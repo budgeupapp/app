@@ -35,8 +35,6 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
     const [page, setPage] = useState(0)
     const [showSavings, setShowSavings] = useState(false)
     const [tooltipActive, setTooltipActive] = useState(false)
-    const touchStartX = useRef(null)
-    const touchStartY = useRef(null)
     const chartContainerRef = useRef(null)
 
     const pageSize = getPageSize(timeView)
@@ -113,28 +111,6 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
             default:
                 return format(date, 'd MMM')
         }
-    }
-
-    const handleTouchStart = (e) => {
-        touchStartX.current = e.touches[0].clientX
-        touchStartY.current = e.touches[0].clientY
-    }
-
-    const handleTouchEnd = (e) => {
-        if (touchStartX.current === null) return
-        const diffX = touchStartX.current - e.changedTouches[0].clientX
-        const diffY = touchStartY.current - e.changedTouches[0].clientY
-
-        // Only handle horizontal swipes (ignore vertical scrolling)
-        if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY) * 1.5) {
-            if (diffX > 0 && currentPage < totalPages - 1) {
-                setPage(p => Math.min(p + 1, totalPages - 1))
-            } else if (diffX < 0 && currentPage > 0) {
-                setPage(p => Math.max(p - 1, 0))
-            }
-        }
-        touchStartX.current = null
-        touchStartY.current = null
     }
 
     const pageLabel = () => {
@@ -368,8 +344,7 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
             {/* Chart */}
             <div
                 ref={chartContainerRef}
-                onTouchStart={(e) => { setTooltipActive(true); handleTouchStart(e) }}
-                onTouchEnd={handleTouchEnd}
+                onTouchStart={() => setTooltipActive(true)}
                 onMouseDown={() => setTooltipActive(true)}
                 style={{ touchAction: 'pan-y' }}
             >

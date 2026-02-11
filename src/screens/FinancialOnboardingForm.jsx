@@ -51,9 +51,9 @@ const STEPS = [
     },
     {
         id: 'oneOffPayments',
-        heading: 'Any one-off or irregular expenses coming up?',
+        heading: 'Any one-off payments or expenses coming up?',
         subtitle:
-            'For example, trips, events, larger purchases, or any expected lump-sum income.'
+            'For example, trips, events, larger purchases, bills, or any expected lump-sum income.'
     },
     {
         id: 'weeklySpend',
@@ -1540,7 +1540,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         marginBottom: 12
                                     }}
                                 >
-                                    Money in
+                                    One-off income
                                 </Text>
                                 <OneOffItemList
                                     items={formData.oneOffIn}
@@ -1557,7 +1557,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         marginBottom: 12
                                     }}
                                 >
-                                    Money out
+                                    One-off expenses
                                 </Text>
                                 <OneOffItemList
                                     items={formData.oneOffOut}
