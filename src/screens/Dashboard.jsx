@@ -126,6 +126,9 @@ export default function Dashboard() {
 
     const handleLogout = async () => {
         try {
+            // Clear all localStorage data
+            localStorage.clear()
+
             await supabase.auth.signOut()
             // The auth state change listener in App.jsx will handle navigation
         } catch (error) {

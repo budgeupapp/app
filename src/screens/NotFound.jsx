@@ -22,7 +22,7 @@ export default function NotFound() {
                 alt="Page Not Found"
                 style={{
                     width: '100%',
-                    maxWidth: 300,
+                    maxWidth: 200,
                     height: 'auto',
                     marginBottom: 32
                 }}
