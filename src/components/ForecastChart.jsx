@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceLine, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceLine, ReferenceDot, ResponsiveContainer } from 'recharts'
 import { format, parseISO } from 'date-fns'
 
 function getPageSize(timeView) {
@@ -188,6 +188,12 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
     }
 
     const tickInterval = getTickInterval(pagedData.length, timeView)
+
+    // Find today's data point in the visible data
+    const todayDataPoint = useMemo(() => {
+        const today = format(new Date(), 'yyyy-MM-dd')
+        return pagedData.find(d => d.date === today)
+    }, [pagedData])
 
     // When savings is shown, ensure Y-axis extends low enough to show the line
     const yDomain = useMemo(() => {
@@ -391,6 +397,18 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
                                 stroke="#e89b3c"
                                 strokeDasharray="4 4"
                                 strokeOpacity={0.6}
+                            />
+                        )}
+                        {todayDataPoint && (
+                            <ReferenceDot
+                                x={todayDataPoint.date}
+                                y={todayDataPoint.balance}
+                                r={6}
+                                fill="#147B75"
+                                stroke="#fff"
+                                strokeWidth={2}
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => setTooltipActive(true)}
                             />
                         )}
                         <Tooltip content={<CustomTooltip />} />
