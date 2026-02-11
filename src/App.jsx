@@ -10,6 +10,7 @@ import LoadingScreen from './screens/LoadingScreen'
 import Dashboard from './screens/Dashboard'
 import PaymentsScreen from './screens/PaymentsScreen'
 import MoneyAdviceScreen from './screens/MoneyAdviceScreen'
+import NotFound from './screens/NotFound'
 import BottomNav from './components/BottomNav'
 import MoneyAdviceSvg from './assets/money-advice.svg'
 
@@ -128,7 +129,16 @@ export default function App() {
 
     /* ---------------- NOT AUTHENTICATED ---------------- */
 
-    if (!session) return <Login />
+    if (!session) {
+        return (
+            <BrowserRouter>
+                <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route path="*" element={<Navigate to="/login" replace />} />
+                </Routes>
+            </BrowserRouter>
+        )
+    }
 
     /* ---------------- NO CONSENT ---------------- */
 
@@ -168,23 +178,39 @@ export default function App() {
 
     return (
         <BrowserRouter>
-            <div className="app-container">
-                {/* Main content area */}
-                <div style={{
-                    height: '100vh',
-                    position: 'relative'
-                }}>
-                    <Routes>
-                        <Route path="/dashboard" element={<Dashboard />} />
-                        <Route path="/payments" element={<PaymentsScreen />} />
-                        <Route path="/advice" element={<MoneyAdviceScreen />} />
-                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                    </Routes>
-                </div>
+            <Routes>
+                {/* Valid app routes with bottom navigation */}
+                <Route path="/dashboard" element={
+                    <div className="app-container">
+                        <div style={{ height: '100vh', position: 'relative' }}>
+                            <Dashboard />
+                        </div>
+                        <BottomNav />
+                    </div>
+                } />
+                <Route path="/payments" element={
+                    <div className="app-container">
+                        <div style={{ height: '100vh', position: 'relative' }}>
+                            <PaymentsScreen />
+                        </div>
+                        <BottomNav />
+                    </div>
+                } />
+                <Route path="/advice" element={
+                    <div className="app-container">
+                        <div style={{ height: '100vh', position: 'relative' }}>
+                            <MoneyAdviceScreen />
+                        </div>
+                        <BottomNav />
+                    </div>
+                } />
 
-                {/* Bottom navigation - fixed, outside scroll container */}
-                <BottomNav />
-            </div>
+                {/* Redirect root to dashboard */}
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+                {/* 404 page for invalid routes */}
+                <Route path="*" element={<NotFound />} />
+            </Routes>
         </BrowserRouter>
     )
 }

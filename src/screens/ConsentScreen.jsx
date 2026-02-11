@@ -41,7 +41,7 @@ export default function ConsentScreen({ user, onConsentGranted }) {
                 flexDirection: 'column'
             }}
         >
-            <div style={{ maxWidth: 480, margin: '0 auto', width: '100%' }}>
+            <div style={{ maxWidth: 480, margin: '0 auto', width: '100%', padding: '0 15px' }}>
                 <div
                     style={{
                         display: 'flex',
@@ -97,15 +97,33 @@ export default function ConsentScreen({ user, onConsentGranted }) {
                                 </Text>
                             ))}
 
-                            <Checkbox
-                                checked={consents[consent.id]}
-                                onChange={e =>
-                                    updateConsent(consent.id, e.target.checked)
-                                }
-                                style={{ marginTop: 15 }}
-                            >
-                                {consent.checkboxLabel}
-                            </Checkbox>
+                            <div style={{
+                                marginTop: 15,
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 8
+                            }}>
+                                <Checkbox
+                                    checked={consents[consent.id]}
+                                    onChange={e =>
+                                        updateConsent(consent.id, e.target.checked)
+                                    }
+                                    style={{
+                                        flexShrink: 0,
+                                        minWidth: 16,
+                                        minHeight: 16
+                                    }}
+                                />
+                                <span style={{
+                                    flex: 1,
+                                    fontSize: 15,
+                                    userSelect: 'none',
+                                    cursor: 'pointer'
+                                }}
+                                    onClick={() => updateConsent(consent.id, !consents[consent.id])}>
+                                    {consent.checkboxLabel}
+                                </span>
+                            </div>
 
                             {consent.footer && (
                                 <Text
