@@ -51,9 +51,9 @@ const STEPS = [
     },
     {
         id: 'oneOffPayments',
-        heading: 'Any one-off payments or expenses coming up?',
+        heading: 'Any one-off income or expenses coming up?',
         subtitle:
-            'For example, trips, events, larger purchases, bills, or any expected lump-sum income.'
+            'For example, trips, events, larger purchases, or any expected lump-sum income.'
     },
     {
         id: 'weeklySpend',
