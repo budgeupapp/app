@@ -1,0 +1,114 @@
+.native-select-wrapper {
+    width: 100%;
+}
+
+.native-select-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: #000;
+    margin-bottom: 6px;
+}
+
+.native-select-container {
+    position: relative;
+    width: 100%;
+}
+
+.native-select {
+    /* Reset default styles */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+
+    /* Apple-style design */
+    width: 100%;
+    height: 44px;
+    padding: 0 40px 0 16px;
+    font-size: 17px;
+    font-family: 'Nunito', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    color: #000000 !important;
+    background-color: #ffffff !important;
+    border: 1px solid #d1d1d6;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    /* Remove default arrow on IE */
+    &::-ms-expand {
+        display: none;
+    }
+}
+
+/* Ensure option text is visible */
+.native-select option {
+    color: #000000;
+    background-color: #ffffff;
+}
+
+/* Placeholder/disabled option styling */
+.native-select option[disabled] {
+    color: #86868b;
+}
+
+.native-select:hover {
+    border-color: #147B75;
+}
+
+.native-select:focus {
+    outline: none;
+    border-color: #147B75;
+    box-shadow: 0 0 0 3px rgba(20, 123, 117, 0.1);
+}
+
+.native-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #f2f2f7;
+}
+
+.native-select-arrow {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: #86868b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* iOS Safari specific fixes */
+@supports (-webkit-touch-callout: none) {
+    .native-select {
+        /* Ensure proper height on iOS */
+        min-height: 44px;
+        line-height: normal;
+    }
+}
+
+/* Dark mode support - disabled for now to ensure consistency */
+/* Uncomment if you want dark mode support later
+@media (prefers-color-scheme: dark) {
+    .native-select {
+        background-color: #1c1c1e !important;
+        color: #ffffff !important;
+        border-color: #38383a;
+    }
+
+    .native-select option {
+        background-color: #1c1c1e;
+        color: #ffffff;
+    }
+
+    .native-select:hover,
+    .native-select:focus {
+        border-color: #147B75;
+    }
+
+    .native-select-label {
+        color: #ffffff;
+    }
+}
+*/

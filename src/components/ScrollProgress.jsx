@@ -41,7 +41,7 @@ export default function ScrollProgress({ scrollRef }) {
                 width: '101%'
             }}
         >
-            <img src="/logo.png" alt="" style={{ height: 32 }} />
+            <img src="/logo.svg" alt="" style={{ height: 32 }} />
 
             <div
                 style={{

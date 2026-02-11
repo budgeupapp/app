@@ -1,6 +1,6 @@
 import { supabase } from '../supabaseClient'
 
-export async function saveConsents(userId, consents) {
+export async function saveUserConsents(userId, consents) {
     const rows = Object.entries(consents)
         .filter(([_, granted]) => granted)
         .map(([type]) => ({
@@ -14,7 +14,7 @@ export async function saveConsents(userId, consents) {
     if (!rows.length) return
 
     const { error } = await supabase
-        .from('consents')
+        .from('user_consents')
         .insert(rows)
 
     if (error) throw error

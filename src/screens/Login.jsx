@@ -1,11 +1,24 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { Button, Form, Input, Typography } from 'antd'
+import { Button, Form, Input, Typography, message } from 'antd'
 
 const { Title, Text } = Typography
 
 export default function Login() {
     const [loading, setLoading] = useState(false)
+    const [cooldownSeconds, setCooldownSeconds] = useState(0)
+    const [messageApi, contextHolder] = message.useMessage({
+        maxCount: 1
+    })
+
+    useEffect(() => {
+        if (cooldownSeconds > 0) {
+            const timer = setTimeout(() => {
+                setCooldownSeconds(cooldownSeconds - 1)
+            }, 1000)
+            return () => clearTimeout(timer)
+        }
+    }, [cooldownSeconds])
 
     const handleLogin = async ({ email }) => {
         setLoading(true)
@@ -21,10 +34,26 @@ export default function Login() {
         setLoading(false)
 
         if (error) {
-            alert(error.message)
+            messageApi.error({
+                content: error.message,
+                duration: 10,
+                style: { fontSize: 15, cursor: 'pointer' },
+                onClick: () => messageApi.destroy()
+            })
         } else {
-            alert('Check your email for your secure login link')
+            setCooldownSeconds(60)
+            messageApi.success({
+                content: 'Your secure login link is on its way. Check your inbox (and spam/junk folder).', duration: 10,
+                style: { fontSize: 15, cursor: 'pointer' },
+                onClick: () => messageApi.destroy()
+            })
         }
+    }
+
+    const getButtonText = () => {
+        if (loading) return 'Sending magic link...'
+        if (cooldownSeconds > 0) return `Check inbox for login link (${cooldownSeconds}s)`
+        return 'Send magic link'
     }
 
     return (
@@ -38,10 +67,12 @@ export default function Login() {
                 justifyContent: 'center'
             }}
         >
+            {contextHolder}
             <div
                 style={{
                     width: '100%',
-                    maxWidth: 420
+                    maxWidth: 420,
+                    padding: '0 8px'
                 }}>
 
                 {/* ---------- BRAND ---------- */}
@@ -55,7 +86,7 @@ export default function Login() {
                     }}
                 >
                     <img
-                        src="/logo.png"
+                        src="/logo.svg"
                         alt="Budge Up"
                         style={{
                             height: 44
@@ -90,7 +121,7 @@ export default function Login() {
                     >
                         <Input
                             size="large"
-                            placeholder="Uni email address"
+                            placeholder="University email address"
                             inputMode="email"
                             style={{
                                 borderRadius: 999,
@@ -104,6 +135,7 @@ export default function Login() {
                         htmlType="submit"
                         size="large"
                         loading={loading}
+                        disabled={cooldownSeconds > 0}
                         block
                         style={{
                             borderRadius: 999,
@@ -112,7 +144,7 @@ export default function Login() {
                             marginTop: 8
                         }}
                     >
-                        Send magic link
+                        {getButtonText()}
                     </Button>
 
                     <Text

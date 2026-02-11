@@ -1,40 +1,291 @@
-import { useState, useRef } from 'react'
-import {
-    Button,
-    Checkbox,
-    Divider,
-    Form,
-    Input,
-    Radio,
-    Select,
-    Slider,
-    Typography
-} from 'antd'
-import { CONSENTS } from '../core/consents'
-import ScrollProgress from '../components/ScrollProgress'
+import { useState, useEffect, useRef } from 'react'
+import { Button, Input, Modal, Radio, Typography, message } from 'antd'
+import StepProgress from '../components/StepProgress'
+import NativeSelect from '../components/NativeSelect'
 import { supabase } from '../lib/supabaseClient'
-import {
-    saveConsents,
-    savePlannedCashflows,
-    saveProfile
-} from '../lib/api'
+import { saveCashflowForecast, saveUserFinances } from '../lib/api'
 
 const { Title, Text } = Typography
 
-const REQUIRED_CONSENTS = CONSENTS.filter(c =>
-    ['manual_data', 'financial_analysis'].includes(c.id)
-)
+const STORAGE_KEY = 'budgeup_onboarding_state'
 
+/* ---------- CONSTANTS ---------- */
+
+const STEPS = [
+    {
+        id: 'university',
+        heading: 'Which university do you attend?',
+        subtitle: "This helps us connect you with your university's financial support team."
+    },
+    {
+        id: 'balance',
+        heading: "What's your current bank balance?",
+        subtitle: 'Your best estimate is fine.'
+    },
+    {
+        id: 'savings',
+        heading: 'How much money do you have in savings?',
+        subtitle:
+            'This helps us understand your financial cushion and recommend appropriate budgeting strategies.'
+    },
+    {
+        id: 'studentLoan',
+        heading: 'Do you receive student loans?',
+        subtitle: 'This helps us understand your main income source.'
+    },
+    {
+        id: 'bursary',
+        heading: 'Do you receive any bursaries?',
+        subtitle: 'Include university bursaries or grants.'
+    },
+    {
+        id: 'otherIncome',
+        heading: 'Do you receive any other regular income?',
+        subtitle: 'For example, from part-time job, family, or other sources.'
+    },
+    {
+        id: 'regularExpense',
+        heading: 'Do you have any regular expenses?',
+        subtitle:
+            'Include rent, bills, subscriptions, or anything you pay for regularly. Enter the date of the next one \u2014 a rough estimate is fine.'
+    },
+    {
+        id: 'oneOffPayments',
+        heading: 'Any one-off or irregular expenses coming up?',
+        subtitle:
+            'For example, trips, events, larger purchases, or any expected lump-sum income.'
+    },
+    {
+        id: 'weeklySpend',
+        heading: 'How much do you typically spend each week?',
+        subtitle: 'Excluding rent and bills.'
+    }
+]
+
+const WEEKLY_SPEND_OPTIONS = [
+    { value: 1, label: '\u00A350\u2013\u00A380 (very frugal)' },
+    { value: 2, label: '\u00A380\u2013\u00A3120 (typical Bristol student)' },
+    { value: 3, label: '\u00A3120\u2013\u00A3180 (social & eating out)' },
+    { value: 4, label: '\u00A3180+ (very social / lifestyle-heavy)' }
+]
+
+const UK_UNIVERSITIES = [
+    'University of Bristol',
+    'University of Oxford',
+    'University of Cambridge',
+    'Imperial College London',
+    'University College London (UCL)',
+    'London School of Economics (LSE)',
+    'University of Edinburgh',
+    'University of Manchester',
+    'King\'s College London',
+    'University of Warwick',
+    'Durham University',
+    'University of Glasgow',
+    'University of Birmingham',
+    'University of Southampton',
+    'University of Leeds',
+    'University of Sheffield',
+    'University of Nottingham',
+    'University of St Andrews',
+    'Queen Mary University of London',
+    'Lancaster University',
+    'University of York',
+    'University of Bath',
+    'University of Exeter',
+    'Cardiff University',
+    'University of Sussex',
+    'University of Liverpool',
+    'University of Reading',
+    'University of Aberdeen',
+    'Newcastle University',
+    'Queen\'s University Belfast',
+    'University of Leicester',
+    'Loughborough University',
+    'University of Surrey',
+    'University of Strathclyde',
+    'Royal Holloway, University of London',
+    'Swansea University',
+    'Heriot-Watt University',
+    'University of Dundee',
+    'City, University of London',
+    'Brunel University London',
+    'Aston University',
+    'University of East Anglia (UEA)',
+    'SOAS University of London',
+    'University of Kent',
+    'University of Essex',
+    'Northumbria University',
+    'Nottingham Trent University',
+    'Bournemouth University',
+    'Coventry University',
+    'University of Portsmouth',
+    'University of Plymouth',
+    'Liverpool John Moores University',
+    'University of the West of England (UWE)',
+    'De Montfort University',
+    'University of Huddersfield',
+    'Manchester Metropolitan University',
+    'Sheffield Hallam University',
+    'Birmingham City University',
+    'University of Central Lancashire',
+    'Oxford Brookes University',
+    'Kingston University',
+    'University of Lincoln',
+    'Keele University',
+    'Robert Gordon University',
+    'Bangor University',
+    'Aberystwyth University',
+    'University of Stirling',
+    'Edge Hill University',
+    'Glasgow Caledonian University',
+    'University of Bradford',
+    'University of Hull',
+    'University of Salford',
+    'Goldsmiths, University of London',
+    'University of Winchester',
+    'Middlesex University',
+    'University of Greenwich',
+    'Staffordshire University',
+    'University of Hertfordshire',
+    'University of Westminster',
+    'University of Roehampton',
+    'Edinburgh Napier University',
+    'Cardiff Metropolitan University',
+    'University of Bedfordshire',
+    'University of Chester',
+    'University of Derby',
+    'Anglia Ruskin University',
+    'University of Brighton',
+    'University of Wolverhampton',
+    'University of Gloucestershire',
+    'University of Northampton',
+    'University of Sunderland',
+    'Teesside University',
+    'University of Bolton',
+    'Canterbury Christ Church University',
+    'University of South Wales',
+    'Leeds Beckett University',
+    'University of the West of Scotland',
+    'London Metropolitan University',
+    'University of East London',
+    'Solent University',
+    'York St John University',
+    'University of Suffolk',
+    'Wrexham University',
+    'Buckinghamshire New University',
+    'Liverpool Hope University',
+    'University of Cumbria',
+    'Bishop Grosseteste University',
+    'University of Wales Trinity Saint David',
+    'St Mary\'s University, Twickenham',
+    'Newman University',
+    'University of Chichester',
+    'Falmouth University',
+    'Plymouth Marjon University',
+    'Leeds Arts University',
+    'Ravensbourne University London',
+    'University of the Arts London',
+    'Arts University Bournemouth',
+    'Royal College of Art',
+    'Royal College of Music',
+    'Royal Academy of Music',
+    'Guildhall School of Music and Drama',
+    'Royal Conservatoire of Scotland',
+    'Courtauld Institute of Art'
+].sort()
+
+const MONTH_LABELS = {
+    september: 'September',
+    october: 'October',
+    november: 'November',
+    december: 'December',
+    january: 'January',
+    february: 'February',
+    march: 'March',
+    april: 'April',
+    may: 'May',
+    june: 'June',
+    july: 'July',
+    august: 'August'
+}
+
+const ALL_MONTH_KEYS = Object.keys(MONTH_LABELS)
+const DEFAULT_LOAN_MONTHS = ['september', 'january', 'april']
+
+const OTHER_INCOME_TYPE_OPTIONS = [
+    { value: 'part_time_job', label: 'Part-time job' },
+    { value: 'family', label: 'Family support' },
+    { value: 'freelance', label: 'Freelance work' },
+    { value: 'investments', label: 'Investments' },
+    { value: 'other', label: 'Other' }
+]
+
+const OTHER_INCOME_FREQ_OPTIONS = [
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'termly', label: 'Termly' },
+    { value: 'yearly', label: 'Yearly' },
+    { value: 'other', label: 'Other' }
+]
+
+const REGULAR_FREQ_OPTIONS = [
+    { value: 'weekly', label: 'Weekly' },
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'quarterly', label: 'Quarterly' },
+    { value: 'other', label: 'Other' }
+]
+
+const PAYMENT_TYPE_OPTIONS = [
+    { value: 'rent', label: 'Rent' },
+    { value: 'bills', label: 'Bills' },
+    { value: 'subscription', label: 'Subscription' },
+    { value: 'insurance', label: 'Insurance' },
+    { value: 'other', label: 'Other' }
+]
+
+const DEFAULT_BURSARY_DATES = ['2025-10-27', '2026-02-09', '2026-03-30']
+
+const INITIAL_FORM_DATA = {
+    university: 'University of Bristol',
+    balance: '',
+    savings: '',
+
+    studentLoan: null,
+    loanAmount: '',
+    loanMonths: [...DEFAULT_LOAN_MONTHS],
+    loanKnowDates: false,
+    loanDates: {},
+
+    bursary: null,
+    bursaryAmount: '',
+    bursaryDates: [...DEFAULT_BURSARY_DATES],
+
+    otherIncome: null,
+    otherIncomeItems: [{ type: 'part_time_job', amount: '', date: '', frequency: 'monthly' }],
+
+    regularExpense: null,
+    regularExpenseItems: [
+        { amount: '', date: '', frequency: 'monthly', type: 'rent' }
+    ],
+
+    oneOffPayments: null,
+    oneOffIn: [{ name: '', amount: '', date: '' }],
+    oneOffOut: [{ name: '', amount: '', date: '' }],
+
+    weeklySpend: ''
+}
+
+/* ---------- HELPERS ---------- */
+
+const formatMoney = raw => {
+    const cleaned = raw.replace(/[^0-9.]/g, '')
+    const parts = cleaned.split('.')
+    const whole = parts[0] || ''
+    const formatted = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    return parts.length > 1 ? `${formatted}.${parts[1]}` : formatted
+}
 /* ---------- SUB-COMPONENTS ---------- */
-
-const Section = ({ title, children }) => (
-    <div style={{ marginBottom: 36 }}>
-        <Title level={4} style={{ marginBottom: 12 }}>
-            {title}
-        </Title>
-        {children}
-    </div>
-)
 
 const YesNo = ({ value, onChange }) => (
     <Radio.Group
@@ -48,353 +299,1389 @@ const YesNo = ({ value, onChange }) => (
     </Radio.Group>
 )
 
-const MoneyDetails = ({
-    amount,
-    setAmount,
-    date,
-    setDate,
-    frequency,
-    setFrequency
-}) => (
+const MonthChip = ({ label, selected, onClick }) => (
     <div
+        onClick={onClick}
         style={{
-            marginTop: 8,
-            marginBottom: 16,
-            padding: '12px 16px',
-            maxWidth: 240,
-            background: '#fafafa',
-            borderRadius: 8,
-            boxSizing: 'border-box'
+            padding: '6px 16px',
+            borderRadius: 999,
+            border: `1px solid ${selected ? '#147B75' : '#d9d9d9'}`,
+            background: selected ? '#147B75' : '#fff',
+            color: selected ? '#fff' : '#333',
+            cursor: 'pointer',
+            fontSize: 14,
+            userSelect: 'none',
+            transition: 'all 0.2s'
         }}
     >
-        <Form.Item label="Amount" style={{ marginBottom: 8 }}>
-            <Input
-                style={{ width: 150 }}
-                prefix="£"
-                inputMode="decimal"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-            />
-        </Form.Item>
-
-        <Form.Item label="Date" style={{ marginBottom: 8 }}>
-            <Input
-                style={{ width: 150 }}
-                type="date"
-                value={date}
-                onChange={e => setDate(e.target.value)}
-            />
-        </Form.Item>
-
-        <Form.Item label="Frequency" style={{ marginBottom: 0 }}>
-            <Select
-                style={{ width: 150 }}
-                value={frequency}
-                onChange={setFrequency}
-                options={[
-                    { value: 'one-off', label: 'One-off' },
-                    { value: 'weekly', label: 'Weekly' },
-                    { value: 'monthly', label: 'Monthly' },
-                    { value: 'termly', label: 'Termly' }
-                ]}
-            />
-        </Form.Item>
+        {label}
     </div>
 )
 
+const OtherIncomeList = ({ items, onChange }) => {
+    const updateItem = (index, field, value) => {
+        const updated = items.map((item, i) =>
+            i === index ? { ...item, [field]: value } : item
+        )
+        onChange(updated)
+    }
+    const addItem = () =>
+        onChange([...items, { type: 'part_time_job', amount: '', date: '', frequency: 'monthly' }])
+    const removeItem = index =>
+        onChange(items.filter((_, i) => i !== index))
+
+    return (
+        <div>
+            {items.map((item, index) => (
+                <div
+                    key={index}
+                    style={{
+                        background: '#fafafa',
+                        borderRadius: 12,
+                        padding: '16px',
+                        marginBottom: 12,
+                        border: '1px solid #e8e8e8'
+                    }}
+                >
+                    {items.length > 1 && (
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: 12
+                        }}>
+                            <Text strong style={{ fontSize: 15 }}>Income {index + 1}</Text>
+                            <Button
+                                type="text"
+                                size="small"
+                                danger
+                                onClick={() => removeItem(index)}
+                            >
+                                Remove
+                            </Button>
+                        </div>
+                    )}
+
+                    <div style={{ marginBottom: 12 }}>
+                        <NativeSelect
+                            label="Type"
+                            value={item.type}
+                            onChange={v => updateItem(index, 'type', v)}
+                            options={OTHER_INCOME_TYPE_OPTIONS}
+                            placeholder="Select type"
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: 12 }}>
+                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                            Amount
+                        </Text>
+                        <Input
+                            prefix={'\u00A3'}
+                            placeholder="0"
+                            inputMode="decimal"
+                            size="large"
+                            style={{ width: '100%' }}
+                            value={item.amount}
+                            onChange={e =>
+                                updateItem(
+                                    index,
+                                    'amount',
+                                    formatMoney(e.target.value)
+                                )
+                            }
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: 12 }}>
+                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                            Next payment date
+                        </Text>
+
+                        <div style={{ display: 'flex', minWidth: 0 }}>
+                            <Input
+                                type="date"
+                                size="large"
+                                style={{ width: '100%' }}
+                                value={item.date}
+                                onChange={e =>
+                                    updateItem(index, 'date', e.target.value)
+                                }
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <NativeSelect
+                            label="Frequency"
+                            value={item.frequency}
+                            onChange={v => updateItem(index, 'frequency', v)}
+                            options={OTHER_INCOME_FREQ_OPTIONS}
+                        />
+                    </div>
+                </div>
+            ))}
+            <Button
+                type="dashed"
+                size="large"
+                onClick={addItem}
+                style={{ marginTop: 4, width: '100%' }}
+            >
+                + Add another income source
+            </Button>
+        </div>
+    )
+}
+
+const RegularExpenseList = ({ items, onChange }) => {
+    const updateItem = (index, field, value) => {
+        const updated = items.map((item, i) =>
+            i === index ? { ...item, [field]: value } : item
+        )
+        onChange(updated)
+    }
+    const addItem = () =>
+        onChange([
+            ...items,
+            { amount: '', date: '', frequency: 'monthly', type: 'rent' }
+        ])
+    const removeItem = index =>
+        onChange(items.filter((_, i) => i !== index))
+
+    return (
+        <div>
+            {items.map((item, index) => (
+                <div
+                    key={index}
+                    style={{
+                        background: '#fafafa',
+                        borderRadius: 12,
+                        padding: '16px',
+                        marginBottom: 12,
+                        border: '1px solid #e8e8e8'
+                    }}
+                >
+                    {items.length > 1 && (
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: 12
+                        }}>
+                            <Text strong style={{ fontSize: 15 }}>Payment {index + 1}</Text>
+                            <Button
+                                type="text"
+                                size="small"
+                                danger
+                                onClick={() => removeItem(index)}
+                            >
+                                Remove
+                            </Button>
+                        </div>
+                    )}
+
+                    <div style={{ marginBottom: 12 }}>
+                        <NativeSelect
+                            label="Type"
+                            value={item.type}
+                            onChange={v => updateItem(index, 'type', v)}
+                            options={PAYMENT_TYPE_OPTIONS}
+                            placeholder="Select type"
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: 12 }}>
+                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                            Amount
+                        </Text>
+                        <Input
+                            prefix={'\u00A3'}
+                            placeholder="0"
+                            inputMode="decimal"
+                            size="large"
+                            style={{ width: '100%' }}
+                            value={item.amount}
+                            onChange={e =>
+                                updateItem(
+                                    index,
+                                    'amount',
+                                    formatMoney(e.target.value)
+                                )
+                            }
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: 12 }}>
+                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                            Next payment date
+                        </Text>
+
+                        <div style={{ display: 'flex', minWidth: 0 }}>
+                            <Input
+                                type="date"
+                                size="large"
+                                style={{ width: '100%' }}
+                                value={item.date}
+                                onChange={e => updateItem(index, 'date', e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <NativeSelect
+                            label="Frequency"
+                            value={item.frequency}
+                            onChange={v => updateItem(index, 'frequency', v)}
+                            options={REGULAR_FREQ_OPTIONS}
+                        />
+                    </div>
+                </div>
+            ))}
+            <Button
+                type="dashed"
+                size="large"
+                onClick={addItem}
+                style={{ marginTop: 4, width: '100%' }}
+            >
+                + Add another expense
+            </Button>
+        </div>
+    )
+}
+
+const OneOffItemList = ({ items, onChange }) => {
+    const updateItem = (index, field, value) => {
+        const updated = items.map((item, i) =>
+            i === index ? { ...item, [field]: value } : item
+        )
+        onChange(updated)
+    }
+    const addItem = () =>
+        onChange([...items, { name: '', amount: '', date: '' }])
+    const removeItem = index =>
+        onChange(items.filter((_, i) => i !== index))
+
+    return (
+        <div>
+            {items.map((item, index) => (
+                <div
+                    key={index}
+                    style={{
+                        background: '#fafafa',
+                        borderRadius: 12,
+                        padding: '16px',
+                        marginBottom: 12,
+                        border: '1px solid #e8e8e8'
+                    }}
+                >
+                    {items.length > 1 && (
+                        <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: 12
+                        }}>
+                            <Text strong style={{ fontSize: 15 }}>Item {index + 1}</Text>
+                            <Button
+                                type="text"
+                                size="small"
+                                danger
+                                onClick={() => removeItem(index)}
+                            >
+                                Remove
+                            </Button>
+                        </div>
+                    )}
+
+                    <div style={{ marginBottom: 12 }}>
+                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                            Name (optional)
+                        </Text>
+                        <Input
+                            placeholder="e.g., Birthday gift, Trip to London"
+                            size="large"
+                            style={{ width: '100%' }}
+                            value={item.name}
+                            onChange={e =>
+                                updateItem(index, 'name', e.target.value)
+                            }
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: 12 }}>
+                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                            Amount
+                        </Text>
+                        <Input
+                            prefix={'\u00A3'}
+                            placeholder="0"
+                            inputMode="decimal"
+                            size="large"
+                            style={{ width: '100%' }}
+                            value={item.amount}
+                            onChange={e =>
+                                updateItem(
+                                    index,
+                                    'amount',
+                                    formatMoney(e.target.value)
+                                )
+                            }
+                        />
+                    </div>
+
+                    <div>
+                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                            Date
+                        </Text>
+
+                        <div style={{ display: 'flex', minWidth: 0 }}>
+                            <Input
+                                type="date"
+                                size="large"
+                                style={{ width: '100%' }}
+                                value={item.date}
+                                onChange={e => updateItem(index, 'date', e.target.value)}
+                            />
+                        </div>
+                    </div>
+                </div>
+            ))}
+            <Button
+                type="dashed"
+                size="large"
+                onClick={addItem}
+                style={{ marginTop: 4, width: '100%' }}
+            >
+                + Add another
+            </Button>
+        </div>
+    )
+}
+
 /* ---------- MAIN COMPONENT ---------- */
 
-export default function FinancialOnboardingForm() {
+export default function FinancialOnboardingForm({ onComplete }) {
+    const pageRef = useRef(null)
+    const subQuestionRef = useRef(null)
+    const scrollAreaRef = useRef(null)
+    const [modal, modalContextHolder] = Modal.useModal()
+    const [messageApi, messageContextHolder] = message.useMessage({
+        maxCount: 1
+    })
 
-    const scrollRef = useRef(null)
+    const addBlur = () => pageRef.current?.classList.add('blur-behind-modal')
+    const removeBlur = () => pageRef.current?.classList.remove('blur-behind-modal')
 
-    const [consents, setConsents] = useState(
-        Object.fromEntries(REQUIRED_CONSENTS.map(c => [c.id, false]))
-    )
+    /* --- State with localStorage restore --- */
 
-    const allRequiredConsented = REQUIRED_CONSENTS.every(c => consents[c.id])
+    const [formData, setFormData] = useState(() => {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY)
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                return { ...INITIAL_FORM_DATA, ...parsed.formData }
+            }
+        } catch {
+            /* ignore */
+        }
+        return { ...INITIAL_FORM_DATA }
+    })
 
-    const [balance, setBalance] = useState('')
-    const [studentLoan, setStudentLoan] = useState(null)
-    const [loanApril, setLoanApril] = useState(null)
+    const [currentStepId, setCurrentStepId] = useState(() => {
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY)
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                if (
+                    parsed.currentStepId &&
+                    STEPS.some(s => s.id === parsed.currentStepId)
+                ) {
+                    return parsed.currentStepId
+                }
+            }
+        } catch {
+            /* ignore */
+        }
+        return STEPS[0].id
+    })
 
-    const [debt, setDebt] = useState(null)
-    const [rentBills, setRentBills] = useState(null)
-    const [income, setIncome] = useState(null)
-    const [surprise, setSurprise] = useState(null)
+    const [submitting, setSubmitting] = useState(false)
+    const [showAllMonths, setShowAllMonths] = useState(() => {
+        const saved = formData.loanMonths || []
+        return saved.some(m => !DEFAULT_LOAN_MONTHS.includes(m))
+    })
 
-    const [spendingStyle, setSpendingStyle] = useState(3)
-    const [weeklySpend, setWeeklySpend] = useState('')
-
-    const [debtAmount, setDebtAmount] = useState('')
-    const [debtDate, setDebtDate] = useState('')
-    const [debtFrequency, setDebtFrequency] = useState('one-off')
-
-    const [rentAmount, setRentAmount] = useState('')
-    const [rentDate, setRentDate] = useState('')
-    const [rentFrequency, setRentFrequency] = useState('monthly')
-
-    const [incomeAmount, setIncomeAmount] = useState('')
-    const [incomeDate, setIncomeDate] = useState('')
-    const [incomeFrequency, setIncomeFrequency] = useState('one-off')
-
-    const [surpriseAmount, setSurpriseAmount] = useState('')
-    const [surpriseDate, setSurpriseDate] = useState('')
-    const [surpriseFrequency, setSurpriseFrequency] = useState('one-off')
-
-    const handleLogout = async () => {
-        await supabase.auth.signOut()
+    const resetForm = () => {
+        localStorage.removeItem(STORAGE_KEY)
+        setFormData({ ...INITIAL_FORM_DATA })
     }
 
+    /* --- Persist to localStorage --- */
+
+    useEffect(() => {
+        localStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({ formData, currentStepId })
+        )
+    }, [formData, currentStepId])
+
+    /* --- Helpers --- */
+
+    const updateField = (key, value) =>
+        setFormData(prev => ({ ...prev, [key]: value }))
+
+    const currentIndex = STEPS.findIndex(s => s.id === currentStepId)
+    const currentStep = STEPS[currentIndex]
+    const progress = ((currentIndex + 1) / STEPS.length) * 100
+    const isLastStep = currentIndex === STEPS.length - 1
+
+    /* --- Navigation --- */
+
+    const goNext = () => {
+        messageApi.destroy()
+        removeBlur()
+        if (!isLastStep) {
+            setCurrentStepId(STEPS[currentIndex + 1].id)
+            scrollAreaRef.current?.scrollTo({ top: 0 })
+        } else {
+            submit()
+        }
+    }
+
+    const goBack = () => {
+        messageApi.destroy()
+        if (currentIndex > 0) {
+            setCurrentStepId(STEPS[currentIndex - 1].id)
+            scrollAreaRef.current?.scrollTo({ top: 0 })
+        }
+    }
+
+    const scrollToSub = () => {
+        setTimeout(() => {
+            subQuestionRef.current?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            })
+        }, 100)
+    }
+
+    const isCurrentStepBlank = () => {
+        switch (currentStep.id) {
+            case 'university':
+                return !formData.university
+            case 'balance':
+                return !formData.balance
+            case 'savings':
+                return !formData.savings
+            case 'studentLoan':
+                return formData.studentLoan === null
+            case 'bursary':
+                return formData.bursary === null
+            case 'otherIncome':
+                return formData.otherIncome === null
+            case 'regularExpense':
+                return formData.regularExpense === null
+            case 'oneOffPayments':
+                return formData.oneOffPayments === null
+            case 'weeklySpend':
+                return !formData.weeklySpend
+            default:
+                return false
+        }
+    }
+
+    const getItemsMissingDates = () => {
+        if (
+            currentStep.id === 'regularExpense' &&
+            formData.regularExpense === true
+        ) {
+            return formData.regularExpenseItems.filter(
+                item => item.amount && !item.date
+            )
+        }
+        if (
+            currentStep.id === 'oneOffPayments' &&
+            formData.oneOffPayments === true
+        ) {
+            const inMissing = formData.oneOffIn.filter(
+                item => item.amount && !item.date
+            )
+            const outMissing = formData.oneOffOut.filter(
+                item => item.amount && !item.date
+            )
+            return [...inMissing, ...outMissing]
+        }
+        return []
+    }
+
+    const getMonthDateRange = (monthKey) => {
+        const pad = n => String(n).padStart(2, '0')
+
+        const monthIndex = {
+            september: 8, october: 9, november: 10, december: 11,
+            january: 0, february: 1, march: 2, april: 3,
+            may: 4, june: 5, july: 6, august: 7
+        }
+
+        const month = monthIndex[monthKey]
+        const today = new Date()
+        const currentYear = today.getFullYear()
+        const currentMonth = today.getMonth()
+
+        // Determine academic year
+        // If we're in Sep-Dec, academic year started this year
+        // If we're in Jan-Aug, academic year started last year
+        let academicYearStart = currentMonth >= 8 ? currentYear : currentYear - 1
+
+        // If the month is Sep-Dec, use academicYearStart
+        // If the month is Jan-Aug, use academicYearStart + 1
+        let year = month >= 8 ? academicYearStart : academicYearStart + 1
+
+        const lastDay = new Date(year, month + 1, 0).getDate()
+
+        return {
+            min: `${year}-${pad(month + 1)}-01`,
+            max: `${year}-${pad(month + 1)}-${pad(lastDay)}`
+        }
+    }
+
+    const checkRequiredFields = () => {
+        // Only check required fields for the current step
+        switch (currentStep.id) {
+            case 'university':
+                if (!formData.university || !UK_UNIVERSITIES.includes(formData.university)) {
+                    return 'Please select your university from the list'
+                }
+                break
+
+            case 'studentLoan':
+                if (formData.studentLoan === true) {
+                    if (!formData.loanAmount) {
+                        return 'Please enter your yearly student loan amount (a rough estimate is fine)'
+                    }
+
+                    else if (formData.loanMonths.length === 0) {
+                        return 'Please select the month(s) in which you receive your student loan instalments'
+                    }
+
+                    else if (formData.loanKnowDates && Object.keys(formData.loanDates).length < formData.loanMonths.length) {
+                        return 'Please enter the dates you receive your student loan instalments (a rough estimate is fine)'
+                    }
+
+                    else if (formData.loanKnowDates) {
+                        // Validate that each date is within the correct month
+                        for (const month of formData.loanMonths) {
+                            const enteredDate = formData.loanDates[month]
+                            if (enteredDate) {
+                                const dateRange = getMonthDateRange(month)
+                                if (enteredDate < dateRange.min || enteredDate > dateRange.max) {
+                                    return `The date for ${MONTH_LABELS[month]} must be within ${MONTH_LABELS[month]}`
+                                }
+                            }
+                        }
+                    }
+                }
+                break
+
+            case 'bursary':
+                if (formData.bursary === true) {
+                    if (!formData.bursaryAmount) {
+                        return 'Please enter your yearly bursary amount (a rough estimate is fine)'
+                    }
+                }
+                break
+
+            case 'otherIncome':
+                if (formData.otherIncome === true) {
+                    for (const item of formData.otherIncomeItems) {
+                        if (!item.amount) {
+                            return 'Please enter an amount for each income source (a rough estimate is fine)'
+                        }
+                        if (!item.date) {
+                            return 'Please enter a date for each income source (a rough estimate is fine)'
+                        }
+                    }
+                }
+                break
+
+            case 'regularExpense':
+                if (formData.regularExpense === true) {
+                    for (const item of formData.regularExpenseItems) {
+                        if (!item.amount) {
+                            return 'Please enter an amount for each regular expense (a rough estimate is fine)'
+                        }
+                        if (!item.date) {
+                            return 'Please enter a date for each regular expense (a rough estimate is fine)'
+                        }
+                    }
+                }
+                break
+
+            case 'oneOffPayments':
+                if (formData.oneOffPayments === true) {
+                    for (const item of formData.oneOffIn) {
+                        if (item.amount && !item.date) {
+                            return 'Please add a date for each one-off income (a rough estimate is fine)'
+                        }
+                    }
+                    for (const item of formData.oneOffOut) {
+                        if (item.amount && !item.date) {
+                            return 'Please add a date for each one-off expense (a rough estimate is fine)'
+                        }
+                    }
+                }
+                break
+        }
+
+        return null
+    }
+
+    const confirmSkip = () => {
+        addBlur()
+
+        modal.confirm({
+            title: 'Skip this question?',
+            content:
+                "You haven’t answered this question. Are you sure you want to skip it?",
+            okText: 'Skip',
+            cancelText: 'Go back',
+            mask: false,
+            onCancel: removeBlur,
+            onOk: goNext
+        })
+    }
+
+    const handleNext = () => {
+        if (isCurrentStepBlank()) {
+            confirmSkip()
+            return
+        }
+
+        const requiredFieldError = checkRequiredFields()
+        if (requiredFieldError) {
+            messageApi.warning({
+                content: requiredFieldError,
+                duration: 5,
+                style: { fontSize: 15, cursor: 'pointer' },
+                onClick: () => messageApi.destroy()
+            })
+            return
+        }
+
+        goNext()
+    }
+
+    /* --- Yes/No handler for steps with sub-questions --- */
+
+    const handleYesNo = (field, val) => {
+        updateField(field, val)
+        if (val === true) {
+            scrollToSub()
+        }
+    }
+
+    /* --- Student loan month toggle --- */
+
+    const toggleMonth = month => {
+        setFormData(prev => {
+            const months = prev.loanMonths.includes(month)
+                ? prev.loanMonths.filter(m => m !== month)
+                : [...prev.loanMonths, month]
+            const dates = { ...prev.loanDates }
+
+            if (!months.includes(month)) {
+                // Month is being removed, delete its date
+                delete dates[month]
+            } else if (!prev.loanMonths.includes(month) && prev.loanKnowDates) {
+                // Month is being added and dates are shown, set default date
+                const dateRange = getMonthDateRange(month)
+                dates[month] = dateRange.min
+            }
+
+            return { ...prev, loanMonths: months, loanDates: dates }
+        })
+    }
+
+    const updateLoanDate = (month, date) => {
+        setFormData(prev => ({
+            ...prev,
+            loanDates: { ...prev.loanDates, [month]: date }
+        }))
+    }
+
+    /* --- Submit --- */
 
     const submit = async () => {
-        if (!allRequiredConsented) return
-
+        setSubmitting(true)
         try {
-            // 1. Get logged-in user
             const {
                 data: { user },
                 error: userError
             } = await supabase.auth.getUser()
 
             if (userError || !user) {
-                alert('You must be logged in')
+                messageApi.error({
+                    content: 'You must be logged in',
+                    duration: 10,
+                    style: { fontSize: 15, cursor: 'pointer' },
+                    onClick: () => messageApi.destroy()
+                })
                 return
             }
 
-            // 2. Build structured payload
-            const data = {
-                balance,
-                spendingStyle,
-                weeklySpend,
-
-                debt: debt && {
-                    amount: debtAmount,
-                    date: debtDate,
-                    frequency: debtFrequency
-                },
-
-                rentBills: rentBills && {
-                    amount: rentAmount,
-                    date: rentDate,
-                    frequency: rentFrequency
-                },
-
-                income: income && {
-                    amount: incomeAmount,
-                    date: incomeDate,
-                    frequency: incomeFrequency
-                },
-
-                surprise: surprise && {
-                    amount: surpriseAmount,
-                    date: surpriseDate,
-                    frequency: surpriseFrequency
-                }
-            }
-
-            // 3. Persist data
-            await saveConsents(user.id, consents)
-            await savePlannedCashflows(user.id, data)
-            await saveProfile(user.id, {
-                balance,
-                spendingStyle,
-                weeklySpend
+            await saveCashflowForecast(user.id, formData)
+            await saveUserFinances(user.id, {
+                university: formData.university,
+                balance: formData.balance,
+                weeklySpend: formData.weeklySpend,
+                savings: formData.savings
             })
 
-            // 4. Success
-            alert('Saved successfully')
+            localStorage.removeItem(STORAGE_KEY)
+
+            // Call onComplete callback to trigger loading screen
+            if (onComplete) {
+                onComplete()
+            }
         } catch (err) {
             console.error(err)
-            alert('Something went wrong saving your data')
+            messageApi.error({
+                content: 'Something went wrong saving your data',
+                duration: 10,
+                style: { fontSize: 15, cursor: 'pointer' },
+                onClick: () => messageApi.destroy()
+            })
+        } finally {
+            setSubmitting(false)
         }
     }
 
+    /* ---------- STEP RENDERERS ---------- */
 
-    const updateConsent = (id, value) =>
-        setConsents(prev => ({ ...prev, [id]: value }))
+    const renderStepContent = () => {
+        switch (currentStep.id) {
+            case 'university':
+                return (
+                    <NativeSelect
+                        value={formData.university}
+                        onChange={(value) => updateField('university', value)}
+                        options={UK_UNIVERSITIES.map(uni => ({ value: uni, label: uni }))}
+                        placeholder="Select your university"
+                        style={{ maxWidth: 360 }}
+                    />
+                )
+
+            case 'balance':
+                return (
+                    <Input
+                        style={{ width: '100%', maxWidth: 200 }}
+                        prefix={'\u00A3'}
+                        inputMode="decimal"
+                        size="large"
+                        value={formData.balance}
+                        onChange={e =>
+                            updateField(
+                                'balance',
+                                formatMoney(e.target.value)
+                            )
+                        }
+                    />
+                )
+
+            case 'savings':
+                return (
+                    <Input
+                        style={{ width: '100%', maxWidth: 200 }}
+                        prefix={'\u00A3'}
+                        inputMode="decimal"
+                        size="large"
+                        value={formData.savings}
+                        onChange={e =>
+                            updateField(
+                                'savings',
+                                formatMoney(e.target.value)
+                            )
+                        }
+                    />
+                )
+
+            case 'studentLoan':
+                return (
+                    <>
+                        <YesNo
+                            value={formData.studentLoan}
+                            onChange={val =>
+                                handleYesNo('studentLoan', val)
+                            }
+                        />
+
+                        {formData.studentLoan === true && (
+                            <div
+                                ref={subQuestionRef}
+                                style={{
+                                    marginTop: 24,
+                                    padding: '20px',
+                                    background: '#f8f8f8',
+                                    borderRadius: 12,
+                                    border: '1px solid #e8e8e8'
+                                }}
+                            >
+                                <Text
+                                    strong
+                                    style={{
+                                        display: 'block',
+                                        marginBottom: 12
+                                    }}
+                                >
+                                    What is your total yearly student
+                                    loan?
+                                </Text>
+                                <Input
+                                    style={{
+                                        width: '100%',
+                                        maxWidth: 200,
+                                        marginBottom: 24
+                                    }}
+                                    prefix={'\u00A3'}
+                                    inputMode="decimal"
+                                    size="large"
+                                    placeholder="e.g. 9,500"
+                                    value={formData.loanAmount}
+                                    onChange={e =>
+                                        updateField(
+                                            'loanAmount',
+                                            formatMoney(e.target.value)
+                                        )
+                                    }
+                                />
+
+                                <Text
+                                    strong
+                                    style={{
+                                        display: 'block',
+                                        marginBottom: 12
+                                    }}
+                                >
+                                    When do you usually receive your
+                                    instalments?
+                                </Text>
+
+                                <div
+                                    style={{
+                                        display: 'flex',
+                                        flexWrap: 'wrap',
+                                        gap: 8,
+                                        marginBottom: 16
+                                    }}
+                                >
+                                    {(showAllMonths
+                                        ? ALL_MONTH_KEYS
+                                        : DEFAULT_LOAN_MONTHS
+                                    ).map(m => (
+                                        <MonthChip
+                                            key={m}
+                                            label={MONTH_LABELS[m]}
+                                            selected={formData.loanMonths.includes(
+                                                m
+                                            )}
+                                            onClick={() => toggleMonth(m)}
+                                        />
+                                    ))}
+
+                                    {!showAllMonths && (
+                                        <div
+                                            onClick={() =>
+                                                setShowAllMonths(true)
+                                            }
+                                            style={{
+                                                padding: '6px 16px',
+                                                borderRadius: 999,
+                                                border: '1px dashed #d9d9d9',
+                                                color: '#888',
+                                                cursor: 'pointer',
+                                                fontSize: 14,
+                                                userSelect: 'none'
+                                            }}
+                                        >
+                                            + Different months
+                                        </div>
+                                    )}
+                                </div>
+
+                                {formData.loanMonths.length > 0 && (<><Text
+                                    strong
+                                    style={{
+                                        display: 'block',
+                                        marginBottom: 12
+                                    }}
+                                >
+                                    Do you know the exact dates?
+                                </Text>
+
+                                    <YesNo
+                                        value={formData.loanKnowDates}
+                                        onChange={val => {
+                                            if (val === true) {
+                                                // Initialize dates with default values for all selected months
+                                                const initialDates = {}
+                                                formData.loanMonths.forEach(month => {
+                                                    const dateRange = getMonthDateRange(month)
+                                                    initialDates[month] = formData.loanDates[month] || dateRange.min
+                                                })
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    loanKnowDates: val,
+                                                    loanDates: initialDates
+                                                }))
+                                                scrollToSub()
+                                            } else {
+                                                updateField('loanKnowDates', val)
+                                            }
+                                        }}
+                                    />
+
+                                    {formData.loanKnowDates === true &&
+                                        formData.loanMonths.length > 0 && (
+                                            <div style={{ marginTop: 16 }}>
+                                                {formData.loanMonths.map(
+                                                    month => {
+                                                        const dateRange = getMonthDateRange(month)
+                                                        return (
+                                                            <div
+                                                                key={month}
+                                                                style={{
+                                                                    display:
+                                                                        'flex',
+                                                                    alignItems:
+                                                                        'center',
+                                                                    gap: 12,
+                                                                    marginBottom: 8
+                                                                }}
+                                                            >
+                                                                <Text
+                                                                    style={{
+                                                                        width: 90,
+                                                                        flexShrink: 0
+                                                                    }}
+                                                                >
+                                                                    {
+                                                                        MONTH_LABELS[
+                                                                        month
+                                                                        ]
+                                                                    }
+                                                                </Text>
+                                                                <Input
+                                                                    type="date"
+                                                                    style={{ width: 160, height: 30 }}
+                                                                    min={dateRange.min}
+                                                                    max={dateRange.max}
+                                                                    value={formData.loanDates[month] || dateRange.min}
+                                                                    onChange={e =>
+                                                                        updateLoanDate(month, e.target.value)
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        )
+                                                    }
+                                                )}
+                                            </div>
+                                        )}</>)}
+                            </div>
+                        )}
+                    </>
+                )
+
+            case 'bursary':
+                return (
+                    <>
+                        <YesNo
+                            value={formData.bursary}
+                            onChange={val =>
+                                handleYesNo('bursary', val)
+                            }
+                        />
+
+                        {formData.bursary === true && (
+                            <div
+                                ref={subQuestionRef}
+                                style={{
+                                    marginTop: 24,
+                                    padding: '20px',
+                                    background: '#f8f8f8',
+                                    borderRadius: 12,
+                                    border: '1px solid #e8e8e8'
+                                }}
+                            >
+                                <Text
+                                    strong
+                                    style={{
+                                        display: 'block',
+                                        marginBottom: 12
+                                    }}
+                                >
+                                    What is your total yearly bursary?
+                                </Text>
+                                <Input
+                                    style={{
+                                        width: '100%',
+                                        maxWidth: 200,
+                                        marginBottom: 24
+                                    }}
+                                    prefix={'\u00A3'}
+                                    inputMode="decimal"
+                                    size="large"
+                                    placeholder="e.g. 2,000"
+                                    value={formData.bursaryAmount}
+                                    onChange={e =>
+                                        updateField(
+                                            'bursaryAmount',
+                                            formatMoney(e.target.value)
+                                        )
+                                    }
+                                />
+
+                                <Text
+                                    strong
+                                    style={{
+                                        display: 'block',
+                                        marginBottom: 4
+                                    }}
+                                >
+                                    When are your bursary payments?
+                                </Text>
+                                <Text
+                                    type="secondary"
+                                    style={{
+                                        display: 'block',
+                                        marginBottom: 12,
+                                        fontSize: 13
+                                    }}
+                                >
+                                    The dates below are based on the typical Bristol University schedule. Adjust them if yours are different.
+                                </Text>
+
+                                {formData.bursaryDates.map(
+                                    (date, index) => (
+                                        <div
+                                            key={index}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 12,
+                                                marginBottom: 8
+                                            }}
+                                        >
+                                            <Text
+                                                style={{
+                                                    width: 90,
+                                                    flexShrink: 0
+                                                }}
+                                            >
+                                                Installment {' '}
+                                                {index + 1}
+                                            </Text>
+                                            <Input
+                                                type="date"
+                                                style={{ width: 160 }}
+                                                value={date}
+                                                onChange={e => {
+                                                    const updated = [
+                                                        ...formData.bursaryDates
+                                                    ]
+                                                    updated[index] =
+                                                        e.target.value
+                                                    updateField(
+                                                        'bursaryDates',
+                                                        updated
+                                                    )
+                                                }}
+                                            />
+                                            {formData.bursaryDates
+                                                .length > 1 && (
+                                                    <Button
+                                                        type="text"
+                                                        size="small"
+                                                        danger
+                                                        onClick={() => {
+                                                            updateField(
+                                                                'bursaryDates',
+                                                                formData.bursaryDates.filter(
+                                                                    (_, i) =>
+                                                                        i !==
+                                                                        index
+                                                                )
+                                                            )
+                                                        }}
+                                                    >
+                                                        Remove
+                                                    </Button>
+                                                )}
+                                        </div>
+                                    )
+                                )}
+                                <Button
+                                    type="dashed"
+                                    size="small"
+                                    onClick={() =>
+                                        updateField(
+                                            'bursaryDates',
+                                            [
+                                                ...formData.bursaryDates,
+                                                ''
+                                            ]
+                                        )
+                                    }
+                                    style={{ marginTop: 4 }}
+                                >
+                                    + Add installment
+                                </Button>
+                            </div>
+                        )}
+                    </>
+                )
+
+            case 'otherIncome':
+                return (
+                    <>
+                        <YesNo
+                            value={formData.otherIncome}
+                            onChange={val =>
+                                handleYesNo('otherIncome', val)
+                            }
+                        />
+
+                        {formData.otherIncome === true && (
+                            <div
+                                ref={subQuestionRef}
+                                style={{
+                                    marginTop: 24,
+                                    padding: '20px',
+                                    background: '#f8f8f8',
+                                    borderRadius: 12,
+                                    border: '1px solid #e8e8e8'
+                                }}
+                            >
+                                <OtherIncomeList
+                                    items={formData.otherIncomeItems}
+                                    onChange={items =>
+                                        updateField(
+                                            'otherIncomeItems',
+                                            items
+                                        )
+                                    }
+                                />
+                            </div>
+                        )}
+                    </>
+                )
+
+            case 'regularExpense':
+                return (
+                    <>
+                        <YesNo
+                            value={formData.regularExpense}
+                            onChange={val =>
+                                handleYesNo('regularExpense', val)
+                            }
+                        />
+
+                        {formData.regularExpense === true && (
+                            <div
+                                ref={subQuestionRef}
+                                style={{
+                                    marginTop: 24,
+                                    padding: '20px',
+                                    background: '#f8f8f8',
+                                    borderRadius: 12,
+                                    border: '1px solid #e8e8e8'
+                                }}
+                            >
+                                <RegularExpenseList
+                                    items={
+                                        formData.regularExpenseItems
+                                    }
+                                    onChange={items =>
+                                        updateField(
+                                            'regularExpenseItems',
+                                            items
+                                        )
+                                    }
+                                />
+                            </div>
+                        )}
+                    </>
+                )
+
+            case 'oneOffPayments':
+                return (
+                    <>
+                        <YesNo
+                            value={formData.oneOffPayments}
+                            onChange={val =>
+                                handleYesNo('oneOffPayments', val)
+                            }
+                        />
+
+                        {formData.oneOffPayments === true && (
+                            <div
+                                ref={subQuestionRef}
+                                style={{
+                                    marginTop: 24,
+                                    padding: '20px',
+                                    background: '#f8f8f8',
+                                    borderRadius: 12,
+                                    border: '1px solid #e8e8e8'
+                                }}
+                            >
+                                <Text
+                                    strong
+                                    style={{
+                                        display: 'block',
+                                        marginBottom: 12
+                                    }}
+                                >
+                                    Money in
+                                </Text>
+                                <OneOffItemList
+                                    items={formData.oneOffIn}
+                                    onChange={items =>
+                                        updateField('oneOffIn', items)
+                                    }
+                                />
+
+                                <Text
+                                    strong
+                                    style={{
+                                        display: 'block',
+                                        marginTop: 20,
+                                        marginBottom: 12
+                                    }}
+                                >
+                                    Money out
+                                </Text>
+                                <OneOffItemList
+                                    items={formData.oneOffOut}
+                                    onChange={items =>
+                                        updateField('oneOffOut', items)
+                                    }
+                                />
+                            </div>
+                        )}
+                    </>
+                )
+
+            case 'weeklySpend':
+                return (
+                    <Select
+                        style={{ width: '100%', maxWidth: 360 }}
+                        size="large"
+                        value={formData.weeklySpend ?? undefined}
+                        placeholder="Select"
+                        onChange={(value) => updateField('weeklySpend', value)}
+                        options={WEEKLY_SPEND_OPTIONS}
+                    />
+                )
+
+            default:
+                return null
+        }
+    }
+
+    /* ---------- RENDER ---------- */
 
     return (
-        <div
-            ref={scrollRef}
-            style={{ height: '100%', overflowY: 'auto', padding: '0 12px' }}
-        >
-            <Form
-                layout="vertical"
-                size="large"
-                colon={false}
-                onFinish={submit}
-                style={{ maxWidth: 720, margin: '0 auto' }}
+        <div ref={pageRef} className="page-shell" style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            touchAction: 'none'
+        }}>
+            <div
+                style={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    padding: '0px 23px',
+                    maxWidth: 480,
+                    margin: '0 auto',
+                    width: '100%',
+                    overflow: 'hidden'
+                }}
             >
-                <ScrollProgress scrollRef={scrollRef} />
+                {modalContextHolder}
+                {messageContextHolder}
 
-                <Title level={3}>Let’s understand your finances</Title>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 24 }}>
-                    This takes about 2 minutes. You can skip anything you’re unsure about.
-                </Text>
+                {/* Fixed progress bar */}
+                <StepProgress progress={progress} />
 
-                <Section title="Your current position">
-                    <Form.Item label="Current bank balance">
-                        <Input
-                            style={{ width: 150 }}
-                            inputMode="decimal"
-                            value={balance}
-                            onChange={e => setBalance(e.target.value)}
-                            prefix="£"
-                        />
-                    </Form.Item>
-                </Section>
-
-                <Section title="Incoming money">
-                    <Form.Item label="Do you receive student loans?">
-                        <YesNo value={studentLoan} onChange={setStudentLoan} />
-                    </Form.Item>
-
-                    {studentLoan && (
-                        <Form.Item label="Will your next loan arrive in mid-April?">
-                            <YesNo value={loanApril} onChange={setLoanApril} />
-                        </Form.Item>
-                    )}
-
-                    <Form.Item label="Any bursaries or additional income before mid-April?">
-                        <YesNo value={income} onChange={setIncome} />
-                    </Form.Item>
-
-                    {income && (
-                        <MoneyDetails
-                            amount={incomeAmount}
-                            setAmount={setIncomeAmount}
-                            date={incomeDate}
-                            setDate={setIncomeDate}
-                            frequency={incomeFrequency}
-                            setFrequency={setIncomeFrequency}
-                        />
-                    )}
-                </Section>
-
-                <Section title="Upcoming commitments">
-                    <Form.Item label="Do you owe or are you owed any money?">
-                        <YesNo value={debt} onChange={setDebt} />
-                    </Form.Item>
-
-                    {debt && (
-                        <MoneyDetails
-                            amount={debtAmount}
-                            setAmount={setDebtAmount}
-                            date={debtDate}
-                            setDate={setDebtDate}
-                            frequency={debtFrequency}
-                            setFrequency={setDebtFrequency}
-                        />
-                    )}
-
-                    <Form.Item label="Any rent or bill payments due before mid-April?">
-                        <YesNo value={rentBills} onChange={setRentBills} />
-                    </Form.Item>
-
-                    {rentBills && (
-                        <MoneyDetails
-                            amount={rentAmount}
-                            setAmount={setRentAmount}
-                            date={rentDate}
-                            setDate={setRentDate}
-                            frequency={rentFrequency}
-                            setFrequency={setRentFrequency}
-                        />
-                    )}
-
-                    <Form.Item label="Any surprising expenses coming up?">
-                        <YesNo value={surprise} onChange={setSurprise} />
-                    </Form.Item>
-
-                    {surprise && (
-                        <MoneyDetails
-                            amount={surpriseAmount}
-                            setAmount={setSurpriseAmount}
-                            date={surpriseDate}
-                            setDate={setSurpriseDate}
-                            frequency={surpriseFrequency}
-                            setFrequency={setSurpriseFrequency}
-                        />
-                    )}
-                </Section>
-
-                <Section title="Spending habits">
-                    <Form.Item label="Weekly spending (excluding rent & bills)">
-                        <Select
-                            value={weeklySpend}
-                            onChange={setWeeklySpend}
-                            placeholder="Select"
-                            options={[
-                                { value: '50-80', label: '£50–£80 (very frugal)' },
-                                { value: '80-120', label: '£80–£120 (typical Bristol student)' },
-                                { value: '120-180', label: '£120–£180 (social & eating out)' },
-                                { value: '180+', label: '£180+ (very social / lifestyle-heavy)' }
-                            ]}
-                        />
-                    </Form.Item>
-
-                    {/* <Form.Item label="How would you describe your spending style?">
-                        <Slider min={1} max={5} value={spendingStyle} onChange={setSpendingStyle} />
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                            1 = very frugal · 5 = very extravagant
+                {/* Scrollable area containing question and form */}
+                <div
+                    ref={scrollAreaRef}
+                    style={{
+                        flex: 1,
+                        overflowY: 'auto',
+                        overflowX: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        paddingTop: 24,
+                        touchAction: 'pan-y',
+                        WebkitOverflowScrolling: 'touch'
+                    }}
+                >
+                    {/* Question section */}
+                    <div style={{ flexShrink: 0 }}>
+                        <Title level={3} style={{ marginBottom: 4 }}>
+                            {currentStep.heading}
+                        </Title>
+                        <Text
+                            type="secondary"
+                            style={{ display: 'block', marginBottom: 24 }}
+                        >
+                            {currentStep.subtitle}
                         </Text>
-                    </Form.Item> */}
-                </Section>
-
-                <Divider />
-
-                <Section title="Before you continue">
-                    <div style={{ background: '#fafafa', padding: 16, borderRadius: 8 }}>
-                        {REQUIRED_CONSENTS.map(consent => (
-                            <div key={consent.id} style={{ marginBottom: 20 }}>
-                                <Title level={5}>{consent.title}</Title>
-
-                                {consent.description.map((d, i) => (
-                                    <Text key={i} type="secondary" style={{ display: 'block' }}>
-                                        {d}
-                                    </Text>
-                                ))}
-
-                                <Checkbox
-                                    checked={consents[consent.id]}
-                                    onChange={e => updateConsent(consent.id, e.target.checked)}
-                                    style={{ marginTop: 8 }}
-                                >
-                                    {consent.checkboxLabel}
-                                </Checkbox>
-                            </div>
-                        ))}
                     </div>
-                </Section>
 
+                    {/* Form content */}
+                    <div>
+                        {renderStepContent()}
+                    </div>
+                </div>
+
+                {/* Fixed navigation buttons */}
                 <div
                     style={{
                         display: 'flex',
-                        justifyContent: 'space-between',
-                        gap: 12
+                        gap: 12,
+                        paddingBottom: 16,
+                        paddingTop: 16,
+                        flexShrink: 0
                     }}
                 >
+                    {currentIndex > 0 && (
+                        <Button
+                            size="large"
+                            onClick={goBack}
+                            style={{ flex: 1 }}
+                        >
+                            Back
+                        </Button>
+                    )}
                     <Button
-                        style={{ flex: 1 }}
-                        type="link"
-                        size="large"
-                        onClick={handleLogout}
-                    >
-                        Log out
-                    </Button>
-
-                    <Button
-                        style={{ flex: 10 }}
                         type="primary"
-                        htmlType="submit"
                         size="large"
-                        disabled={!allRequiredConsented}
+                        onClick={handleNext}
+                        loading={submitting}
+                        style={{ flex: 1 }}
                     >
-                        Continue
+                        {isLastStep ? 'Submit' : 'Next'}
                     </Button>
                 </div>
-            </Form>
+            </div>
         </div>
     )
 }
