@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Checkbox, Typography } from 'antd'
+import { Button, Checkbox, Typography, message } from 'antd'
 import { CONSENTS } from '../core/consents'
 import { saveUserConsents } from '../lib/api'
 
@@ -12,6 +12,9 @@ export default function ConsentScreen({ user, onConsentGranted }) {
         Object.fromEntries(CONSENTS.map(c => [c.id, false]))
     )
     const [saving, setSaving] = useState(false)
+    const [messageApi, contextHolder] = message.useMessage({
+        maxCount: 1
+    })
 
     const allRequiredChecked = REQUIRED_IDS.every(id => consents[id])
 
@@ -25,22 +28,29 @@ export default function ConsentScreen({ user, onConsentGranted }) {
             onConsentGranted()
         } catch (err) {
             console.error(err)
-            alert('Something went wrong saving your consents')
+            messageApi.error({
+                content: 'Something went wrong saving your consents. Please try again.',
+                duration: 5,
+                style: { fontSize: 15, cursor: 'pointer' },
+                onClick: () => messageApi.destroy()
+            })
         } finally {
             setSaving(false)
         }
     }
 
     return (
-        <div
-            style={{
-                height: '100%',
-                overflowY: 'auto',
-                padding: '0 12px',
-                display: 'flex',
-                flexDirection: 'column'
-            }}
-        >
+        <>
+            {contextHolder}
+            <div
+                style={{
+                    height: '100%',
+                    overflowY: 'auto',
+                    padding: '0 12px',
+                    display: 'flex',
+                    flexDirection: 'column'
+                }}
+            >
             <div style={{ maxWidth: 480, margin: '0 auto', width: '100%', padding: '0 15px' }}>
                 <div
                     style={{
@@ -153,5 +163,6 @@ export default function ConsentScreen({ user, onConsentGranted }) {
                 </Button>
             </div>
         </div>
+        </>
     )
 }
