@@ -7,6 +7,7 @@ const { Title, Text } = Typography
 export default function Login() {
     const [loading, setLoading] = useState(false)
     const [cooldownSeconds, setCooldownSeconds] = useState(0)
+    const [lastEmail, setLastEmail] = useState('')
     const [messageApi, contextHolder] = message.useMessage({
         maxCount: 1
     })
@@ -41,6 +42,7 @@ export default function Login() {
                 onClick: () => messageApi.destroy()
             })
         } else {
+            setLastEmail(email)
             setCooldownSeconds(60)
             messageApi.success({
                 content: 'Your secure login link is on its way. Check your inbox (and spam/junk folder).', duration: 10,
@@ -111,6 +113,12 @@ export default function Login() {
                     onFinish={handleLogin}
                     requiredMark={false}
                     autoComplete="on"
+                    onValuesChange={(changedValues) => {
+                        if (changedValues.email && changedValues.email !== lastEmail) {
+                            setCooldownSeconds(0)
+                            messageApi.destroy()
+                        }
+                    }}
                 >
                     <Form.Item
                         label={<Text strong>Your email address</Text>}
