@@ -110,6 +110,7 @@ export default function Login() {
                     layout="vertical"
                     onFinish={handleLogin}
                     requiredMark={false}
+                    autoComplete="on"
                 >
                     <Form.Item
                         label={<Text strong>Your email address</Text>}
@@ -122,7 +123,9 @@ export default function Login() {
                         <Input
                             size="large"
                             placeholder="University email address"
+                            type="email"
                             inputMode="email"
+                            autoComplete="username email"
                             style={{
                                 borderRadius: 999,
                                 padding: '12px 20px'

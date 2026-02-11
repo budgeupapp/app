@@ -1572,13 +1572,15 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
             case 'weeklySpend':
                 return (
-                    <Select
-                        style={{ width: '100%', maxWidth: 360 }}
-                        size="large"
-                        value={formData.weeklySpend ?? undefined}
+                    <NativeSelect
+                        value={formData.weeklySpend ? String(formData.weeklySpend) : ''}
+                        onChange={(value) => updateField('weeklySpend', Number(value))}
+                        options={WEEKLY_SPEND_OPTIONS.map(opt => ({
+                            value: String(opt.value),
+                            label: opt.label,
+                        }))}
                         placeholder="Select"
-                        onChange={(value) => updateField('weeklySpend', value)}
-                        options={WEEKLY_SPEND_OPTIONS}
+                        style={{ maxWidth: 360 }}
                     />
                 )
 
