@@ -173,7 +173,6 @@ export function calculateForecast(
 
         currentDate = addDays(currentDate, 1)
     }
-    console.log('Generated forecast:', forecast)
     return forecast
 }
 

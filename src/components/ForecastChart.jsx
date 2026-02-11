@@ -14,7 +14,11 @@ function getPageSize(timeView) {
 
 function getTickInterval(dataLength, timeView) {
     if (timeView === 'day') return 0 // show every day for weekly
-    if (timeView === 'term') return Math.floor(dataLength / 5) - 1 // ~5 ticks for term
+    if (timeView === 'term') {
+        if (dataLength <= 10) return 0
+        if (dataLength <= 60) return Math.floor(dataLength / 6)
+        return Math.floor(dataLength / 8)
+    }
     if (dataLength <= 10) return 0
     if (dataLength <= 30) return Math.floor(dataLength / 6) - 1
     return Math.floor(dataLength / 5) - 1
@@ -37,7 +41,7 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
 
     const pageSize = getPageSize(timeView)
 
-    const totalPages = (timeView === 'year' || timeView === 'term') ? 1 : Math.ceil(data.length / pageSize)
+    const totalPages = timeView === 'year' ? 1 : timeView === 'term' ? 2 : Math.ceil(data.length / pageSize)
 
     // Clamp page to valid range
     const currentPage = Math.max(0, Math.min(page, totalPages - 1))
@@ -50,12 +54,29 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
     const pagedData = useMemo(() => {
         if (data.length === 0) return []
 
-        // For term view, filter to only show Jan-May and Sep-Dec
+        // For term view, show Term 1 (Jan-May) or Term 2 (Sep-Dec) based on page
         if (timeView === 'term') {
-            return data.filter(d => {
-                const month = parseISO(d.date).getMonth() + 1 // 1-12
-                return (month >= 1 && month <= 5) || (month >= 9 && month <= 12)
-            })
+            // Find the first data point to determine the current year
+            const firstDate = parseISO(data[0].date)
+            const currentYear = firstDate.getFullYear()
+
+            if (currentPage === 0) {
+                // Term 1: January to May of current year
+                return data.filter(d => {
+                    const date = parseISO(d.date)
+                    const month = date.getMonth() + 1 // 1-12
+                    const year = date.getFullYear()
+                    return year === currentYear && month >= 1 && month <= 5
+                })
+            } else {
+                // Term 2: September to December of current year
+                return data.filter(d => {
+                    const date = parseISO(d.date)
+                    const month = date.getMonth() + 1 // 1-12
+                    const year = date.getFullYear()
+                    return year === currentYear && month >= 9 && month <= 12
+                })
+            }
         }
 
         const safePage = Math.max(0, Math.min(currentPage, totalPages - 1))
@@ -118,6 +139,11 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
 
     const pageLabel = () => {
         if (pagedData.length === 0) return ''
+
+        if (timeView === 'term') {
+            return currentPage === 0 ? 'Term 1 (Jan–May)' : 'Term 2 (Sep–Dec)'
+        }
+
         const first = format(parseISO(pagedData[0].date), 'd MMM')
         const last = format(parseISO(pagedData[pagedData.length - 1].date), 'd MMM yyyy')
         return `${first} – ${last}`
@@ -195,7 +221,59 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
         return [yMin, 'auto']
     }, [showSavings, savingsBuffer, pagedData])
 
-    if (pagedData.length === 0) return null
+    if (pagedData.length === 0) {
+        return (
+            <div style={{
+                width: '100%',
+                height: 220,
+                background: '#f8f8f8',
+                borderRadius: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                overflow: 'hidden'
+            }}>
+                {/* Animated skeleton gradient */}
+                <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.4) 50%, transparent 100%)',
+                    animation: 'shimmer 2s infinite',
+                    transformOrigin: 'center'
+                }} />
+
+                {/* Skeleton chart bars */}
+                <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    gap: 8,
+                    height: 140,
+                    padding: '0 20px'
+                }}>
+                    {[60, 85, 70, 95, 75, 88, 65].map((height, i) => (
+                        <div
+                            key={i}
+                            style={{
+                                width: 30,
+                                height: `${height}%`,
+                                background: '#e0e0e0',
+                                borderRadius: '4px 4px 0 0',
+                                opacity: 0.6
+                            }}
+                        />
+                    ))}
+                </div>
+
+                <style>{`
+                    @keyframes shimmer {
+                        0% { transform: translateX(-100%); }
+                        100% { transform: translateX(100%); }
+                    }
+                `}</style>
+            </div>
+        )
+    }
 
     return (
         <div>

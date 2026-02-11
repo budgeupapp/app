@@ -158,14 +158,13 @@ export default function Dashboard() {
                 top: 0,
                 zIndex: 10,
                 background: '#fff',
-                borderBottom: '1px solid #f0f0f0'
             }}>
                 {/* Page Title with Logout Button */}
                 <div style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '15px 20px 16px'
+                    padding: '8px 20px 16px'
                 }}>
                     <h1 style={{
                         margin: 0,
@@ -200,7 +199,7 @@ export default function Dashboard() {
 
                 {/* Time View Segmented Control */}
                 <div style={{
-                    padding: '0 20px 20px'
+                    padding: '0 20px'
                 }}>
                     <NativeSegmented
                         value={timeView}
@@ -215,7 +214,7 @@ export default function Dashboard() {
                 flex: 1,
                 overflow: 'auto',
                 paddingTop: 20,
-                minHeight: 'calc(100vh - 200px)'
+                minHeight: 'calc(100vh - 200px)',
             }}>
                 {/* Chart Section with Status & Balance */}
                 <div style={{

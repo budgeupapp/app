@@ -16,7 +16,6 @@ export default function PaymentsScreen() {
                 top: 0,
                 zIndex: 10,
                 background: '#fff',
-                borderBottom: '1px solid #f0f0f0'
             }}>
                 <h1 style={{
                     margin: 0,
