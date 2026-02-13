@@ -38,17 +38,30 @@
     pointer-events: none;
     z-index: 1;
 
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
 
-    /* Progressive fade */
-    mask-image: linear-gradient(to top, black 40%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to top, black 40%, transparent 100%);
+    /* Smooth fade of blur */
+    mask-image: linear-gradient(to top,
+            black 0%,
+            black 35%,
+            rgba(0, 0, 0, 0.8) 55%,
+            rgba(0, 0, 0, 0.4) 75%,
+            transparent 100%);
+    -webkit-mask-image: linear-gradient(to top,
+            black 0%,
+            black 35%,
+            rgba(0, 0, 0, 0.8) 55%,
+            rgba(0, 0, 0, 0.4) 75%,
+            transparent 100%);
 
+    /* White → transparent */
     background: linear-gradient(to top,
-            rgba(255, 255, 255, 0),
-            rgba(255, 255, 255, 1),
-            transparent);
+            rgba(255, 255, 255, 1) 0%,
+            rgba(255, 255, 255, 0.95) 20%,
+            rgba(255, 255, 255, 0.7) 40%,
+            rgba(255, 255, 255, 0.3) 65%,
+            rgba(255, 255, 255, 0.0) 100%);
 }
 
 .nav-tab {

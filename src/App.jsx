@@ -3,22 +3,23 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { Spin } from 'antd'
 
-import Login from './screens/Login'
-import ConsentScreen from './screens/ConsentScreen'
+import LoginForm from './screens/LoginForm'
+import SignupForm from './screens/SignupForm'
 import FinancialOnboardingForm from './screens/FinancialOnboardingForm'
 import LoadingScreen from './screens/LoadingScreen'
 import Dashboard from './screens/Dashboard'
-import PaymentsScreen from './screens/PaymentsScreen'
+import FinancesScreen from './screens/FinancesScreen'
 import MoneyAdviceScreen from './screens/MoneyAdviceScreen'
+import SettingsScreen from './screens/SettingsScreen'
 import NotFound from './screens/NotFound'
 import BottomNav from './components/BottomNav'
 import MoneyAdviceSvg from './assets/money-advice.svg'
+import { saveSignupConsents } from './lib/api'
 
 export default function App() {
     const [session, setSession] = useState(null)
     const [loading, setLoading] = useState(true)
-    const [hasConsent, setHasConsent] = useState(false)
-    const [consentLoading, setConsentLoading] = useState(true)
+    const [processingSignup, setProcessingSignup] = useState(false)
     const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false)
     const [onboardingLoading, setOnboardingLoading] = useState(true)
     const [showLoadingScreen, setShowLoadingScreen] = useState(false)
@@ -40,8 +41,26 @@ export default function App() {
         })
 
         const { data: listener } = supabase.auth.onAuthStateChange(
-            (_event, session) => {
+            async (event, session) => {
                 setSession(session)
+
+                // Handle new signup consent insertion
+                if (event === 'SIGNED_IN' && session?.user) {
+                    const signupEmail = localStorage.getItem('signup_email')
+                    const signupTimestamp = localStorage.getItem('signup_timestamp')
+
+                    // Check if this is a recent signup (within last 10 minutes)
+                    const isRecentSignup = signupTimestamp &&
+                        (Date.now() - parseInt(signupTimestamp)) < 10 * 60 * 1000
+
+                    if (signupEmail === session.user.email && isRecentSignup) {
+                        setProcessingSignup(true)
+                        await saveSignupConsents(session.user.id)
+                        localStorage.removeItem('signup_email')
+                        localStorage.removeItem('signup_timestamp')
+                        setProcessingSignup(false)
+                    }
+                }
             }
         )
 
@@ -49,29 +68,6 @@ export default function App() {
             listener?.subscription.unsubscribe()
         }
     }, [])
-
-    /* ---------------- CONSENT CHECK ---------------- */
-
-    useEffect(() => {
-        if (!session) {
-            setConsentLoading(false)
-            return
-        }
-
-        const checkConsent = async () => {
-            setConsentLoading(true)
-            const { data } = await supabase
-                .from('user_consents')
-                .select('id')
-                .eq('user_id', session.user.id)
-                .is('revoked_at', null)
-
-            setHasConsent(data && data.length > 0)
-            setConsentLoading(false)
-        }
-
-        checkConsent()
-    }, [session?.user?.id])
 
     /* ---------------- ONBOARDING CHECK ---------------- */
 
@@ -101,17 +97,17 @@ export default function App() {
     }
 
     useEffect(() => {
-        if (!session || !hasConsent) {
+        if (!session) {
             setOnboardingLoading(false)
             return
         }
 
         checkOnboarding()
-    }, [session?.user?.id, hasConsent])
+    }, [session?.user?.id])
 
     /* ---------------- LOADING STATE ---------------- */
 
-    if (loading || consentLoading || onboardingLoading) {
+    if (loading || onboardingLoading || processingSignup) {
         return (
             <div
                 style={{
@@ -122,7 +118,7 @@ export default function App() {
                     backgroundColor: '#ffffff',
                 }}
             >
-                <Spin size="large" description="Loading…" />
+                <Spin size="large" />
             </div>
         )
     }
@@ -133,21 +129,11 @@ export default function App() {
         return (
             <BrowserRouter>
                 <Routes>
-                    <Route path="/login" element={<Login />} />
+                    <Route path="/login" element={<LoginForm />} />
+                    <Route path="/signup" element={<SignupForm />} />
                     <Route path="*" element={<Navigate to="/login" replace />} />
                 </Routes>
             </BrowserRouter>
-        )
-    }
-
-    /* ---------------- NO CONSENT ---------------- */
-
-    if (!hasConsent) {
-        return (
-            <ConsentScreen
-                user={session.user}
-                onConsentGranted={() => setHasConsent(true)}
-            />
         )
     }
 
@@ -188,10 +174,10 @@ export default function App() {
                         <BottomNav />
                     </div>
                 } />
-                <Route path="/payments" element={
+                <Route path="/transactions" element={
                     <div className="app-container">
                         <div style={{ height: '100vh', position: 'relative' }}>
-                            <PaymentsScreen />
+                            <FinancesScreen />
                         </div>
                         <BottomNav />
                     </div>
@@ -200,6 +186,14 @@ export default function App() {
                     <div className="app-container">
                         <div style={{ height: '100vh', position: 'relative' }}>
                             <MoneyAdviceScreen />
+                        </div>
+                        <BottomNav />
+                    </div>
+                } />
+                <Route path="/settings" element={
+                    <div className="app-container">
+                        <div style={{ height: '100vh', position: 'relative' }}>
+                            <SettingsScreen />
                         </div>
                         <BottomNav />
                     </div>

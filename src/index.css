@@ -69,6 +69,7 @@ input[type="date"]::-webkit-date-and-time-value {
   margin-top: 1%;
 }
 
+
 /* Remove default focus outline/shadow from native selects */
 select:focus,
 select:focus-visible,
@@ -121,6 +122,11 @@ button:focus {
   50% {
     opacity: 0.5;
   }
+}
+
+/* Hide iubenda floating cookie preferences button (we have our own in footer) */
+.iubenda-cs-preferences-link {
+  display: none !important;
 }
 
 /* Responsive layout for desktop/laptop */

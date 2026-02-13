@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Spin, Alert } from 'antd'
 import { addDays, addMonths, addYears, format, parseISO } from 'date-fns'
-import { LogOut01 } from '@untitledui/icons'
 import ForecastChart from '../components/ForecastChart'
 import NativeSegmented from '../components/NativeSegmented'
 import { fetchUserData } from '../lib/api'
 import { calculateForecast, analyzeForecast } from '../lib/forecastCalculator'
 import { supabase } from '../lib/supabaseClient'
+
 
 // Map weekly spend band to actual amount (midpoint of ranges)
 const WEEKLY_SPEND_MAP = {
@@ -110,7 +110,7 @@ export default function Dashboard() {
         const weeklySpend = WEEKLY_SPEND_MAP[profile.weekly_spend_band] || 0
 
         const forecast = calculateForecast(
-            profile.current_balance || 0,
+            profile.balance || 0,
             profile.savings || 0,
             cashflows,
             weeklySpend,
@@ -124,24 +124,12 @@ export default function Dashboard() {
         setInsights(analysis)
     }
 
-    const handleLogout = async () => {
-        try {
-            // Clear all localStorage data
-            localStorage.clear()
-
-            await supabase.auth.signOut()
-            // The auth state change listener in App.jsx will handle navigation
-        } catch (error) {
-            console.error('Error logging out:', error)
-        }
-    }
-
     const handleVisibleDataChange = useCallback((visibleData) => {
         setVisibleTotals(calculateTotals(visibleData))
     }, [])
 
     // Render the layout structure even during loading
-    const currentBalance = userData?.profile?.current_balance || 0
+    const currentBalance = userData?.profile?.balance || 0
     const { totalIncome, totalExpense } = visibleTotals
 
     // Show error if present
@@ -162,11 +150,8 @@ export default function Dashboard() {
                 zIndex: 10,
                 background: '#fff',
             }}>
-                {/* Page Title with Logout Button */}
+                {/* Page Title */}
                 <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
                     padding: '8px 20px 16px'
                 }}>
                     <h1 style={{
@@ -177,27 +162,6 @@ export default function Dashboard() {
                     }}>
                         Your Financial Forecast
                     </h1>
-
-                    <button
-                        onClick={handleLogout}
-                        style={{
-                            background: 'transparent',
-                            border: 'none',
-                            padding: 8,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            borderRadius: 8,
-                            transition: 'background 0.2s ease',
-                            color: '#666'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                        aria-label="Logout"
-                    >
-                        <LogOut01 size={20} strokeWidth={2} />
-                    </button>
                 </div>
 
                 {/* Time View Segmented Control */}

@@ -1,4 +1,5 @@
 export { saveUserConsents } from './saveUserConsents'
+export { saveSignupConsents } from './saveSignupConsents'
 export { saveCashflowForecast } from './saveCashflowForecast'
 export { saveUserFinances } from './saveUserFinances'
 export { fetchUserData, updateCashflowEntry, deleteCashflowEntry } from './fetchUserData'

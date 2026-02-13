@@ -10,7 +10,7 @@ export async function saveUserFinances(userId, profile) {
             {
                 user_id: userId,
                 university: profile.university || null,
-                current_balance: Number(stripCommas(profile.balance)) || 0,
+                balance: Number(stripCommas(profile.balance)) || 0,
                 savings: Number(stripCommas(profile.savings)) || 0,
                 weekly_spend_band: profile.weeklySpend || null,
                 currency: profile.currency ?? 'GBP',

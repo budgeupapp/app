@@ -10,6 +10,14 @@ export default function NativeSelect({
     required = false,
     disabled = false
 }) {
+    // Normalize options to {value, label} format
+    const normalizedOptions = options.map(option => {
+        if (typeof option === 'string') {
+            return { value: option, label: option }
+        }
+        return option
+    })
+
     return (
         <div className="native-select-wrapper" style={style}>
             {label && (
@@ -30,7 +38,7 @@ export default function NativeSelect({
                             {placeholder}
                         </option>
                     )}
-                    {options.map((option) => (
+                    {normalizedOptions.map((option) => (
                         <option
                             key={option.value}
                             value={option.value}

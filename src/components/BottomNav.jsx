@@ -1,7 +1,8 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
     CoinsHand,
-    MessageQuestionCircle
+    MessageQuestionCircle,
+    Settings01
 } from "@untitledui/icons";
 import './BottomNav.css'
 
@@ -17,9 +18,9 @@ export default function BottomNav() {
             icon: 'logo' // Use logo image
         },
         {
-            key: 'payments',
-            path: '/payments',
-            label: 'Payments',
+            key: 'transactions',
+            path: '/transactions',
+            label: 'Finances',
             icon: <CoinsHand className="size-5" />
         },
         {
@@ -27,6 +28,12 @@ export default function BottomNav() {
             path: '/advice',
             label: 'Money Advice',
             icon: <MessageQuestionCircle className="size-5" />
+        },
+        {
+            key: 'settings',
+            path: '/settings',
+            label: 'Settings',
+            icon: <Settings01 className="size-5" />
         }
     ]
 

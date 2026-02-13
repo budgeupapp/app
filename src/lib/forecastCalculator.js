@@ -41,13 +41,21 @@ function generateOccurrences(transaction, startDate, endDate) {
     const occurrences = []
     const scheduledDate = parseISO(transaction.scheduled_date)
 
-    // If transaction is before our range and not recurring, skip it
-    if (isBefore(scheduledDate, startDate) && transaction.recurrence === 'once') {
+    // Parse transaction end_date if it exists
+    const transactionEndDate = transaction.end_date ? parseISO(transaction.end_date) : null
+
+    // If transaction hasn't started yet (scheduled_date is after our range), skip it
+    if (isAfter(scheduledDate, endDate)) {
         return occurrences
     }
 
-    // If transaction is after our range, skip it
-    if (isAfter(scheduledDate, endDate)) {
+    // If transaction has already ended before our range starts, skip it
+    if (transactionEndDate && isBefore(transactionEndDate, startDate)) {
+        return occurrences
+    }
+
+    // If transaction is before our range and not recurring, skip it
+    if (isBefore(scheduledDate, startDate) && transaction.recurrence === 'once') {
         return occurrences
     }
 
@@ -59,7 +67,7 @@ function generateOccurrences(transaction, startDate, endDate) {
                 amount: Number(transaction.amount),
                 direction: transaction.direction,
                 title: transaction.title,
-                category: transaction.category
+                type: transaction.type
             })
         }
     } else {
@@ -72,14 +80,23 @@ function generateOccurrences(transaction, startDate, endDate) {
             !isAfter(currentDate, endDate) &&
             occurrenceCount < maxOccurrences
         ) {
-            if (!isBefore(currentDate, startDate)) {
+            // Check if this occurrence is within the forecast range AND before transaction end_date
+            const isWithinRange = !isBefore(currentDate, startDate)
+            const isBeforeTransactionEnd = !transactionEndDate || !isAfter(currentDate, transactionEndDate)
+
+            if (isWithinRange && isBeforeTransactionEnd) {
                 occurrences.push({
                     date: currentDate,
                     amount: Number(transaction.amount),
                     direction: transaction.direction,
                     title: transaction.title,
-                    category: transaction.category
+                    type: transaction.type
                 })
+            }
+
+            // Stop generating if we've passed the transaction's end_date
+            if (transactionEndDate && isAfter(currentDate, transactionEndDate)) {
+                break
             }
 
             occurrenceCount++
@@ -135,12 +152,12 @@ export function calculateForecast(
     let occurrenceIndex = 0
 
     while (!isAfter(currentDate, end)) {
-        const dayTransactions = []
+        const dayFinances = []
 
         // Apply daily spending (as an outflow)
         if (dailySpending > 0) {
             currentBalance -= dailySpending
-            dayTransactions.push({
+            dayFinances.push({
                 title: 'Daily spending',
                 amount: dailySpending,
                 direction: 'out'
@@ -161,14 +178,14 @@ export function calculateForecast(
                 currentBalance -= amount
             }
 
-            dayTransactions.push(occurrence)
+            dayFinances.push(occurrence)
             occurrenceIndex++
         }
 
         forecast.push({
             date: format(currentDate, 'yyyy-MM-dd'),
             balance: Math.round(currentBalance * 100) / 100, // Round to 2 decimals
-            transactions: dayTransactions
+            transactions: dayFinances
         })
 
         currentDate = addDays(currentDate, 1)

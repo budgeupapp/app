@@ -71,7 +71,7 @@ export async function saveCashflowForecast(userId, data) {
             rows.push({
                 user_id: userId,
                 direction: 'in',
-                category: 'student_loan',
+                type: 'student_loan',
                 title: `Student loan - ${month}`,
                 amount: perInstalment,
                 currency: 'GBP',
@@ -97,7 +97,7 @@ export async function saveCashflowForecast(userId, data) {
             rows.push({
                 user_id: userId,
                 direction: 'in',
-                category: 'bursary',
+                type: 'bursary',
                 title: 'Bursary',
                 amount: perPayment,
                 currency: 'GBP',
@@ -114,17 +114,17 @@ export async function saveCashflowForecast(userId, data) {
         for (const item of data.otherIncomeItems) {
             const amount = stripCommas(item.amount)
             if (!amount) continue
-            const categoryLabel = INCOME_TYPE_LABELS[item.type] || 'Other income'
+            const typeLabel = INCOME_TYPE_LABELS[item.type] || 'Other income'
             rows.push({
                 user_id: userId,
                 direction: 'in',
-                category: item.type || 'income',
-                title: categoryLabel,
+                type: item.type || 'income',
+                title: typeLabel,
                 amount,
                 currency: 'GBP',
                 recurrence: mapFrequencyToRecurrence(item.frequency),
                 scheduled_date: item.date,
-                end_date: null,
+                end_date: item.endDate || null,
                 source: 'manual'
             })
         }
@@ -135,17 +135,17 @@ export async function saveCashflowForecast(userId, data) {
         for (const item of data.regularExpenseItems) {
             const amount = stripCommas(item.amount)
             if (!amount) continue
-            const categoryLabel = PAYMENT_TYPE_LABELS[item.type] || 'Regular payment'
+            const typeLabel = PAYMENT_TYPE_LABELS[item.type] || 'Regular payment'
             rows.push({
                 user_id: userId,
                 direction: 'out',
-                category: item.type || 'bill',
-                title: categoryLabel,
+                type: item.type || 'bill',
+                title: typeLabel,
                 amount,
                 currency: 'GBP',
                 recurrence: mapFrequencyToRecurrence(item.frequency),
                 scheduled_date: item.date || null,
-                end_date: null,
+                end_date: item.endDate || null,
                 source: 'manual'
             })
         }
@@ -159,7 +159,7 @@ export async function saveCashflowForecast(userId, data) {
             rows.push({
                 user_id: userId,
                 direction: 'in',
-                category: 'one_off',
+                type: 'one_off',
                 title: item.name || 'One-off income',
                 amount,
                 currency: 'GBP',
@@ -179,7 +179,7 @@ export async function saveCashflowForecast(userId, data) {
             rows.push({
                 user_id: userId,
                 direction: 'out',
-                category: 'one_off',
+                type: 'one_off',
                 title: item.name || 'One-off expense',
                 amount,
                 currency: 'GBP',
