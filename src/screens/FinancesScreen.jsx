@@ -265,7 +265,6 @@ export default function FinancesScreen() {
             <div
                 style={{
                     flex: 1,
-                    minHeight: 0, // ← THIS FIXES IT
                     overflowY: 'auto',
                     overflowX: 'hidden',
                     WebkitOverflowScrolling: 'touch',
@@ -546,23 +545,25 @@ export default function FinancesScreen() {
                                                 <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
                                                     Start Date
                                                 </Text>
-                                                <Input
-                                                    type="date"
-                                                    size="large"
-                                                    value={item.date}
-                                                    onChange={e => {
-                                                        const newItems = [...formData.otherIncomeItems]
-                                                        newItems[originalIdx].date = e.target.value
-                                                        updateField('otherIncomeItems', newItems)
-                                                    }}
-                                                    style={{
-                                                        borderRadius: 8,
-                                                        marginBottom: 12,
-                                                        WebkitAppearance: 'none',
-                                                        width: '100%',
-                                                        height: 44,
-                                                    }}
-                                                />
+                                                <div style={{ display: 'flex', minWidth: 0 }}>
+                                                    <Input
+                                                        type="date"
+                                                        size="large"
+                                                        value={item.date}
+                                                        onChange={e => {
+                                                            const newItems = [...formData.otherIncomeItems]
+                                                            newItems[originalIdx].date = e.target.value
+                                                            updateField('otherIncomeItems', newItems)
+                                                        }}
+                                                        style={{
+                                                            borderRadius: 8,
+                                                            marginBottom: 12,
+                                                            WebkitAppearance: 'none',
+                                                            width: '100%',
+                                                            height: 44,
+                                                        }}
+                                                    />
+                                                </div>
                                                 <NativeSelect
                                                     label="Frequency"
                                                     value={item.frequency}
@@ -577,22 +578,24 @@ export default function FinancesScreen() {
                                                 <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
                                                     End Date (optional)
                                                 </Text>
-                                                <Input
-                                                    type="date"
-                                                    size="large"
-                                                    value={item.endDate}
-                                                    onChange={e => {
-                                                        const newItems = [...formData.otherIncomeItems]
-                                                        newItems[originalIdx].endDate = e.target.value
-                                                        updateField('otherIncomeItems', newItems)
-                                                    }}
-                                                    style={{
-                                                        borderRadius: 8,
-                                                        WebkitAppearance: 'none',
-                                                        width: '100%',
-                                                        height: 44,
-                                                    }}
-                                                />
+                                                <div style={{ display: 'flex', minWidth: 0 }}>
+                                                    <Input
+                                                        type="date"
+                                                        size="large"
+                                                        value={item.endDate}
+                                                        onChange={e => {
+                                                            const newItems = [...formData.otherIncomeItems]
+                                                            newItems[originalIdx].endDate = e.target.value
+                                                            updateField('otherIncomeItems', newItems)
+                                                        }}
+                                                        style={{
+                                                            borderRadius: 8,
+                                                            WebkitAppearance: 'none',
+                                                            width: '100%',
+                                                            height: 44,
+                                                        }}
+                                                    />
+                                                </div>
                                             </div>
                                         )
                                     })}
@@ -695,23 +698,25 @@ export default function FinancesScreen() {
                                                 <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
                                                     Start Date
                                                 </Text>
-                                                <Input
-                                                    type="date"
-                                                    size="large"
-                                                    value={item.date}
-                                                    onChange={e => {
-                                                        const newItems = [...formData.regularExpenseItems]
-                                                        newItems[originalIdx].date = e.target.value
-                                                        updateField('regularExpenseItems', newItems)
-                                                    }}
-                                                    style={{
-                                                        borderRadius: 8,
-                                                        marginBottom: 12,
-                                                        WebkitAppearance: 'none',
-                                                        width: '100%',
-                                                        height: 44,
-                                                    }}
-                                                />
+                                                <div style={{ display: 'flex', minWidth: 0 }}>
+                                                    <Input
+                                                        type="date"
+                                                        size="large"
+                                                        value={item.date}
+                                                        onChange={e => {
+                                                            const newItems = [...formData.regularExpenseItems]
+                                                            newItems[originalIdx].date = e.target.value
+                                                            updateField('regularExpenseItems', newItems)
+                                                        }}
+                                                        style={{
+                                                            borderRadius: 8,
+                                                            marginBottom: 12,
+                                                            WebkitAppearance: 'none',
+                                                            width: '100%',
+                                                            height: 44,
+                                                        }}
+                                                    />
+                                                </div>
                                                 <NativeSelect
                                                     label="Frequency"
                                                     value={item.frequency}
@@ -726,22 +731,24 @@ export default function FinancesScreen() {
                                                 <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
                                                     End Date (optional)
                                                 </Text>
-                                                <Input
-                                                    type="date"
-                                                    size="large"
-                                                    value={item.endDate}
-                                                    onChange={e => {
-                                                        const newItems = [...formData.regularExpenseItems]
-                                                        newItems[originalIdx].endDate = e.target.value
-                                                        updateField('regularExpenseItems', newItems)
-                                                    }}
-                                                    style={{
-                                                        borderRadius: 8,
-                                                        WebkitAppearance: 'none',
-                                                        width: '100%',
-                                                        height: 44,
-                                                    }}
-                                                />
+                                                <div style={{ display: 'flex', minWidth: 0 }}>
+                                                    <Input
+                                                        type="date"
+                                                        size="large"
+                                                        value={item.endDate}
+                                                        onChange={e => {
+                                                            const newItems = [...formData.regularExpenseItems]
+                                                            newItems[originalIdx].endDate = e.target.value
+                                                            updateField('regularExpenseItems', newItems)
+                                                        }}
+                                                        style={{
+                                                            borderRadius: 8,
+                                                            WebkitAppearance: 'none',
+                                                            width: '100%',
+                                                            height: 44,
+                                                        }}
+                                                    />
+                                                </div>
                                             </div>
                                         )
                                     })}
@@ -842,22 +849,24 @@ export default function FinancesScreen() {
                                             <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
                                                 Date
                                             </Text>
-                                            <Input
-                                                type="date"
-                                                size="large"
-                                                value={item.date}
-                                                onChange={e => {
-                                                    const newItems = [...formData.oneOffIn]
-                                                    newItems[idx].date = e.target.value
-                                                    updateField('oneOffIn', newItems)
-                                                }}
-                                                style={{
-                                                    borderRadius: 8,
-                                                    WebkitAppearance: 'none',
-                                                    width: '100%',
-                                                    height: 44,
-                                                }}
-                                            />
+                                            <div style={{ display: 'flex', minWidth: 0 }}>
+                                                <Input
+                                                    type="date"
+                                                    size="large"
+                                                    value={item.date}
+                                                    onChange={e => {
+                                                        const newItems = [...formData.oneOffIn]
+                                                        newItems[idx].date = e.target.value
+                                                        updateField('oneOffIn', newItems)
+                                                    }}
+                                                    style={{
+                                                        borderRadius: 8,
+                                                        WebkitAppearance: 'none',
+                                                        width: '100%',
+                                                        height: 44,
+                                                    }}
+                                                />
+                                            </div>
                                         </div>
                                     ))}
                                     <Button
@@ -936,22 +945,24 @@ export default function FinancesScreen() {
                                             <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
                                                 Date
                                             </Text>
-                                            <Input
-                                                type="date"
-                                                size="large"
-                                                value={item.date}
-                                                onChange={e => {
-                                                    const newItems = [...formData.oneOffOut]
-                                                    newItems[idx].date = e.target.value
-                                                    updateField('oneOffOut', newItems)
-                                                }}
-                                                style={{
-                                                    borderRadius: 8,
-                                                    WebkitAppearance: 'none',
-                                                    width: '100%',
-                                                    height: 44,
-                                                }}
-                                            />
+                                            <div style={{ display: 'flex', minWidth: 0 }}>
+                                                <Input
+                                                    type="date"
+                                                    size="large"
+                                                    value={item.date}
+                                                    onChange={e => {
+                                                        const newItems = [...formData.oneOffOut]
+                                                        newItems[idx].date = e.target.value
+                                                        updateField('oneOffOut', newItems)
+                                                    }}
+                                                    style={{
+                                                        borderRadius: 8,
+                                                        WebkitAppearance: 'none',
+                                                        width: '100%',
+                                                        height: 44,
+                                                    }}
+                                                />
+                                            </div>
                                         </div>
                                     ))}
                                     <Button

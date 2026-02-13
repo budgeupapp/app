@@ -150,7 +150,8 @@ const OtherIncomeList = ({ items, onChange }) => {
                                 size="large"
                                 style={{
                                     width: '100%',
-                                    WebkitAppearance: 'none'
+                                    WebkitAppearance: 'none',
+                                    height: 44,
                                 }}
                                 value={item.date}
                                 onChange={e =>
@@ -179,7 +180,8 @@ const OtherIncomeList = ({ items, onChange }) => {
                                 size="large"
                                 style={{
                                     width: '100%',
-                                    WebkitAppearance: 'none'
+                                    WebkitAppearance: 'none',
+                                    height: 44,
                                 }}
                                 value={item.endDate}
                                 onChange={e =>
@@ -291,7 +293,8 @@ const RegularExpenseList = ({ items, onChange }) => {
                                 size="large"
                                 style={{
                                     width: '100%',
-                                    WebkitAppearance: 'none'
+                                    WebkitAppearance: 'none',
+                                    height: 44,
                                 }}
                                 value={item.date}
                                 onChange={e => updateItem(index, 'date', e.target.value)}
@@ -318,7 +321,8 @@ const RegularExpenseList = ({ items, onChange }) => {
                                 size="large"
                                 style={{
                                     width: '100%',
-                                    WebkitAppearance: 'none'
+                                    WebkitAppearance: 'none',
+                                    height: 44,
                                 }}
                                 value={item.endDate}
                                 onChange={e =>
