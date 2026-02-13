@@ -88,7 +88,7 @@ export default function LoginForm() {
         <Form.Item
           label={<Text strong>Your email address</Text>}
           name="email"
-          validateTrigger={['onSubmit', 'onChange']}
+          validateTrigger="onSubmit"
           rules={[
             { required: true, message: 'Please enter your email' },
             { type: 'email', message: 'Enter a valid email address' }
