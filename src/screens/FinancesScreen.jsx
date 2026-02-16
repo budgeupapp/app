@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { saveUserFinances, saveCashflowForecast, fetchUserData } from '../lib/api'
 import NativeSelect from '../components/NativeSelect'
+import { usePostHog } from '@posthog/react'
 import {
     WEEKLY_SPEND_OPTIONS,
     UK_UNIVERSITIES,
@@ -81,6 +82,7 @@ const YesNo = ({ value, onChange }) => (
 )
 
 export default function FinancesScreen() {
+    const posthog = usePostHog()
     const navigate = useNavigate()
     const location = useLocation()
     const [loading, setLoading] = useState(true)
@@ -91,6 +93,82 @@ export default function FinancesScreen() {
 
     // Check if there are unsaved changes
     const hasUnsavedChanges = JSON.stringify(formData) !== JSON.stringify(initialFormData)
+
+    // Check for incomplete entries (amount without date or date without amount)
+    const getIncompleteFields = useCallback((data) => {
+        const issues = []
+
+        if (data.studentLoan) {
+            if (data.loanAmount && data.loanMonths.length === 0) {
+                issues.push('Student Loan: amount entered but no payment months selected')
+            }
+            if (!data.loanAmount && data.loanMonths.length > 0) {
+                issues.push('Student Loan: payment months selected but no amount entered')
+            }
+        }
+
+        if (data.bursary) {
+            const hasAmount = !!data.bursaryAmount
+            const hasDates = data.bursaryDates.some(d => !!d)
+            if (hasAmount && !hasDates) {
+                issues.push('Bursary: amount entered but no payment dates set')
+            }
+            if (!hasAmount && hasDates) {
+                issues.push('Bursary: payment dates set but no amount entered')
+            }
+        }
+
+        if (data.otherIncome) {
+            data.otherIncomeItems.forEach((item, i) => {
+                const hasAmount = !!item.amount
+                const hasDate = !!item.date
+                if (hasAmount && !hasDate) {
+                    issues.push(`Other Income ${i + 1}: amount entered but no start date set`)
+                }
+                if (!hasAmount && hasDate) {
+                    issues.push(`Other Income ${i + 1}: start date set but no amount entered`)
+                }
+            })
+        }
+
+        if (data.regularExpense) {
+            data.regularExpenseItems.forEach((item, i) => {
+                const hasAmount = !!item.amount
+                const hasDate = !!item.date
+                if (hasAmount && !hasDate) {
+                    issues.push(`Regular Expense ${i + 1}: amount entered but no start date set`)
+                }
+                if (!hasAmount && hasDate) {
+                    issues.push(`Regular Expense ${i + 1}: start date set but no amount entered`)
+                }
+            })
+        }
+
+        if (data.oneOffPayments) {
+            data.oneOffIn.forEach((item, i) => {
+                const hasAmount = !!item.amount
+                const hasDate = !!item.date
+                if (hasAmount && !hasDate) {
+                    issues.push(`One-off Income ${i + 1}: amount entered but no date set`)
+                }
+                if (!hasAmount && hasDate) {
+                    issues.push(`One-off Income ${i + 1}: date set but no amount entered`)
+                }
+            })
+            data.oneOffOut.forEach((item, i) => {
+                const hasAmount = !!item.amount
+                const hasDate = !!item.date
+                if (hasAmount && !hasDate) {
+                    issues.push(`One-off Expense ${i + 1}: amount entered but no date set`)
+                }
+                if (!hasAmount && hasDate) {
+                    issues.push(`One-off Expense ${i + 1}: date set but no amount entered`)
+                }
+            })
+        }
+
+        return issues
+    }, [])
 
     // Use refs so the click listener always sees latest values without re-registering
     const hasUnsavedChangesRef = useRef(false)
@@ -124,26 +202,54 @@ export default function FinancesScreen() {
             e.preventDefault()
             e.stopPropagation()
 
-            Modal.confirm({
-                title: 'Unsaved changes',
-                content: 'You have unsaved changes. Do you want to save before leaving?',
-                okText: 'Save & leave',
-                cancelText: 'Discard & leave',
-                closable: false,
-                okButtonProps: {
-                    style: {
-                        backgroundColor: '#147B75',
-                        borderColor: '#147B75'
+            const issues = getIncompleteFields(formDataRef.current)
+            if (issues.length > 0) {
+                Modal.confirm({
+                    title: 'Incomplete fields',
+                    content: (
+                        <div>
+                            <p>You have incomplete fields:</p>
+                            <ul style={{ paddingLeft: 20, margin: '8px 0' }}>
+                                {issues.map((issue, i) => (
+                                    <li key={i} style={{ marginBottom: 4 }}>{issue}</li>
+                                ))}
+                            </ul>
+                            <p>Do you want to stay and complete them, or discard and leave?</p>
+                        </div>
+                    ),
+                    okText: 'Stay',
+                    cancelText: 'Discard & leave',
+                    closable: false,
+                    okButtonProps: {
+                        style: { backgroundColor: '#147B75', borderColor: '#147B75' }
+                    },
+                    onOk: () => { },
+                    onCancel: () => {
+                        navigate(href)
                     }
-                },
-                onOk: async () => {
-                    await handleSaveRef.current()
-                    navigate(href)
-                },
-                onCancel: () => {
-                    navigate(href)
-                }
-            })
+                })
+            } else {
+                Modal.confirm({
+                    title: 'Unsaved changes',
+                    content: 'You have unsaved changes. Do you want to save before leaving?',
+                    okText: 'Save & leave',
+                    cancelText: 'Discard & leave',
+                    closable: false,
+                    okButtonProps: {
+                        style: {
+                            backgroundColor: '#147B75',
+                            borderColor: '#147B75'
+                        }
+                    },
+                    onOk: async () => {
+                        await handleSaveRef.current()
+                        navigate(href)
+                    },
+                    onCancel: () => {
+                        navigate(href)
+                    }
+                })
+            }
         }
 
         document.addEventListener('click', handleClick, true)
@@ -286,6 +392,27 @@ export default function FinancesScreen() {
     }
 
     const handleSave = async () => {
+        const issues = getIncompleteFields(formDataRef.current)
+        if (issues.length > 0) {
+            Modal.warning({
+                title: 'Incomplete fields',
+                content: (
+                    <div>
+                        <p>Please complete the following before saving:</p>
+                        <ul style={{ paddingLeft: 20, margin: '8px 0' }}>
+                            {issues.map((issue, i) => (
+                                <li key={i} style={{ marginBottom: 4 }}>{issue}</li>
+                            ))}
+                        </ul>
+                    </div>
+                ),
+                okText: 'OK',
+                okButtonProps: {
+                    style: { backgroundColor: '#147B75', borderColor: '#147B75' }
+                }
+            })
+            return
+        }
         setSaving(true)
         try {
             const { data: { user } } = await supabase.auth.getUser()
@@ -310,12 +437,22 @@ export default function FinancesScreen() {
             // Save cashflow using API function (handles all column mappings)
             await saveCashflowForecast(user.id, currentData)
 
+            // Track finances saved event
+            posthog?.capture('finances_saved', {
+                has_student_loan: currentData.studentLoan,
+                has_bursary: currentData.bursary,
+                has_other_income: currentData.otherIncome,
+                has_regular_expenses: currentData.regularExpense,
+                has_one_off_payments: currentData.oneOffPayments
+            })
+
             messageApi.success('Changes saved successfully')
 
             // Reload data without refreshing the page
             await loadUserData()
         } catch (error) {
             console.error('Error saving:', error)
+            posthog?.captureException(error)
             messageApi.error('Failed to save changes')
         } finally {
             setSaving(false)
@@ -600,6 +737,7 @@ export default function FinancesScreen() {
                                     </Text>
                                     <Input
                                         placeholder="0"
+                                        inputMode="decimal"
                                         prefix="£"
                                         value={formData.bursaryAmount}
                                         onChange={e => updateField('bursaryAmount', formatMoney(e.target.value))}
@@ -873,6 +1011,7 @@ export default function FinancesScreen() {
                                                     Amount
                                                 </Text>
                                                 <Input
+                                                    inputMode="decimal"
                                                     placeholder="0"
                                                     prefix="£"
                                                     value={item.amount}
@@ -1020,6 +1159,7 @@ export default function FinancesScreen() {
                                                 Amount
                                             </Text>
                                             <Input
+                                                inputMode="decimal"
                                                 placeholder="0"
                                                 prefix="£"
                                                 value={item.amount}
@@ -1113,6 +1253,7 @@ export default function FinancesScreen() {
                                                 Amount
                                             </Text>
                                             <Input
+                                                inputMode="decimal"
                                                 placeholder="0"
                                                 prefix="£"
                                                 value={item.amount}

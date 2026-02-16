@@ -6,6 +6,7 @@ import NativeSegmented from '../components/NativeSegmented'
 import { fetchUserData } from '../lib/api'
 import { calculateForecast, analyzeForecast } from '../lib/forecastCalculator'
 import { supabase } from '../lib/supabaseClient'
+import { usePostHog } from '@posthog/react'
 
 
 // Map weekly spend band to actual amount (midpoint of ranges)
@@ -43,6 +44,7 @@ function calculateTotals(forecast) {
 }
 
 export default function Dashboard() {
+    const posthog = usePostHog()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
     const [timeView, setTimeView] = useState('month')
@@ -170,7 +172,13 @@ export default function Dashboard() {
                 }}>
                     <NativeSegmented
                         value={timeView}
-                        onChange={setTimeView}
+                        onChange={(value) => {
+                            posthog?.capture('forecast_view_changed', {
+                                view_type: value,
+                                previous_view_type: timeView
+                            })
+                            setTimeView(value)
+                        }}
                         options={TIME_OPTIONS}
                     />
                 </div>

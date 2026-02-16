@@ -3,16 +3,21 @@ import { Button, Typography, Modal, message } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { POLICY_URLS } from '../lib/policyVersions'
+import { usePostHog } from '@posthog/react'
 
 const { Title, Text } = Typography
 
 export default function SettingsScreen() {
+  const posthog = usePostHog()
   const navigate = useNavigate()
   const [loggingOut, setLoggingOut] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
   const [messageApi, contextHolder] = message.useMessage({ maxCount: 1 })
 
   const handleLogout = async () => {
+    // Track logout intent
+    posthog?.capture('logout_clicked')
+
     Modal.confirm({
       title: 'Log out?',
       content: 'Are you sure you want to log out?',
@@ -35,12 +40,15 @@ export default function SettingsScreen() {
             duration: 5
           })
         }
-        // App.jsx will handle redirect after signOut
+        // App.jsx will handle redirect after signOut and reset PostHog
       }
     })
   }
 
   const handleDeleteAccount = async () => {
+    // Track delete account intent
+    posthog?.capture('delete_account_clicked')
+
     Modal.confirm({
       title: 'Delete account permanently?',
       content: (
@@ -81,15 +89,19 @@ export default function SettingsScreen() {
             throw authError
           }
 
+          // Track successful account deletion before sign out
+          posthog?.capture('account_deleted')
+
           messageApi.success({
             content: 'Account deleted successfully',
             duration: 3
           })
 
-          // Sign out
+          // Sign out (which will also reset PostHog in App.jsx)
           await supabase.auth.signOut()
         } catch (error) {
           console.error('Error deleting account:', error)
+          posthog?.captureException(error)
           messageApi.error({
             content: 'Failed to delete account. Please contact support.',
             duration: 10

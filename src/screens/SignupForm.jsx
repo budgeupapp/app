@@ -4,10 +4,12 @@ import { Button, Form, Input, Checkbox, Typography, message } from 'antd'
 import { Link } from 'react-router-dom'
 import AuthContainer from '../components/AuthContainer'
 import { POLICY_URLS } from '../lib/policyVersions'
+import { usePostHog } from '@posthog/react'
 
 const { Text } = Typography
 
 export default function SignupForm() {
+  const posthog = usePostHog()
   const [loading, setLoading] = useState(false)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const [lastEmail, setLastEmail] = useState('')
@@ -38,6 +40,11 @@ export default function SignupForm() {
 
     setLoading(true)
 
+    // Track signup attempt
+    posthog?.capture('signup_started', {
+      email_domain: email.split('@')[1]
+    })
+
     // Store signup intent in localStorage
     localStorage.setItem('signup_email', email)
     localStorage.setItem('signup_timestamp', Date.now().toString())
@@ -56,6 +63,12 @@ export default function SignupForm() {
       // Clean up localStorage on error
       localStorage.removeItem('signup_email')
       localStorage.removeItem('signup_timestamp')
+
+      // Track signup failure
+      posthog?.capture('signup_failed', {
+        error_message: error.message,
+        email_domain: email.split('@')[1]
+      })
 
       // Provide clearer error messages for common issues
       let errorMessage = error.message

@@ -3,10 +3,12 @@ import { supabase } from '../lib/supabaseClient'
 import { Button, Form, Input, Typography, message } from 'antd'
 import { Link } from 'react-router-dom'
 import AuthContainer from '../components/AuthContainer'
+import { usePostHog } from '@posthog/react'
 
 const { Text } = Typography
 
 export default function LoginForm() {
+  const posthog = usePostHog()
   const [loading, setLoading] = useState(false)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const [lastEmail, setLastEmail] = useState('')
@@ -26,6 +28,11 @@ export default function LoginForm() {
   const handleLogin = async ({ email }) => {
     setLoading(true)
 
+    // Track login attempt
+    posthog?.capture('login_started', {
+      email_domain: email.split('@')[1]
+    })
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -37,6 +44,12 @@ export default function LoginForm() {
     setLoading(false)
 
     if (error) {
+      // Track login failure
+      posthog?.capture('login_failed', {
+        error_message: error.message,
+        email_domain: email.split('@')[1]
+      })
+
       // Provide clearer error messages for common issues
       let errorMessage = error.message
 
