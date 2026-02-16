@@ -1229,7 +1229,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     }
                                     style={{ marginTop: 4 }}
                                 >
-                                    + Add installment
+                                    + Add payment date
                                 </Button>
                             </div>
                         )}

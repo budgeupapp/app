@@ -23,9 +23,9 @@
 
     /* Apple-style design */
     width: 100%;
-    height: 44px;
-    padding: 0 40px 0 16px;
-    font-size: 17px;
+    height: 34px;
+    padding: 0 40px 0 12px;
+    font-size: 14px;
     font-family: 'Nunito', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     color: #000000 !important;
     background-color: #ffffff !important;
@@ -83,32 +83,7 @@
 @supports (-webkit-touch-callout: none) {
     .native-select {
         /* Ensure proper height on iOS */
-        min-height: 44px;
+        min-height: 34px;
         line-height: normal;
     }
 }
-
-/* Dark mode support - disabled for now to ensure consistency */
-/* Uncomment if you want dark mode support later
-@media (prefers-color-scheme: dark) {
-    .native-select {
-        background-color: #1c1c1e !important;
-        color: #ffffff !important;
-        border-color: #38383a;
-    }
-
-    .native-select option {
-        background-color: #1c1c1e;
-        color: #ffffff;
-    }
-
-    .native-select:hover,
-    .native-select:focus {
-        border-color: #147B75;
-    }
-
-    .native-select-label {
-        color: #ffffff;
-    }
-}
-*/

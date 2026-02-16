@@ -55,7 +55,7 @@ export const STEPS = [
 
 export const WEEKLY_SPEND_OPTIONS = [
     { value: 1, label: '£50–£80 (very frugal)' },
-    { value: 2, label: '£80–£120 (typical Bristol student)' },
+    { value: 2, label: '£80–£120 (typical student)' },
     { value: 3, label: '£120–£180 (social & eating out)' },
     { value: 4, label: '£180+ (very social / lifestyle-heavy)' }
 ]

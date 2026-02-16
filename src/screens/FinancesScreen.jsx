@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
-import { Collapse, Input, Radio, Button, Typography, message, Spin, Badge } from 'antd'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Collapse, Input, Radio, Button, Typography, message, Spin, Badge, Modal } from 'antd'
 import { ChevronDown } from '@untitledui/icons'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { saveUserFinances, saveCashflowForecast, fetchUserData } from '../lib/api'
 import NativeSelect from '../components/NativeSelect'
@@ -49,6 +50,23 @@ const sortByEndDate = items => {
 }
 
 
+// Helper to get default date (15th) for a student loan month
+const getDefaultDateForMonth = (monthKey) => {
+    const monthIndex = {
+        september: 8, october: 9, november: 10, december: 11,
+        january: 0, february: 1, march: 2, april: 3,
+        may: 4, june: 5, july: 6, august: 7
+    }
+    const month = monthIndex[monthKey]
+    const today = new Date()
+    const currentYear = today.getFullYear()
+    const currentMonth = today.getMonth()
+    const academicYearStart = currentMonth >= 8 ? currentYear : currentYear - 1
+    const year = month >= 8 ? academicYearStart : academicYearStart + 1
+    const pad = n => String(n).padStart(2, '0')
+    return `${year}-${pad(month + 1)}-15`
+}
+
 // YesNo component
 const YesNo = ({ value, onChange }) => (
     <Radio.Group
@@ -63,13 +81,86 @@ const YesNo = ({ value, onChange }) => (
 )
 
 export default function FinancesScreen() {
+    const navigate = useNavigate()
+    const location = useLocation()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [formData, setFormData] = useState({ ...INITIAL_FORM_DATA })
+    const [initialFormData, setInitialFormData] = useState({ ...INITIAL_FORM_DATA })
     const [messageApi, contextHolder] = message.useMessage({ maxCount: 1 })
+
+    // Check if there are unsaved changes
+    const hasUnsavedChanges = JSON.stringify(formData) !== JSON.stringify(initialFormData)
+
+    // Use refs so the click listener always sees latest values without re-registering
+    const hasUnsavedChangesRef = useRef(false)
+    hasUnsavedChangesRef.current = hasUnsavedChanges
+    const formDataRef = useRef(formData)
+    formDataRef.current = formData
+    const initialFormDataRef = useRef(initialFormData)
+    initialFormDataRef.current = initialFormData
+    const handleSaveRef = useRef(null)
 
     useEffect(() => {
         loadUserData()
+    }, [])
+
+    // Block navigation when there are unsaved changes
+    useEffect(() => {
+        const handleClick = (e) => {
+            if (!hasUnsavedChangesRef.current) return
+
+            // Check for <a href="/..."> links or BottomNav [data-href] divs
+            const linkTarget = e.target.closest('a[href]')
+            const navTarget = e.target.closest('[data-href]')
+            const target = linkTarget || navTarget
+            if (!target) return
+
+            const href = linkTarget
+                ? target.getAttribute('href')
+                : target.getAttribute('data-href')
+            if (!href || !href.startsWith('/') || href === location.pathname) return
+
+            e.preventDefault()
+            e.stopPropagation()
+
+            Modal.confirm({
+                title: 'Unsaved changes',
+                content: 'You have unsaved changes. Do you want to save before leaving?',
+                okText: 'Save & leave',
+                cancelText: 'Discard & leave',
+                closable: false,
+                okButtonProps: {
+                    style: {
+                        backgroundColor: '#147B75',
+                        borderColor: '#147B75'
+                    }
+                },
+                onOk: async () => {
+                    await handleSaveRef.current()
+                    navigate(href)
+                },
+                onCancel: () => {
+                    navigate(href)
+                }
+            })
+        }
+
+        document.addEventListener('click', handleClick, true)
+        return () => document.removeEventListener('click', handleClick, true)
+    }, [location.pathname, navigate])
+
+    // Warn before closing browser tab
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            if (hasUnsavedChangesRef.current) {
+                e.preventDefault()
+                e.returnValue = ''
+            }
+        }
+
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload)
     }, [])
 
     const loadUserData = async () => {
@@ -80,14 +171,16 @@ export default function FinancesScreen() {
 
             const userData = await fetchUserData(user.id)
 
+            let newFormData = { ...INITIAL_FORM_DATA }
+
             if (userData.profile) {
-                setFormData(prev => ({
-                    ...prev,
+                newFormData = {
+                    ...newFormData,
                     university: userData.profile.university || 'University of Bristol',
                     balance: userData.profile.balance?.toString() || '',
                     savings: userData.profile.savings?.toString() || '',
                     weeklySpend: userData.profile.weekly_spend_band || ''
-                }))
+                }
             }
 
             // Load cashflow data
@@ -107,8 +200,8 @@ export default function FinancesScreen() {
                     c => c.direction === 'out' && c.type === 'one_off'
                 )
 
-                setFormData(prev => ({
-                    ...prev,
+                newFormData = {
+                    ...newFormData,
                     studentLoan: studentLoans.length > 0,
                     loanAmount: studentLoans.length > 0
                         ? (studentLoans.reduce((sum, loan) => sum + (parseFloat(loan.amount) || 0), 0)).toString()
@@ -120,6 +213,16 @@ export default function FinancesScreen() {
                         )
                         return month
                     }).filter(Boolean),
+                    loanDates: studentLoans.reduce((acc, l) => {
+                        const title = l.title || ''
+                        const month = ALL_MONTH_KEYS.find(m =>
+                            title.toLowerCase().includes(MONTH_LABELS[m].toLowerCase())
+                        )
+                        if (month && l.scheduled_date) {
+                            acc[month] = l.scheduled_date
+                        }
+                        return acc
+                    }, {}),
 
                     bursary: bursaries.length > 0,
                     bursaryAmount: bursaries.length > 0
@@ -164,8 +267,12 @@ export default function FinancesScreen() {
                             date: o.scheduled_date || ''
                         }))
                         : [{ name: '', amount: '', date: '' }]
-                }))
+                }
             }
+
+            // Set both formData and initialFormData to track changes
+            setFormData(newFormData)
+            setInitialFormData(newFormData)
         } catch (error) {
             console.error('Error loading user data:', error)
             messageApi.error('Failed to load data')
@@ -184,12 +291,14 @@ export default function FinancesScreen() {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) throw new Error('No user found')
 
+            const currentData = formDataRef.current
+
             // Save user_finances
             await saveUserFinances(user.id, {
-                university: formData.university,
-                balance: formData.balance,
-                savings: formData.savings,
-                weeklySpend: formData.weeklySpend
+                university: currentData.university,
+                balance: currentData.balance,
+                savings: currentData.savings,
+                weeklySpend: currentData.weeklySpend
             })
 
             // Delete existing cashflow and rebuild
@@ -199,7 +308,7 @@ export default function FinancesScreen() {
                 .eq('user_id', user.id)
 
             // Save cashflow using API function (handles all column mappings)
-            await saveCashflowForecast(user.id, formData)
+            await saveCashflowForecast(user.id, currentData)
 
             messageApi.success('Changes saved successfully')
 
@@ -212,11 +321,12 @@ export default function FinancesScreen() {
             setSaving(false)
         }
     }
+    handleSaveRef.current = handleSave
 
     if (loading) {
         return (
             <div style={{
-                height: '100vh',
+                height: '80vh',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -315,7 +425,7 @@ export default function FinancesScreen() {
                             </Text>
                             <Input
                                 name="balance"
-                                size="large"
+                                inputMode="decimal"
                                 placeholder="0"
                                 prefix="£"
                                 value={formData.balance}
@@ -337,7 +447,7 @@ export default function FinancesScreen() {
                             </Text>
                             <Input
                                 name="savings"
-                                size="large"
+                                inputMode="decimal"
                                 placeholder="0"
                                 prefix="£"
                                 value={formData.savings}
@@ -365,11 +475,11 @@ export default function FinancesScreen() {
                             {formData.studentLoan && (
                                 <div style={{ marginTop: 16 }}>
                                     <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                                        Loan amount per payment
+                                        Total yearly student loan
                                     </Text>
                                     <Input
                                         name="loanAmount"
-                                        size="large"
+                                        inputMode="decimal"
                                         placeholder="0"
                                         prefix="£"
                                         value={formData.loanAmount}
@@ -390,16 +500,29 @@ export default function FinancesScreen() {
                                                         const newMonths = isSelected
                                                             ? formData.loanMonths.filter(m => m !== month)
                                                             : [...formData.loanMonths, month]
-                                                        updateField('loanMonths', newMonths)
+                                                        // Also update loanDates when adding/removing months
+                                                        const newDates = { ...formData.loanDates }
+                                                        if (isSelected) {
+                                                            delete newDates[month]
+                                                        } else {
+                                                            newDates[month] = getDefaultDateForMonth(month)
+                                                        }
+                                                        setFormData(prev => ({
+                                                            ...prev,
+                                                            loanMonths: newMonths,
+                                                            loanDates: newDates
+                                                        }))
                                                     }}
                                                     style={{
-                                                        padding: '8px 16px',
-                                                        borderRadius: 8,
-                                                        border: `2px solid ${isSelected ? 'var(--ant-color-primary)' : '#d9d9d9'}`,
-                                                        background: isSelected ? 'var(--ant-color-primary)' : '#fff',
-                                                        color: isSelected ? '#fff' : '#000',
+                                                        padding: '6px 16px',
+                                                        borderRadius: 999,
+                                                        border: `1px solid ${isSelected ? '#147B75' : '#d9d9d9'}`,
+                                                        background: isSelected ? '#147B75' : '#fff',
+                                                        color: isSelected ? '#fff' : '#333',
                                                         cursor: 'pointer',
-                                                        fontSize: 14
+                                                        fontSize: 14,
+                                                        userSelect: 'none',
+                                                        transition: 'all 0.2s'
                                                     }}
                                                 >
                                                     {MONTH_LABELS[month]}
@@ -407,6 +530,49 @@ export default function FinancesScreen() {
                                             )
                                         })}
                                     </div>
+
+                                    {formData.loanMonths.length > 0 && (
+                                        <div style={{ marginTop: 16 }}>
+                                            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                                                Payment dates
+                                            </Text>
+                                            {formData.loanMonths.map(month => (
+                                                <div
+                                                    key={month}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: 12,
+                                                        marginBottom: 8
+                                                    }}
+                                                >
+                                                    <Text style={{ width: 90, flexShrink: 0 }}>
+                                                        {MONTH_LABELS[month]}
+                                                    </Text>
+                                                    <Input
+                                                        type="date"
+                                                        value={formData.loanDates?.[month] || ''}
+                                                        onChange={e => {
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                loanDates: {
+                                                                    ...prev.loanDates,
+                                                                    [month]: e.target.value
+                                                                }
+                                                            }))
+                                                        }}
+                                                        style={{
+                                                            borderRadius: 8,
+                                                            WebkitAppearance: 'none',
+                                                            width: '100%',
+                                                            height: 34,
+                                                            flex: 1
+                                                        }}
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -430,10 +596,9 @@ export default function FinancesScreen() {
                             {formData.bursary && (
                                 <div style={{ marginTop: 16 }}>
                                     <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                                        Bursary amount per payment
+                                        Total yearly bursary
                                     </Text>
                                     <Input
-                                        size="large"
                                         placeholder="0"
                                         prefix="£"
                                         value={formData.bursaryAmount}
@@ -445,19 +610,45 @@ export default function FinancesScreen() {
                                         Payment dates
                                     </Text>
                                     {formData.bursaryDates.map((date, idx) => (
-                                        <Input
-                                            key={idx}
-                                            type="date"
-                                            size="large"
-                                            value={date}
-                                            onChange={e => {
-                                                const newDates = [...formData.bursaryDates]
-                                                newDates[idx] = e.target.value
-                                                updateField('bursaryDates', newDates)
-                                            }}
-                                            style={{ borderRadius: 8, marginBottom: 8 }}
-                                        />
+                                        <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+                                            <Input
+                                                type="date"
+                                                value={date}
+                                                onChange={e => {
+                                                    const newDates = [...formData.bursaryDates]
+                                                    newDates[idx] = e.target.value
+                                                    updateField('bursaryDates', newDates)
+                                                }}
+                                                style={{
+                                                    borderRadius: 8,
+                                                    WebkitAppearance: 'none',
+                                                    width: '100%',
+                                                    height: 34,
+                                                    flex: 1,
+                                                }}
+                                            />
+                                            <Button
+                                                type="text"
+                                                size="small"
+                                                danger
+                                                onClick={() => {
+                                                    const newDates = formData.bursaryDates.filter((_, i) => i !== idx)
+                                                    updateField('bursaryDates', newDates)
+                                                }}
+                                            >
+                                                Remove
+                                            </Button>
+                                        </div>
                                     ))}
+                                    <Button
+                                        type="dashed"
+                                        onClick={() => {
+                                            updateField('bursaryDates', [...formData.bursaryDates, ''])
+                                        }}
+                                        style={{ width: '100%' }}
+                                    >
+                                        + Add payment date
+                                    </Button>
                                 </div>
                             )}
                         </div>
@@ -531,7 +722,7 @@ export default function FinancesScreen() {
                                                     Amount
                                                 </Text>
                                                 <Input
-                                                    size="large"
+                                                    inputMode="decimal"
                                                     placeholder="0"
                                                     prefix="£"
                                                     value={item.amount}
@@ -548,7 +739,6 @@ export default function FinancesScreen() {
                                                 <div style={{ display: 'flex', minWidth: 0 }}>
                                                     <Input
                                                         type="date"
-                                                        size="large"
                                                         value={item.date}
                                                         onChange={e => {
                                                             const newItems = [...formData.otherIncomeItems]
@@ -560,7 +750,7 @@ export default function FinancesScreen() {
                                                             marginBottom: 12,
                                                             WebkitAppearance: 'none',
                                                             width: '100%',
-                                                            height: 44,
+                                                            height: 34,
                                                         }}
                                                     />
                                                 </div>
@@ -581,7 +771,6 @@ export default function FinancesScreen() {
                                                 <div style={{ display: 'flex', minWidth: 0 }}>
                                                     <Input
                                                         type="date"
-                                                        size="large"
                                                         value={item.endDate}
                                                         onChange={e => {
                                                             const newItems = [...formData.otherIncomeItems]
@@ -592,7 +781,7 @@ export default function FinancesScreen() {
                                                             borderRadius: 8,
                                                             WebkitAppearance: 'none',
                                                             width: '100%',
-                                                            height: 44,
+                                                            height: 34,
                                                         }}
                                                     />
                                                 </div>
@@ -684,7 +873,6 @@ export default function FinancesScreen() {
                                                     Amount
                                                 </Text>
                                                 <Input
-                                                    size="large"
                                                     placeholder="0"
                                                     prefix="£"
                                                     value={item.amount}
@@ -701,7 +889,6 @@ export default function FinancesScreen() {
                                                 <div style={{ display: 'flex', minWidth: 0 }}>
                                                     <Input
                                                         type="date"
-                                                        size="large"
                                                         value={item.date}
                                                         onChange={e => {
                                                             const newItems = [...formData.regularExpenseItems]
@@ -713,7 +900,7 @@ export default function FinancesScreen() {
                                                             marginBottom: 12,
                                                             WebkitAppearance: 'none',
                                                             width: '100%',
-                                                            height: 44,
+                                                            height: 34,
                                                         }}
                                                     />
                                                 </div>
@@ -734,7 +921,6 @@ export default function FinancesScreen() {
                                                 <div style={{ display: 'flex', minWidth: 0 }}>
                                                     <Input
                                                         type="date"
-                                                        size="large"
                                                         value={item.endDate}
                                                         onChange={e => {
                                                             const newItems = [...formData.regularExpenseItems]
@@ -745,7 +931,7 @@ export default function FinancesScreen() {
                                                             borderRadius: 8,
                                                             WebkitAppearance: 'none',
                                                             width: '100%',
-                                                            height: 44,
+                                                            height: 34,
                                                         }}
                                                     />
                                                 </div>
@@ -822,7 +1008,6 @@ export default function FinancesScreen() {
                                                 Name (optional)
                                             </Text>
                                             <Input
-                                                size="large"
                                                 value={item.name}
                                                 onChange={e => {
                                                     const newItems = [...formData.oneOffIn]
@@ -835,7 +1020,6 @@ export default function FinancesScreen() {
                                                 Amount
                                             </Text>
                                             <Input
-                                                size="large"
                                                 placeholder="0"
                                                 prefix="£"
                                                 value={item.amount}
@@ -852,7 +1036,6 @@ export default function FinancesScreen() {
                                             <div style={{ display: 'flex', minWidth: 0 }}>
                                                 <Input
                                                     type="date"
-                                                    size="large"
                                                     value={item.date}
                                                     onChange={e => {
                                                         const newItems = [...formData.oneOffIn]
@@ -863,7 +1046,7 @@ export default function FinancesScreen() {
                                                         borderRadius: 8,
                                                         WebkitAppearance: 'none',
                                                         width: '100%',
-                                                        height: 44,
+                                                        height: 34,
                                                     }}
                                                 />
                                             </div>
@@ -918,7 +1101,6 @@ export default function FinancesScreen() {
                                                 Name (optional)
                                             </Text>
                                             <Input
-                                                size="large"
                                                 value={item.name}
                                                 onChange={e => {
                                                     const newItems = [...formData.oneOffOut]
@@ -931,7 +1113,6 @@ export default function FinancesScreen() {
                                                 Amount
                                             </Text>
                                             <Input
-                                                size="large"
                                                 placeholder="0"
                                                 prefix="£"
                                                 value={item.amount}
@@ -948,7 +1129,6 @@ export default function FinancesScreen() {
                                             <div style={{ display: 'flex', minWidth: 0 }}>
                                                 <Input
                                                     type="date"
-                                                    size="large"
                                                     value={item.date}
                                                     onChange={e => {
                                                         const newItems = [...formData.oneOffOut]
@@ -959,7 +1139,7 @@ export default function FinancesScreen() {
                                                         borderRadius: 8,
                                                         WebkitAppearance: 'none',
                                                         width: '100%',
-                                                        height: 44,
+                                                        height: 34,
                                                     }}
                                                 />
                                             </div>

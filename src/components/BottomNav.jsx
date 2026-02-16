@@ -46,6 +46,7 @@ export default function BottomNav() {
                 {tabs.map(tab => (
                     <div
                         key={tab.key}
+                        data-href={tab.path}
                         onClick={() => navigate(tab.path)}
                         className={`nav-tab ${isActive(tab.path) ? 'active' : ''}`}
                     >

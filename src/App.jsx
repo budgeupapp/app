@@ -112,7 +112,7 @@ export default function App() {
             <div
                 style={{
                     width: '100vw',
-                    height: '100vh',
+                    height: '80vh',
                     display: 'grid',
                     placeItems: 'center',
                     backgroundColor: '#ffffff',
