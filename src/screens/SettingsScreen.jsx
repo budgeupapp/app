@@ -82,8 +82,8 @@ export default function SettingsScreen() {
             console.error('Error deleting user data:', dataError)
           }
 
-          // Delete the auth user account
-          const { error: authError } = await supabase.auth.admin.deleteUser(user.id)
+          // Delete the auth user account via database RPC
+          const { error: authError } = await supabase.rpc('delete_own_account')
 
           if (authError) {
             throw authError
