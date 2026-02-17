@@ -136,8 +136,8 @@ export default function SettingsScreen() {
         : `${window.location.origin}/signup`
 
       const shareData = {
-        title: 'You’ve been invited to Budge Up 🎉',
-        text: "Join Budge Up — the new budgeting app for students! 🌻✨\nSign up with my referral code to get started:",
+        title: 'Join Budge Up 🎉',
+        text: `This app makes it way easier to manage student money. 🌻\n\nThought you’d find it useful — here’s my invite link:`,
         url: inviteUrl
       }
 
