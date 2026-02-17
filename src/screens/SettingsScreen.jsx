@@ -207,9 +207,6 @@ export default function SettingsScreen() {
 
         {/* INVITE FRIENDS */}
         <div style={{ marginBottom: 40 }}>
-          <Title level={4} style={{ marginBottom: 16, fontSize: 16 }}>
-            Share Budge Up 🚀
-          </Title>
 
           <Button
             type="default"
@@ -226,7 +223,7 @@ export default function SettingsScreen() {
               fontWeight: 600,
             }}
           >
-            Invite your friends
+            Invite your friends 🚀
           </Button>
         </div>
 
