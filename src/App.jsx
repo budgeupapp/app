@@ -152,7 +152,7 @@ export default function App() {
                 <Routes>
                     <Route path="/login" element={<LoginForm />} />
                     <Route path="/signup" element={<SignupForm />} />
-                    <Route path="*" element={<Navigate to="/login" replace />} />
+                    <Route path="*" element={<Navigate to="/signup" replace />} />
                 </Routes>
             </BrowserRouter>
         )
