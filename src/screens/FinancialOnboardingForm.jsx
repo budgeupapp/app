@@ -116,11 +116,12 @@ const OtherIncomeList = ({ items, onChange }) => {
                             onChange={v => updateItem(index, 'type', v)}
                             options={OTHER_INCOME_TYPE_OPTIONS}
                             placeholder="Select type"
+                            style={{ fontSize: 16, height: '40px' }}
                         />
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
-                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 6, fontSize: 13, }}>
                             Amount
                         </Text>
                         <Input
@@ -141,7 +142,7 @@ const OtherIncomeList = ({ items, onChange }) => {
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
-                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 6, fontSize: 13, }}>
                             Next payment date
                         </Text>
 
@@ -152,7 +153,9 @@ const OtherIncomeList = ({ items, onChange }) => {
                                 style={{
                                     width: '100%',
                                     WebkitAppearance: 'none',
-                                    height: 44,
+                                    display: 'flex',
+                                    height: 40,
+                                    boxShadow: 'none'
                                 }}
                                 value={item.date}
                                 onChange={e =>
@@ -168,27 +171,40 @@ const OtherIncomeList = ({ items, onChange }) => {
                             value={item.frequency}
                             onChange={v => updateItem(index, 'frequency', v)}
                             options={OTHER_INCOME_FREQ_OPTIONS}
+                            style={{ fontSize: 16, height: '40px' }}
                         />
                     </div>
 
                     <div>
-                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 6, fontSize: 13, }}>
                             End date (optional)
                         </Text>
-                        <div style={{ display: 'flex', minWidth: 0 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <Input
                                 type="date"
                                 size="large"
                                 style={{
                                     width: '100%',
                                     WebkitAppearance: 'none',
-                                    height: 44,
+                                    display: 'flex',
+                                    height: 40,
+                                    boxShadow: 'none'
                                 }}
                                 value={item.endDate}
                                 onChange={e =>
                                     updateItem(index, 'endDate', e.target.value)
                                 }
                             />
+                            {item.endDate && (
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    danger
+                                    onClick={() => updateItem(index, 'endDate', '')}
+                                >
+                                    Clear
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -259,11 +275,12 @@ const RegularExpenseList = ({ items, onChange }) => {
                             onChange={v => updateItem(index, 'type', v)}
                             options={PAYMENT_TYPE_OPTIONS}
                             placeholder="Select type"
+                            style={{ fontSize: 16, height: '40px' }}
                         />
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
-                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 6, fontSize: 13, }}>
                             Amount
                         </Text>
                         <Input
@@ -284,7 +301,7 @@ const RegularExpenseList = ({ items, onChange }) => {
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
-                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 6, fontSize: 13, }}>
                             Next payment date
                         </Text>
 
@@ -295,7 +312,9 @@ const RegularExpenseList = ({ items, onChange }) => {
                                 style={{
                                     width: '100%',
                                     WebkitAppearance: 'none',
-                                    height: 44,
+                                    display: 'flex',
+                                    height: 40,
+                                    boxShadow: 'none'
                                 }}
                                 value={item.date}
                                 onChange={e => updateItem(index, 'date', e.target.value)}
@@ -309,27 +328,40 @@ const RegularExpenseList = ({ items, onChange }) => {
                             value={item.frequency}
                             onChange={v => updateItem(index, 'frequency', v)}
                             options={REGULAR_FREQ_OPTIONS}
+                            style={{ fontSize: 16, height: '40px' }}
                         />
                     </div>
 
                     <div>
-                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 6, fontSize: 13, }}>
                             End date (optional)
                         </Text>
-                        <div style={{ display: 'flex', minWidth: 0 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <Input
                                 type="date"
                                 size="large"
                                 style={{
                                     width: '100%',
                                     WebkitAppearance: 'none',
-                                    height: 44,
+                                    display: 'flex',
+                                    height: 40,
+                                    boxShadow: 'none'
                                 }}
                                 value={item.endDate}
                                 onChange={e =>
                                     updateItem(index, 'endDate', e.target.value)
                                 }
                             />
+                            {item.endDate && (
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    danger
+                                    onClick={() => updateItem(index, 'endDate', '')}
+                                >
+                                    Clear
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -346,7 +378,7 @@ const RegularExpenseList = ({ items, onChange }) => {
     )
 }
 
-const OneOffItemList = ({ items, onChange }) => {
+const OneOffItemList = ({ items, onChange, type }) => {
     const updateItem = (index, field, value) => {
         const updated = items.map((item, i) =>
             i === index ? { ...item, [field]: value } : item
@@ -391,7 +423,7 @@ const OneOffItemList = ({ items, onChange }) => {
                     )}
 
                     <div style={{ marginBottom: 12 }}>
-                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 6, fontSize: 13, }}>
                             Name (optional)
                         </Text>
                         <Input
@@ -406,7 +438,7 @@ const OneOffItemList = ({ items, onChange }) => {
                     </div>
 
                     <div style={{ marginBottom: 12 }}>
-                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 6, fontSize: 13, }}>
                             Amount
                         </Text>
                         <Input
@@ -427,7 +459,7 @@ const OneOffItemList = ({ items, onChange }) => {
                     </div>
 
                     <div>
-                        <Text style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#666' }}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 6, fontSize: 13, }}>
                             Date
                         </Text>
 
@@ -435,9 +467,15 @@ const OneOffItemList = ({ items, onChange }) => {
                             <Input
                                 type="date"
                                 size="large"
-                                style={{ width: '100%' }}
                                 value={item.date}
                                 onChange={e => updateItem(index, 'date', e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    WebkitAppearance: 'none',
+                                    display: 'flex',
+                                    height: 40,
+                                    boxShadow: 'none'
+                                }}
                             />
                         </div>
                     </div>
@@ -449,7 +487,7 @@ const OneOffItemList = ({ items, onChange }) => {
                 onClick={addItem}
                 style={{ marginTop: 4, width: '100%' }}
             >
-                + Add another
+                + Add another {type}
             </Button>
         </div>
     )
@@ -594,8 +632,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 return formData.otherIncome === null
             case 'regularExpense':
                 return formData.regularExpense === null
-            case 'oneOffPayments':
-                return formData.oneOffPayments === null
+            case 'oneOffIncome':
+                return formData.oneOffIncome === null
+            case 'oneOffExpenses':
+                return formData.oneOffExpenses === null
             case 'weeklySpend':
                 return !formData.weeklySpend
             default:
@@ -613,16 +653,20 @@ export default function FinancialOnboardingForm({ onComplete }) {
             )
         }
         if (
-            currentStep.id === 'oneOffPayments' &&
-            formData.oneOffPayments === true
+            currentStep.id === 'oneOffIncome' &&
+            formData.oneOffIncome === true
         ) {
-            const inMissing = formData.oneOffIn.filter(
+            return formData.oneOffIn.filter(
                 item => item.amount && !item.date
             )
-            const outMissing = formData.oneOffOut.filter(
+        }
+        if (
+            currentStep.id === 'oneOffExpenses' &&
+            formData.oneOffExpenses === true
+        ) {
+            return formData.oneOffOut.filter(
                 item => item.amount && !item.date
             )
-            return [...inMissing, ...outMissing]
         }
         return []
     }
@@ -654,7 +698,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
         return {
             min: `${year}-${pad(month + 1)}-01`,
-            max: `${year}-${pad(month + 1)}-${pad(lastDay)}`
+            max: `${year}-${pad(month + 1)}-${pad(lastDay)}`,
+            default: `${year}-${pad(month + 1)}-15`
         }
     }
 
@@ -673,25 +718,19 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         return 'Please enter your yearly student loan amount (a rough estimate is fine)'
                     }
 
-                    else if (formData.loanMonths.length === 0) {
-                        return 'Please select the month(s) in which you receive your student loan instalments'
+                    if (formData.loanKnowDates === null) {
+                        return 'Please select whether you know the exact dates of your instalments'
                     }
 
-                    else if (formData.loanKnowDates && Object.keys(formData.loanDates).length < formData.loanMonths.length) {
-                        return 'Please enter the dates you receive your student loan instalments (a rough estimate is fine)'
-                    }
-
-                    else if (formData.loanKnowDates) {
-                        // Validate that each date is within the correct month
-                        for (const month of formData.loanMonths) {
-                            const enteredDate = formData.loanDates[month]
-                            if (enteredDate) {
-                                const dateRange = getMonthDateRange(month)
-                                if (enteredDate < dateRange.min || enteredDate > dateRange.max) {
-                                    return `The date for ${MONTH_LABELS[month]} must be within ${MONTH_LABELS[month]}`
-                                }
-                            }
+                    if (formData.loanKnowDates === true) {
+                        const hasValidDates = (formData.instalmentDates || []).some(d => !!d)
+                        if (!hasValidDates) {
+                            return 'Please enter at least one instalment date'
                         }
+                    }
+
+                    if (formData.loanKnowDates === false && formData.loanMonths.length === 0) {
+                        return 'Please select the month(s) in which you receive your student loan instalments'
                     }
                 }
                 break
@@ -711,7 +750,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             return 'Please enter an amount for each income source (a rough estimate is fine)'
                         }
                         if (!item.date) {
-                            return 'Please enter a date for each income source (a rough estimate is fine)'
+                            return 'Please add a date for each income source (a rough estimate is fine)'
                         }
                     }
                 }
@@ -724,18 +763,31 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             return 'Please enter an amount for each regular expense (a rough estimate is fine)'
                         }
                         if (!item.date) {
-                            return 'Please enter a date for each regular expense (a rough estimate is fine)'
+                            return 'Please add a date for each regular expense (a rough estimate is fine)'
                         }
                     }
                 }
                 break
 
-            case 'oneOffPayments':
-                if (formData.oneOffPayments === true) {
+            case 'oneOffIncome':
+                if (formData.oneOffIncome === true) {
+                    const hasAnyAmount = formData.oneOffIn.some(item => !!item.amount)
+                    if (!hasAnyAmount) {
+                        return 'Please enter an amount for each one-off income (a rough estimate is fine)'
+                    }
                     for (const item of formData.oneOffIn) {
                         if (item.amount && !item.date) {
                             return 'Please add a date for each one-off income (a rough estimate is fine)'
                         }
+                    }
+                }
+                break
+
+            case 'oneOffExpenses':
+                if (formData.oneOffExpenses === true) {
+                    const hasAnyAmount = formData.oneOffOut.some(item => !!item.amount)
+                    if (!hasAnyAmount) {
+                        return 'Please enter an amount for each one-off expense (a rough estimate is fine)'
                     }
                     for (const item of formData.oneOffOut) {
                         if (item.amount && !item.date) {
@@ -808,7 +860,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             } else if (!prev.loanMonths.includes(month) && prev.loanKnowDates) {
                 // Month is being added and dates are shown, set default date
                 const dateRange = getMonthDateRange(month)
-                dates[month] = dateRange.min
+                dates[month] = dateRange.default
             }
 
             return { ...prev, loanMonths: months, loanDates: dates }
@@ -843,12 +895,26 @@ export default function FinancialOnboardingForm({ onComplete }) {
             }
 
             await saveCashflowForecast(user.id, formData)
+
+            // Get referral code from user metadata or localStorage
+            const referredBy = user.user_metadata?.referred_by || localStorage.getItem('referral_code')
+
             await saveUserFinances(user.id, {
                 university: formData.university,
                 balance: formData.balance,
                 weeklySpend: formData.weeklySpend,
-                savings: formData.savings
+                savings: formData.savings,
+                referredBy: referredBy || null
             })
+
+            // Clear referral code from localStorage after saving
+            if (referredBy) {
+                localStorage.removeItem('referral_code')
+                // Track successful referral conversion
+                posthog?.capture('referral_completed', {
+                    referral_code: referredBy
+                })
+            }
 
             localStorage.removeItem(STORAGE_KEY)
 
@@ -859,7 +925,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 has_bursary: formData.bursary,
                 has_other_income: formData.otherIncome,
                 has_regular_expenses: formData.regularExpense,
-                has_one_off_payments: formData.oneOffPayments
+                has_one_off_income: formData.oneOffIncome,
+                has_one_off_expenses: formData.oneOffExpenses,
+                was_referred: !!referredBy
             })
 
             // Call onComplete callback to trigger loading screen
@@ -891,7 +959,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         onChange={(value) => updateField('university', value)}
                         options={UK_UNIVERSITIES.map(uni => ({ value: uni, label: uni }))}
                         placeholder="Select your university"
-                        style={{ maxWidth: 360 }}
+                        containerStyle={{ maxWidth: 360 }}
+                        style={{ fontSize: 16, height: '40px' }}
                     />
                 )
 
@@ -900,6 +969,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     <Input
                         style={{ width: '100%', maxWidth: 200 }}
                         prefix={'\u00A3'}
+                        placeholder='0'
                         inputMode="decimal"
                         size="large"
                         value={formData.balance}
@@ -917,6 +987,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     <Input
                         style={{ width: '100%', maxWidth: 200 }}
                         prefix={'\u00A3'}
+                        placeholder='0'
                         inputMode="decimal"
                         size="large"
                         value={formData.savings}
@@ -986,130 +1057,149 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         marginBottom: 12
                                     }}
                                 >
-                                    When do you usually receive your
-                                    instalments?
+                                    Do you know the exact dates of your student loan instalments?
                                 </Text>
 
-                                <div
-                                    style={{
-                                        display: 'flex',
-                                        flexWrap: 'wrap',
-                                        gap: 8,
-                                        marginBottom: 16
+                                <YesNo
+                                    value={formData.loanKnowDates}
+                                    onChange={val => {
+                                        if (val === true) {
+                                            // Initialize with 3 default dates (Sep 15, Jan 15, Apr 15)
+                                            const defaultDates = ['september', 'january', 'april'].map(month => {
+                                                const dateRange = getMonthDateRange(month)
+                                                return dateRange.default
+                                            })
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                loanKnowDates: val,
+                                                loanDates: {},
+                                                loanMonths: [],
+                                                instalmentDates: defaultDates
+                                            }))
+                                            scrollToSub()
+                                        } else {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                loanKnowDates: val,
+                                                loanDates: {},
+                                                instalmentDates: [],
+                                                loanMonths: prev.loanMonths.length ? prev.loanMonths : DEFAULT_LOAN_MONTHS
+                                            }))
+                                            scrollToSub()
+                                        }
                                     }}
-                                >
-                                    {(showAllMonths
-                                        ? ALL_MONTH_KEYS
-                                        : DEFAULT_LOAN_MONTHS
-                                    ).map(m => (
-                                        <MonthChip
-                                            key={m}
-                                            label={MONTH_LABELS[m]}
-                                            selected={formData.loanMonths.includes(
-                                                m
-                                            )}
-                                            onClick={() => toggleMonth(m)}
-                                        />
-                                    ))}
+                                />
 
-                                    {!showAllMonths && (
-                                        <div
-                                            onClick={() =>
-                                                setShowAllMonths(true)
-                                            }
+                                {formData.loanKnowDates === true && (
+                                    <div style={{ marginTop: 16 }}>
+                                        <Text
+                                            strong
                                             style={{
-                                                padding: '6px 16px',
-                                                borderRadius: 999,
-                                                border: '1px dashed #d9d9d9',
-                                                color: '#888',
-                                                cursor: 'pointer',
-                                                fontSize: 14,
-                                                userSelect: 'none'
+                                                display: 'block',
+                                                marginBottom: 12
                                             }}
                                         >
-                                            + Different months
-                                        </div>
-                                    )}
-                                </div>
+                                            When do you receive your student loan instalments?
+                                        </Text>
+                                        {(formData.instalmentDates || []).map((date, index) => (
+                                            <div key={index} style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+                                                <Text
+                                                    style={{
+                                                        width: 90,
+                                                        flexShrink: 0
+                                                    }}
+                                                >
+                                                    Instalment {' '}
+                                                    {index + 1}
+                                                </Text>
+                                                <Input
+                                                    type="date"
+                                                    style={{ width: 160, boxShadow: 'none' }}
+                                                    value={date}
+                                                    onChange={e => {
+                                                        const newDates = [...(formData.instalmentDates || [])]
+                                                        newDates[index] = e.target.value
+                                                        updateField('instalmentDates', newDates)
+                                                    }}
 
-                                {formData.loanMonths.length > 0 && (<><Text
-                                    strong
-                                    style={{
-                                        display: 'block',
-                                        marginBottom: 12
-                                    }}
-                                >
-                                    Do you know the exact dates?
-                                </Text>
-
-                                    <YesNo
-                                        value={formData.loanKnowDates}
-                                        onChange={val => {
-                                            if (val === true) {
-                                                // Initialize dates with default values for all selected months
-                                                const initialDates = {}
-                                                formData.loanMonths.forEach(month => {
-                                                    const dateRange = getMonthDateRange(month)
-                                                    initialDates[month] = formData.loanDates[month] || dateRange.min
-                                                })
-                                                setFormData(prev => ({
-                                                    ...prev,
-                                                    loanKnowDates: val,
-                                                    loanDates: initialDates
-                                                }))
-                                                scrollToSub()
-                                            } else {
-                                                updateField('loanKnowDates', val)
-                                            }
-                                        }}
-                                    />
-
-                                    {formData.loanKnowDates === true &&
-                                        formData.loanMonths.length > 0 && (
-                                            <div style={{ marginTop: 16 }}>
-                                                {formData.loanMonths.map(
-                                                    month => {
-                                                        const dateRange = getMonthDateRange(month)
-                                                        return (
-                                                            <div
-                                                                key={month}
-                                                                style={{
-                                                                    display:
-                                                                        'flex',
-                                                                    alignItems:
-                                                                        'center',
-                                                                    gap: 12,
-                                                                    marginBottom: 8
-                                                                }}
-                                                            >
-                                                                <Text
-                                                                    style={{
-                                                                        width: 90,
-                                                                        flexShrink: 0
-                                                                    }}
-                                                                >
-                                                                    {
-                                                                        MONTH_LABELS[
-                                                                        month
-                                                                        ]
-                                                                    }
-                                                                </Text>
-                                                                <Input
-                                                                    type="date"
-                                                                    style={{ width: 160, height: 30 }}
-                                                                    min={dateRange.min}
-                                                                    max={dateRange.max}
-                                                                    value={formData.loanDates[month] || dateRange.min}
-                                                                    onChange={e =>
-                                                                        updateLoanDate(month, e.target.value)
-                                                                    }
-                                                                />
-                                                            </div>
-                                                        )
-                                                    }
+                                                />
+                                                {(formData.instalmentDates || []).length > 1 && (
+                                                    <Button
+                                                        type="text"
+                                                        size="small"
+                                                        danger
+                                                        onClick={() => {
+                                                            const newDates = (formData.instalmentDates || []).filter((_, i) => i !== index)
+                                                            updateField('instalmentDates', newDates)
+                                                        }}
+                                                    >
+                                                        Remove
+                                                    </Button>
                                                 )}
                                             </div>
-                                        )}</>)}
+                                        ))}
+                                        <Button
+                                            type="dashed"
+                                            onClick={() => {
+                                                updateField('instalmentDates', [...(formData.instalmentDates || []), ''])
+                                            }}
+                                            style={{ width: '100%' }}
+                                        >
+                                            + Add instalment
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {formData.loanKnowDates === false && (
+                                    <div style={{ marginTop: 16 }}>
+                                        <Text
+                                            strong
+                                            style={{
+                                                display: 'block',
+                                                marginBottom: 12
+                                            }}
+                                        >
+                                            Which months do you receive your student loan instalments?
+                                        </Text>
+
+                                        <div
+                                            style={{
+                                                display: 'flex',
+                                                flexWrap: 'wrap',
+                                                gap: 8
+                                            }}
+                                        >
+                                            {(showAllMonths
+                                                ? ALL_MONTH_KEYS
+                                                : DEFAULT_LOAN_MONTHS
+                                            ).map(m => (
+                                                <MonthChip
+                                                    key={m}
+                                                    label={MONTH_LABELS[m]}
+                                                    selected={formData.loanMonths.includes(m)}
+                                                    onClick={() => toggleMonth(m)}
+                                                />
+                                            ))}
+
+                                            {!showAllMonths && (
+                                                <div
+                                                    onClick={() => setShowAllMonths(true)}
+                                                    style={{
+                                                        padding: '6px 16px',
+                                                        borderRadius: 999,
+                                                        border: '1px dashed #d9d9d9',
+                                                        color: '#888',
+                                                        cursor: 'pointer',
+                                                        fontSize: 14,
+                                                        userSelect: 'none'
+                                                    }}
+                                                >
+                                                    + Different months
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </>
@@ -1171,7 +1261,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         marginBottom: 4
                                     }}
                                 >
-                                    When are your bursary payments?
+                                    When do you receive your bursary instalments?
                                 </Text>
                                 <Text
                                     type="secondary"
@@ -1191,8 +1281,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             style={{
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                gap: 12,
-                                                marginBottom: 8
+                                                gap: 8,
+                                                marginBottom: 12
                                             }}
                                         >
                                             <Text
@@ -1201,12 +1291,12 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                     flexShrink: 0
                                                 }}
                                             >
-                                                Installment {' '}
+                                                Instalment {' '}
                                                 {index + 1}
                                             </Text>
                                             <Input
                                                 type="date"
-                                                style={{ width: 160 }}
+                                                style={{ width: 160, boxShadow: 'none' }}
                                                 value={date}
                                                 onChange={e => {
                                                     const updated = [
@@ -1245,7 +1335,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 )}
                                 <Button
                                     type="dashed"
-                                    size="small"
                                     onClick={() =>
                                         updateField(
                                             'bursaryDates',
@@ -1255,9 +1344,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             ]
                                         )
                                     }
-                                    style={{ marginTop: 4 }}
+                                    style={{ width: '100%' }}
                                 >
-                                    + Add payment date
+                                    + Add instalment
                                 </Button>
                             </div>
                         )}
@@ -1336,17 +1425,17 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     </>
                 )
 
-            case 'oneOffPayments':
+            case 'oneOffIncome':
                 return (
                     <>
                         <YesNo
-                            value={formData.oneOffPayments}
+                            value={formData.oneOffIncome}
                             onChange={val =>
-                                handleYesNo('oneOffPayments', val)
+                                handleYesNo('oneOffIncome', val)
                             }
                         />
 
-                        {formData.oneOffPayments === true && (
+                        {formData.oneOffIncome === true && (
                             <div
                                 ref={subQuestionRef}
                                 style={{
@@ -1357,37 +1446,45 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     border: '1px solid #e8e8e8'
                                 }}
                             >
-                                <Text
-                                    strong
-                                    style={{
-                                        display: 'block',
-                                        marginBottom: 12
-                                    }}
-                                >
-                                    One-off income
-                                </Text>
                                 <OneOffItemList
                                     items={formData.oneOffIn}
                                     onChange={items =>
                                         updateField('oneOffIn', items)
                                     }
+                                    type="income"
                                 />
+                            </div>
+                        )}
+                    </>
+                )
 
-                                <Text
-                                    strong
-                                    style={{
-                                        display: 'block',
-                                        marginTop: 20,
-                                        marginBottom: 12
-                                    }}
-                                >
-                                    One-off expenses
-                                </Text>
+            case 'oneOffExpenses':
+                return (
+                    <>
+                        <YesNo
+                            value={formData.oneOffExpenses}
+                            onChange={val =>
+                                handleYesNo('oneOffExpenses', val)
+                            }
+                        />
+
+                        {formData.oneOffExpenses === true && (
+                            <div
+                                ref={subQuestionRef}
+                                style={{
+                                    marginTop: 24,
+                                    padding: '20px',
+                                    background: '#f8f8f8',
+                                    borderRadius: 12,
+                                    border: '1px solid #e8e8e8'
+                                }}
+                            >
                                 <OneOffItemList
                                     items={formData.oneOffOut}
                                     onChange={items =>
                                         updateField('oneOffOut', items)
                                     }
+                                    type="expense"
                                 />
                             </div>
                         )}
@@ -1467,8 +1564,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         display: 'flex',
                         flexDirection: 'column',
                         paddingTop: 24,
+                        paddingRight: 20,
                         touchAction: 'pan-y',
-                        WebkitOverflowScrolling: 'touch'
+                        WebkitOverflowScrolling: 'touch',
                     }}
                 >
                     {/* Question section */}

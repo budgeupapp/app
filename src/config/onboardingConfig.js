@@ -39,10 +39,16 @@ export const STEPS = [
             'Include rent, bills, subscriptions, or anything you pay for regularly. Enter the date of the next one — a rough estimate is fine.'
     },
     {
-        id: 'oneOffPayments',
-        heading: 'Any one-off income or expenses coming up?',
+        id: 'oneOffIncome',
+        heading: 'Do you have any one-off income coming up?',
         subtitle:
-            'For example, trips, events, larger purchases, or any expected lump-sum income.'
+            'For example, birthday money, refunds, or any expected lump-sum income.'
+    },
+    {
+        id: 'oneOffExpenses',
+        heading: 'Do you have any one-off expenses coming up?',
+        subtitle:
+            'For example, trips, events, or larger purchases.'
     },
     {
         id: 'weeklySpend',
@@ -247,6 +253,7 @@ export const INITIAL_FORM_DATA = {
     loanMonths: [...DEFAULT_LOAN_MONTHS],
     loanKnowDates: false,
     loanDates: {},
+    instalmentDates: [],
 
     bursary: null,
     bursaryAmount: '',
@@ -260,8 +267,10 @@ export const INITIAL_FORM_DATA = {
         { amount: '', date: '', frequency: 'monthly', type: 'rent', endDate: '' }
     ],
 
-    oneOffPayments: null,
+    oneOffIncome: null,
     oneOffIn: [{ name: '', amount: '', date: '' }],
+
+    oneOffExpenses: null,
     oneOffOut: [{ name: '', amount: '', date: '' }],
 
     weeklySpend: ''

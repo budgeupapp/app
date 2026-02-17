@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { Button, Form, Input, Checkbox, Typography, message } from 'antd'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import AuthContainer from '../components/AuthContainer'
 import { POLICY_URLS } from '../lib/policyVersions'
 import { usePostHog } from '@posthog/react'
@@ -10,6 +10,7 @@ const { Text } = Typography
 
 export default function SignupForm() {
   const posthog = usePostHog()
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const [lastEmail, setLastEmail] = useState('')
@@ -17,6 +18,18 @@ export default function SignupForm() {
   const [messageApi, contextHolder] = message.useMessage({
     maxCount: 1
   })
+
+  // Capture referral code from URL
+  useEffect(() => {
+    const refCode = searchParams.get('ref')
+    if (refCode) {
+      localStorage.setItem('referral_code', refCode)
+      // Track that user arrived via referral
+      posthog?.capture('referral_signup_started', {
+        referral_code: refCode
+      })
+    }
+  }, [searchParams, posthog])
 
   useEffect(() => {
     if (cooldownSeconds > 0) {
@@ -49,11 +62,17 @@ export default function SignupForm() {
     localStorage.setItem('signup_email', email)
     localStorage.setItem('signup_timestamp', Date.now().toString())
 
+    // Get referral code from localStorage
+    const referralCode = localStorage.getItem('referral_code')
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: window.location.origin
+        emailRedirectTo: window.location.origin,
+        data: {
+          referred_by: referralCode || null
+        }
       }
     })
 

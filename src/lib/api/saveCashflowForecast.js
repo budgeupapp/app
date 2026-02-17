@@ -55,58 +55,102 @@ const mapFrequencyToRecurrence = freq => {
 export async function saveCashflowForecast(userId, data) {
     const rows = []
 
-    /* --- Student loan (one entry per selected month) --- */
-    if (data.studentLoan && data.loanMonths?.length) {
-        const monthCount = data.loanMonths.length
+    /* --- Student loan --- */
+    if (data.studentLoan) {
         const rawAmount = stripCommas(data.loanAmount)
-        const perInstalment =
-            rawAmount && monthCount
-                ? (Number(rawAmount) / monthCount).toFixed(2)
+
+        // If user knows exact dates, use instalmentDates array
+        if (data.loanKnowDates && data.instalmentDates?.length) {
+            const validDates = data.instalmentDates.filter(Boolean)
+            const dateCount = validDates.length
+            const totalAmount = Number(rawAmount)
+            const perInstalment = rawAmount && dateCount
+                ? Number((totalAmount / dateCount).toFixed(2))
                 : null
 
-        for (const month of data.loanMonths) {
-            const exactDate = data.loanDates?.[month]
-            const fallbackDate = MONTH_TO_DEFAULT_DATE[month] || null
+            validDates.forEach((date, idx) => {
+                // For the last instalment, calculate to ensure sum equals total
+                const amount = idx === validDates.length - 1
+                    ? (totalAmount - (perInstalment * idx)).toFixed(2)
+                    : perInstalment.toFixed(2)
 
-            rows.push({
-                user_id: userId,
-                direction: 'in',
-                type: 'student_loan',
-                title: `Student loan - ${month.charAt(0).toUpperCase() + month.slice(1)}`,
-                amount: perInstalment,
-                currency: 'GBP',
-                recurrence: 'yearly',
-                scheduled_date: exactDate || fallbackDate,
-                end_date: null,
-                source: 'manual'
+                rows.push({
+                    user_id: userId,
+                    direction: 'in',
+                    type: 'student_loan',
+                    title: `Student loan - instalment ${idx + 1}`,
+                    amount,
+                    currency: 'GBP',
+                    recurrence: 'yearly',
+                    scheduled_date: date,
+                    end_date: null,
+                    source: 'manual'
+                })
+            })
+        }
+        // Otherwise, use loanMonths with default dates
+        else if (!data.loanKnowDates && data.loanMonths?.length) {
+            const monthCount = data.loanMonths.length
+            const totalAmount = Number(rawAmount)
+            const perInstalment = rawAmount && monthCount
+                ? Number((totalAmount / monthCount).toFixed(2))
+                : null
+
+            data.loanMonths.forEach((month, idx) => {
+                const exactDate = data.loanDates?.[month]
+                const fallbackDate = MONTH_TO_DEFAULT_DATE[month] || null
+
+                // For the last instalment, calculate to ensure sum equals total
+                const amount = idx === data.loanMonths.length - 1
+                    ? (totalAmount - (perInstalment * idx)).toFixed(2)
+                    : perInstalment.toFixed(2)
+
+                rows.push({
+                    user_id: userId,
+                    direction: 'in',
+                    type: 'student_loan',
+                    title: `Student loan - ${month.charAt(0).toUpperCase() + month.slice(1)}`,
+                    amount,
+                    currency: 'GBP',
+                    recurrence: 'yearly',
+                    scheduled_date: exactDate || fallbackDate,
+                    end_date: null,
+                    source: 'manual'
+                })
             })
         }
     }
 
     /* --- Bursary (one entry per payment date) --- */
     if (data.bursary && data.bursaryDates?.length) {
-        const dateCount = data.bursaryDates.filter(Boolean).length
+        const validDates = data.bursaryDates.filter(Boolean)
+        const dateCount = validDates.length
         const rawAmount = stripCommas(data.bursaryAmount)
+        const totalAmount = Number(rawAmount)
         const perPayment =
             rawAmount && dateCount
-                ? (Number(rawAmount) / dateCount).toFixed(2)
+                ? Number((totalAmount / dateCount).toFixed(2))
                 : null
 
-        for (const date of data.bursaryDates) {
-            if (!date) continue
+        validDates.forEach((date, idx) => {
+            // For the last payment, calculate to ensure sum equals total
+            const amount = idx === validDates.length - 1
+                ? (totalAmount - (perPayment * idx)).toFixed(2)
+                : perPayment.toFixed(2)
+
             rows.push({
                 user_id: userId,
                 direction: 'in',
                 type: 'bursary',
                 title: 'Bursary',
-                amount: perPayment,
+                amount,
                 currency: 'GBP',
                 recurrence: 'yearly',
                 scheduled_date: date,
                 end_date: null,
                 source: 'manual'
             })
-        }
+        })
     }
 
     /* --- Other income --- */
@@ -152,7 +196,7 @@ export async function saveCashflowForecast(userId, data) {
     }
 
     /* --- One-off money in --- */
-    if (data.oneOffPayments && data.oneOffIn?.length) {
+    if (data.oneOffIncome && data.oneOffIn?.length) {
         for (const item of data.oneOffIn) {
             const amount = stripCommas(item.amount)
             if (!amount) continue
@@ -172,7 +216,7 @@ export async function saveCashflowForecast(userId, data) {
     }
 
     /* --- One-off money out --- */
-    if (data.oneOffPayments && data.oneOffOut?.length) {
+    if (data.oneOffExpenses && data.oneOffOut?.length) {
         for (const item of data.oneOffOut) {
             const amount = stripCommas(item.amount)
             if (!amount) continue

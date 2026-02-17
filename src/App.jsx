@@ -203,7 +203,7 @@ export default function App() {
                         <BottomNav />
                     </div>
                 } />
-                <Route path="/advice" element={
+                <Route path="/support" element={
                     <div className="app-container">
                         <div style={{ height: '100vh', position: 'relative' }}>
                             <MoneyAdviceScreen />

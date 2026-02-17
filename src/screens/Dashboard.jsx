@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Spin, Alert } from 'antd'
-import { addDays, addMonths, addYears, format, parseISO } from 'date-fns'
+import { Spin, Typography } from 'antd'
+import { addYears, format, parseISO } from 'date-fns'
 import ForecastChart from '../components/ForecastChart'
 import NativeSegmented from '../components/NativeSegmented'
 import { fetchUserData } from '../lib/api'
 import { calculateForecast, analyzeForecast } from '../lib/forecastCalculator'
 import { supabase } from '../lib/supabaseClient'
 import { usePostHog } from '@posthog/react'
+
+
+const { Title } = Typography
 
 
 // Map weekly spend band to actual amount (midpoint of ranges)
@@ -47,7 +50,7 @@ export default function Dashboard() {
     const posthog = usePostHog()
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
-    const [timeView, setTimeView] = useState('month')
+    const [timeView, setTimeView] = useState('term')
     const [forecastData, setForecastData] = useState([])
     const [insights, setInsights] = useState(null)
     const [userData, setUserData] = useState(null)
@@ -143,7 +146,6 @@ export default function Dashboard() {
             flexDirection: 'column',
             height: '100vh',
             background: '#fff',
-            paddingBottom: 100
         }}>
             {/* STICKY HEADER - Title + Segmented Control */}
             <div style={{
@@ -153,17 +155,10 @@ export default function Dashboard() {
                 background: '#fff',
             }}>
                 {/* Page Title */}
-                <div style={{
-                    padding: '8px 20px 16px'
-                }}>
-                    <h1 style={{
-                        margin: 0,
-                        fontSize: 20,
-                        fontWeight: 600,
-                        color: '#1a1a2e',
-                    }}>
+                <div style={{ padding: '16px 20px' }}>
+                    <Title level={2} style={{ margin: 0, fontSize: 20 }}>
                         Your Financial Forecast
-                    </h1>
+                    </Title>
                 </div>
 
                 {/* Time View Segmented Control */}
@@ -187,9 +182,11 @@ export default function Dashboard() {
             {/* SCROLLABLE CONTENT */}
             <div style={{
                 flex: 1,
-                overflow: 'auto',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch',
                 paddingTop: 20,
-                minHeight: 'calc(100vh - 200px)',
+                paddingBottom: 'calc(250px + env(safe-area-inset-bottom))'// Ensure it takes full height for proper scrolling
             }}>
                 {/* Chart Section with Status & Balance */}
                 <div style={{

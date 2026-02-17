@@ -265,7 +265,8 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 marginBottom: 8,
-                padding: '0 4px'
+                padding: '0 4px',
+                height: 24
             }}>
                 {savingsBuffer > 0 ? (
                     <label style={{

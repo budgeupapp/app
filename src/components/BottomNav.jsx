@@ -24,9 +24,9 @@ export default function BottomNav() {
             icon: <CoinsHand className="size-5" />
         },
         {
-            key: 'advice',
-            path: '/advice',
-            label: 'Money Advice',
+            key: '/support',
+            path: '/support',
+            label: 'Support',
             icon: <MessageQuestionCircle className="size-5" />
         },
         {

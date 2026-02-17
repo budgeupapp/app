@@ -1,4 +1,6 @@
 import './NativeSelect.css'
+import { Typography } from 'antd'
+
 
 export default function NativeSelect({
     value,
@@ -6,9 +8,10 @@ export default function NativeSelect({
     options,
     placeholder,
     label,
+    containerStyle,
     style,
     required = false,
-    disabled = false
+    disabled = false,
 }) {
     // Normalize options to {value, label} format
     const normalizedOptions = options.map(option => {
@@ -18,16 +21,19 @@ export default function NativeSelect({
         return option
     })
 
+    const { Title, Text } = Typography
+
     return (
-        <div className="native-select-wrapper" style={style}>
+        <div className="native-select-wrapper" style={containerStyle}>
             {label && (
-                <label className="native-select-label">
+                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                     {label}
-                </label>
+                </Text>
             )}
             <div className="native-select-container">
                 <select
                     className="native-select"
+                    style={style}
                     value={value || ''}
                     onChange={(e) => onChange(e.target.value)}
                     required={required}

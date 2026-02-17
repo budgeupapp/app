@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Collapse, Input, Radio, Button, Typography, message, Spin, Badge, Modal } from 'antd'
+import { Collapse, Input, Radio, Button, Typography, message, Badge, Modal } from 'antd'
 import { ChevronDown } from '@untitledui/icons'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
@@ -72,6 +72,19 @@ const getDefaultDateForMonth = (monthKey) => {
     return `${year}-${pad(month + 1)}-15`
 }
 
+// Helper to extract month key from a date string
+const getMonthKeyFromDate = (dateStr) => {
+    if (!dateStr) return null
+    const date = new Date(dateStr)
+    const month = date.getMonth() // 0-11
+    const monthKeys = {
+        8: 'september', 9: 'october', 10: 'november', 11: 'december',
+        0: 'january', 1: 'february', 2: 'march', 3: 'april',
+        4: 'may', 5: 'june', 6: 'july', 7: 'august'
+    }
+    return monthKeys[month] || null
+}
+
 // YesNo component
 const YesNo = ({ value, onChange }) => (
     <Radio.Group
@@ -103,11 +116,22 @@ export default function FinancesScreen() {
         const issues = []
 
         if (data.studentLoan) {
-            if (data.loanAmount && data.loanMonths.length === 0) {
-                issues.push('Student Loan: amount entered but no payment months selected')
-            }
-            if (!data.loanAmount && data.loanMonths.length > 0) {
-                issues.push('Student Loan: payment months selected but no amount entered')
+            if (data.loanKnowDates === true) {
+                const hasAmount = !!data.loanAmount
+                const hasDates = (data.instalmentDates || []).some(d => !!d)
+                if (hasAmount && !hasDates) {
+                    issues.push('Student Loan: amount entered but no payment instalment dates set')
+                }
+                if (!hasAmount && hasDates) {
+                    issues.push('Student Loan: payment instalment dates set but no amount entered')
+                }
+            } else if (data.loanKnowDates === false) {
+                if (data.loanAmount && data.loanMonths.length === 0) {
+                    issues.push('Student Loan: amount entered but no payment instalment months selected')
+                }
+                if (!data.loanAmount && data.loanMonths.length > 0) {
+                    issues.push('Student Loan: payment instalment months selected but no amount entered')
+                }
             }
         }
 
@@ -115,10 +139,10 @@ export default function FinancesScreen() {
             const hasAmount = !!data.bursaryAmount
             const hasDates = data.bursaryDates.some(d => !!d)
             if (hasAmount && !hasDates) {
-                issues.push('Bursary: amount entered but no payment dates set')
+                issues.push('Bursary: amount entered but no payment instalment dates set')
             }
             if (!hasAmount && hasDates) {
-                issues.push('Bursary: payment dates set but no amount entered')
+                issues.push('Bursary: payment instalment dates set but no amount entered')
             }
         }
 
@@ -127,10 +151,10 @@ export default function FinancesScreen() {
                 const hasAmount = !!item.amount
                 const hasDate = !!item.date
                 if (hasAmount && !hasDate) {
-                    issues.push(`Other Income ${i + 1}: amount entered but no start date set`)
+                    issues.push(`Other Regular Income ${i + 1}: amount entered but no start date set`)
                 }
                 if (!hasAmount && hasDate) {
-                    issues.push(`Other Income ${i + 1}: start date set but no amount entered`)
+                    issues.push(`Other Regular Income ${i + 1}: start date set but no amount entered`)
                 }
             })
         }
@@ -148,7 +172,7 @@ export default function FinancesScreen() {
             })
         }
 
-        if (data.oneOffPayments) {
+        if (data.oneOffIncome) {
             data.oneOffIn.forEach((item, i) => {
                 const hasAmount = !!item.amount
                 const hasDate = !!item.date
@@ -159,6 +183,9 @@ export default function FinancesScreen() {
                     issues.push(`One-off Income ${i + 1}: date set but no amount entered`)
                 }
             })
+        }
+
+        if (data.oneOffExpenses) {
             data.oneOffOut.forEach((item, i) => {
                 const hasAmount = !!item.amount
                 const hasDate = !!item.date
@@ -235,23 +262,48 @@ export default function FinancesScreen() {
             } else {
                 Modal.confirm({
                     title: 'Unsaved changes',
-                    content: 'You have unsaved changes. Do you want to save before leaving?',
-                    okText: 'Save & leave',
-                    cancelText: 'Discard & leave',
+                    content: (
+                        <div>
+                            <p>You have unsaved changes. Save your changes before leaving?</p>
+                            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <Button
+                                    type="primary"
+                                    block
+                                    onClick={async () => {
+                                        Modal.destroyAll()
+                                        await handleSaveRef.current({ silent: true })
+                                        navigate(href)
+                                    }}
+                                    style={{
+                                        backgroundColor: '#147B75',
+                                        borderColor: '#147B75'
+                                    }}
+                                >
+                                    Save & leave
+                                </Button>
+                                <Button
+                                    block
+                                    danger
+                                    onClick={() => {
+                                        Modal.destroyAll()
+                                        navigate(href)
+                                    }}
+                                >
+                                    Leave without saving
+                                </Button>
+                                <Button
+                                    block
+                                    onClick={() => {
+                                        Modal.destroyAll()
+                                    }}
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </div>
+                    ),
                     closable: false,
-                    okButtonProps: {
-                        style: {
-                            backgroundColor: '#147B75',
-                            borderColor: '#147B75'
-                        }
-                    },
-                    onOk: async () => {
-                        await handleSaveRef.current()
-                        navigate(href)
-                    },
-                    onCancel: () => {
-                        navigate(href)
-                    }
+                    footer: null
                 })
             }
         }
@@ -310,20 +362,30 @@ export default function FinancesScreen() {
                     c => c.direction === 'out' && c.type === 'one_off'
                 )
 
+                // Detect if student loans are saved as exact dates or months
+                const hasMonthBasedLoans = studentLoans.some(l => {
+                    const title = l.title || ''
+                    return ALL_MONTH_KEYS.some(m => title.toLowerCase().includes(MONTH_LABELS[m].toLowerCase()))
+                })
+
                 newFormData = {
                     ...newFormData,
                     studentLoan: studentLoans.length > 0,
                     loanAmount: studentLoans.length > 0
-                        ? (studentLoans.reduce((sum, loan) => sum + (parseFloat(loan.amount) || 0), 0)).toString()
+                        ? (studentLoans.reduce((sum, loan) => sum + (parseFloat(loan.amount) || 0), 0)).toFixed(2)
                         : '',
-                    loanMonths: studentLoans.map(l => {
+                    loanKnowDates: studentLoans.length > 0 ? !hasMonthBasedLoans : null,
+                    instalmentDates: !hasMonthBasedLoans && studentLoans.length > 0
+                        ? studentLoans.map(l => l.scheduled_date).filter(Boolean)
+                        : [],
+                    loanMonths: hasMonthBasedLoans ? studentLoans.map(l => {
                         const title = l.title || ''
                         const month = ALL_MONTH_KEYS.find(m =>
                             title.toLowerCase().includes(MONTH_LABELS[m].toLowerCase())
                         )
                         return month
-                    }).filter(Boolean),
-                    loanDates: studentLoans.reduce((acc, l) => {
+                    }).filter(Boolean) : [],
+                    loanDates: hasMonthBasedLoans ? studentLoans.reduce((acc, l) => {
                         const title = l.title || ''
                         const month = ALL_MONTH_KEYS.find(m =>
                             title.toLowerCase().includes(MONTH_LABELS[m].toLowerCase())
@@ -332,11 +394,11 @@ export default function FinancesScreen() {
                             acc[month] = l.scheduled_date
                         }
                         return acc
-                    }, {}),
+                    }, {}) : {},
 
                     bursary: bursaries.length > 0,
                     bursaryAmount: bursaries.length > 0
-                        ? (bursaries.reduce((sum, bursary) => sum + (parseFloat(bursary.amount) || 0), 0)).toString()
+                        ? (bursaries.reduce((sum, bursary) => sum + (parseFloat(bursary.amount) || 0), 0)).toFixed(2)
                         : '',
                     bursaryDates: bursaries.map(b => b.scheduled_date).filter(Boolean),
 
@@ -362,7 +424,7 @@ export default function FinancesScreen() {
                         }))
                         : [{ amount: '', date: '', frequency: 'monthly', type: 'rent', endDate: '' }],
 
-                    oneOffPayments: oneOffIn.length > 0 || oneOffOut.length > 0,
+                    oneOffIncome: oneOffIn.length > 0,
                     oneOffIn: oneOffIn.length > 0
                         ? oneOffIn.map(i => ({
                             name: i.title || '',
@@ -370,6 +432,8 @@ export default function FinancesScreen() {
                             date: i.scheduled_date || ''
                         }))
                         : [{ name: '', amount: '', date: '' }],
+
+                    oneOffExpenses: oneOffOut.length > 0,
                     oneOffOut: oneOffOut.length > 0
                         ? oneOffOut.map(o => ({
                             name: o.title || '',
@@ -395,7 +459,8 @@ export default function FinancesScreen() {
         setFormData(prev => ({ ...prev, [key]: value }))
     }
 
-    const handleSave = async () => {
+    const handleSave = async (options = {}) => {
+        const { silent = false } = options
         const issues = getIncompleteFields(formDataRef.current)
         if (issues.length > 0) {
             Modal.warning({
@@ -447,10 +512,13 @@ export default function FinancesScreen() {
                 has_bursary: currentData.bursary,
                 has_other_income: currentData.otherIncome,
                 has_regular_expenses: currentData.regularExpense,
-                has_one_off_payments: currentData.oneOffPayments
+                has_one_off_income: currentData.oneOffIncome,
+                has_one_off_expenses: currentData.oneOffExpenses
             })
 
-            messageApi.success('Changes saved successfully')
+            if (!silent) {
+                messageApi.success('Changes saved successfully')
+            }
 
             // Reload data without refreshing the page
             await loadUserData()
@@ -463,20 +531,6 @@ export default function FinancesScreen() {
         }
     }
     handleSaveRef.current = handleSave
-
-    if (loading) {
-        return (
-            <div style={{
-                height: '80vh',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: '#fff'
-            }}>
-                <Spin size="large" />
-            </div>
-        )
-    }
 
     const panelStyle = {
         marginBottom: 16,
@@ -500,15 +554,11 @@ export default function FinancesScreen() {
                 top: 0,
                 zIndex: 10,
                 background: '#fff',
-                borderBottom: '1px solid #f0f0f0'
             }}>
                 <div style={{ padding: '16px 20px' }}>
                     <Title level={2} style={{ margin: 0, fontSize: 20 }}>
                         Your Financial Info
                     </Title>
-                    <Text type="secondary" style={{ fontSize: 13 }}>
-                        Update your income, expenses, and financial details
-                    </Text>
                 </div>
             </div>
 
@@ -519,7 +569,7 @@ export default function FinancesScreen() {
                     overflowY: 'auto',
                     overflowX: 'hidden',
                     WebkitOverflowScrolling: 'touch',
-                    padding: '16px 20px',
+                    padding: '0px 20px',
                     paddingBottom: 'calc(250px + env(safe-area-inset-bottom))'
                 }}
             >
@@ -628,90 +678,128 @@ export default function FinancesScreen() {
                                         style={{ borderRadius: 8, marginBottom: 16 }}
                                     />
 
-                                    <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                                        Which months do you receive payments?
+                                    <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                                        Do you know the exact dates of your instalments?
                                     </Text>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                                        {ALL_MONTH_KEYS.map(month => {
-                                            const isSelected = formData.loanMonths.includes(month)
-                                            return (
-                                                <div
-                                                    key={month}
-                                                    onClick={() => {
-                                                        const newMonths = isSelected
-                                                            ? formData.loanMonths.filter(m => m !== month)
-                                                            : [...formData.loanMonths, month]
-                                                        // Also update loanDates when adding/removing months
-                                                        const newDates = { ...formData.loanDates }
-                                                        if (isSelected) {
-                                                            delete newDates[month]
-                                                        } else {
-                                                            newDates[month] = getDefaultDateForMonth(month)
-                                                        }
-                                                        setFormData(prev => ({
-                                                            ...prev,
-                                                            loanMonths: newMonths,
-                                                            loanDates: newDates
-                                                        }))
-                                                    }}
-                                                    style={{
-                                                        padding: '6px 16px',
-                                                        borderRadius: 999,
-                                                        border: `1px solid ${isSelected ? '#147B75' : '#d9d9d9'}`,
-                                                        background: isSelected ? '#147B75' : '#fff',
-                                                        color: isSelected ? '#fff' : '#333',
-                                                        cursor: 'pointer',
-                                                        fontSize: 14,
-                                                        userSelect: 'none',
-                                                        transition: 'all 0.2s'
-                                                    }}
-                                                >
-                                                    {MONTH_LABELS[month]}
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
+                                    <YesNo
+                                        value={formData.loanKnowDates}
+                                        onChange={val => {
+                                            if (val === true) {
+                                                // Switching to "Yes, I know exact dates"
+                                                // Convert loanMonths to instalmentDates if instalmentDates is empty
+                                                updateField('loanKnowDates', val)
+                                                if (!formData.instalmentDates?.length && formData.loanMonths?.length) {
+                                                    const dates = formData.loanMonths.map(getDefaultDateForMonth)
+                                                    updateField('instalmentDates', dates)
+                                                } else if (!formData.instalmentDates?.length) {
+                                                    // No data in either field, use defaults
+                                                    const defaultDates = ['september', 'january', 'april'].map(getDefaultDateForMonth)
+                                                    updateField('instalmentDates', defaultDates)
+                                                }
+                                            } else {
+                                                // Switching to "No, I don't know exact dates"
+                                                // Extract months from instalmentDates and set loanMonths
+                                                updateField('loanKnowDates', val)
+                                                if (formData.instalmentDates?.length) {
+                                                    const months = formData.instalmentDates
+                                                        .map(getMonthKeyFromDate)
+                                                        .filter(Boolean)
+                                                    if (months.length) {
+                                                        updateField('loanMonths', months)
+                                                    }
+                                                }
+                                            }
+                                        }}
+                                    />
 
-                                    {formData.loanMonths.length > 0 && (
+                                    {formData.loanKnowDates === true && (
                                         <div style={{ marginTop: 16 }}>
                                             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                                                Payment dates
+                                                Instalment dates
                                             </Text>
-                                            {formData.loanMonths.map(month => (
-                                                <div
-                                                    key={month}
-                                                    style={{
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: 12,
-                                                        marginBottom: 8
-                                                    }}
-                                                >
-                                                    <Text style={{ width: 90, flexShrink: 0 }}>
-                                                        {MONTH_LABELS[month]}
-                                                    </Text>
+                                            {(formData.instalmentDates || []).map((date, idx) => (
+                                                <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
                                                     <Input
                                                         type="date"
-                                                        value={formData.loanDates?.[month] || ''}
+                                                        value={date}
                                                         onChange={e => {
-                                                            setFormData(prev => ({
-                                                                ...prev,
-                                                                loanDates: {
-                                                                    ...prev.loanDates,
-                                                                    [month]: e.target.value
-                                                                }
-                                                            }))
+                                                            const newDates = [...(formData.instalmentDates || [])]
+                                                            newDates[idx] = e.target.value
+                                                            updateField('instalmentDates', newDates)
                                                         }}
                                                         style={{
                                                             borderRadius: 8,
                                                             WebkitAppearance: 'none',
                                                             width: '100%',
                                                             height: 34,
-                                                            flex: 1
+                                                            flex: 1,
+                                                            boxShadow: 'none'
                                                         }}
                                                     />
+                                                    {(formData.instalmentDates || []).length > 1 && (
+                                                        <Button
+                                                            type="text"
+                                                            size="small"
+                                                            danger
+                                                            onClick={() => {
+                                                                const newDates = (formData.instalmentDates || []).filter((_, i) => i !== idx)
+                                                                updateField('instalmentDates', newDates)
+                                                            }}
+                                                        >
+                                                            Remove
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             ))}
+                                            <Button
+                                                type="dashed"
+                                                onClick={() => {
+                                                    updateField('instalmentDates', [...(formData.instalmentDates || []), ''])
+                                                }}
+                                                style={{ width: '100%' }}
+                                            >
+                                                + Add instalment
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {formData.loanKnowDates === false && (
+                                        <div style={{ marginTop: 16 }}>
+                                            <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                                                Which months do you receive payments?
+                                            </Text>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                                                {ALL_MONTH_KEYS.map(month => {
+                                                    const isSelected = formData.loanMonths.includes(month)
+                                                    return (
+                                                        <div
+                                                            key={month}
+                                                            onClick={() => {
+                                                                const newMonths = isSelected
+                                                                    ? formData.loanMonths.filter(m => m !== month)
+                                                                    : [...formData.loanMonths, month]
+                                                                setFormData(prev => ({
+                                                                    ...prev,
+                                                                    loanMonths: newMonths
+                                                                }))
+                                                            }}
+                                                            style={{
+                                                                padding: '6px 16px',
+                                                                borderRadius: 999,
+                                                                border: `1px solid ${isSelected ? '#147B75' : '#d9d9d9'}`,
+                                                                background: isSelected ? '#147B75' : '#fff',
+                                                                color: isSelected ? '#fff' : '#333',
+                                                                cursor: 'pointer',
+                                                                fontSize: 14,
+                                                                userSelect: 'none',
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                        >
+                                                            {MONTH_LABELS[month]}
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -749,7 +837,7 @@ export default function FinancesScreen() {
                                     />
 
                                     <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                                        Payment dates
+                                        Instalment dates
                                     </Text>
                                     {formData.bursaryDates.map((date, idx) => (
                                         <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
@@ -767,19 +855,22 @@ export default function FinancesScreen() {
                                                     width: '100%',
                                                     height: 34,
                                                     flex: 1,
+                                                    boxShadow: 'none'
                                                 }}
                                             />
-                                            <Button
-                                                type="text"
-                                                size="small"
-                                                danger
-                                                onClick={() => {
-                                                    const newDates = formData.bursaryDates.filter((_, i) => i !== idx)
-                                                    updateField('bursaryDates', newDates)
-                                                }}
-                                            >
-                                                Remove
-                                            </Button>
+                                            {formData.bursaryDates.length > 1 && (
+                                                <Button
+                                                    type="text"
+                                                    size="small"
+                                                    danger
+                                                    onClick={() => {
+                                                        const newDates = formData.bursaryDates.filter((_, i) => i !== idx)
+                                                        updateField('bursaryDates', newDates)
+                                                    }}
+                                                >
+                                                    Remove
+                                                </Button>
+                                            )}
                                         </div>
                                     ))}
                                     <Button
@@ -789,7 +880,7 @@ export default function FinancesScreen() {
                                         }}
                                         style={{ width: '100%' }}
                                     >
-                                        + Add payment date
+                                        + Add instalment
                                     </Button>
                                 </div>
                             )}
@@ -798,7 +889,7 @@ export default function FinancesScreen() {
 
                     {/* Other Income */}
                     <Panel
-                        header={<Text strong>Other Income</Text>}
+                        header={<Text strong>Other Regular Income</Text>}
                         key="otherIncome"
                         style={panelStyle}
                     >
@@ -858,9 +949,9 @@ export default function FinancesScreen() {
                                                         updateField('otherIncomeItems', newItems)
                                                     }}
                                                     options={OTHER_INCOME_TYPE_OPTIONS}
-                                                    style={{ marginBottom: 12 }}
+                                                    containerStyle={{ marginBottom: 12 }}
                                                 />
-                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                     Amount
                                                 </Text>
                                                 <Input
@@ -875,7 +966,7 @@ export default function FinancesScreen() {
                                                     }}
                                                     style={{ borderRadius: 8, marginBottom: 12 }}
                                                 />
-                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                     Start Date
                                                 </Text>
                                                 <div style={{ display: 'flex', minWidth: 0 }}>
@@ -893,6 +984,7 @@ export default function FinancesScreen() {
                                                             WebkitAppearance: 'none',
                                                             width: '100%',
                                                             height: 34,
+                                                            boxShadow: 'none'
                                                         }}
                                                     />
                                                 </div>
@@ -905,12 +997,12 @@ export default function FinancesScreen() {
                                                         updateField('otherIncomeItems', newItems)
                                                     }}
                                                     options={OTHER_INCOME_FREQ_OPTIONS}
-                                                    style={{ marginBottom: 12 }}
+                                                    containerStyle={{ marginBottom: 12 }}
                                                 />
-                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                     End Date (optional)
                                                 </Text>
-                                                <div style={{ display: 'flex', minWidth: 0 }}>
+                                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                                     <Input
                                                         type="date"
                                                         value={item.endDate}
@@ -924,8 +1016,24 @@ export default function FinancesScreen() {
                                                             WebkitAppearance: 'none',
                                                             width: '100%',
                                                             height: 34,
+                                                            flex: 1,
+                                                            boxShadow: 'none'
                                                         }}
                                                     />
+                                                    {item.endDate && (
+                                                        <Button
+                                                            type="text"
+                                                            size="small"
+                                                            danger
+                                                            onClick={() => {
+                                                                const newItems = [...formData.otherIncomeItems]
+                                                                newItems[originalIdx].endDate = ''
+                                                                updateField('otherIncomeItems', newItems)
+                                                            }}
+                                                        >
+                                                            Clear
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </div>
                                         )
@@ -940,7 +1048,7 @@ export default function FinancesScreen() {
                                         }}
                                         style={{ width: '100%' }}
                                     >
-                                        + Add Another
+                                        + Add another income source
                                     </Button>
                                 </div>
                             )}
@@ -1009,9 +1117,9 @@ export default function FinancesScreen() {
                                                         updateField('regularExpenseItems', newItems)
                                                     }}
                                                     options={PAYMENT_TYPE_OPTIONS}
-                                                    style={{ marginBottom: 12 }}
+                                                    containerStyle={{ marginBottom: 12 }}
                                                 />
-                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                     Amount
                                                 </Text>
                                                 <Input
@@ -1026,7 +1134,7 @@ export default function FinancesScreen() {
                                                     }}
                                                     style={{ borderRadius: 8, marginBottom: 12 }}
                                                 />
-                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                     Start Date
                                                 </Text>
                                                 <div style={{ display: 'flex', minWidth: 0 }}>
@@ -1044,6 +1152,7 @@ export default function FinancesScreen() {
                                                             WebkitAppearance: 'none',
                                                             width: '100%',
                                                             height: 34,
+                                                            boxShadow: 'none'
                                                         }}
                                                     />
                                                 </div>
@@ -1056,12 +1165,12 @@ export default function FinancesScreen() {
                                                         updateField('regularExpenseItems', newItems)
                                                     }}
                                                     options={REGULAR_FREQ_OPTIONS}
-                                                    style={{ marginBottom: 12 }}
+                                                    containerStyle={{ marginBottom: 12 }}
                                                 />
-                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                                <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                     End Date (optional)
                                                 </Text>
-                                                <div style={{ display: 'flex', minWidth: 0 }}>
+                                                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                                     <Input
                                                         type="date"
                                                         value={item.endDate}
@@ -1075,8 +1184,24 @@ export default function FinancesScreen() {
                                                             WebkitAppearance: 'none',
                                                             width: '100%',
                                                             height: 34,
+                                                            flex: 1,
+                                                            boxShadow: 'none'
                                                         }}
                                                     />
+                                                    {item.endDate && (
+                                                        <Button
+                                                            type="text"
+                                                            size="small"
+                                                            danger
+                                                            onClick={() => {
+                                                                const newItems = [...formData.regularExpenseItems]
+                                                                newItems[originalIdx].endDate = ''
+                                                                updateField('regularExpenseItems', newItems)
+                                                            }}
+                                                        >
+                                                            Clear
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </div>
                                         )
@@ -1091,33 +1216,30 @@ export default function FinancesScreen() {
                                         }}
                                         style={{ width: '100%' }}
                                     >
-                                        + Add Another
+                                        + Add another expense
                                     </Button>
                                 </div>
                             )}
                         </div>
                     </Panel>
 
-                    {/* One-Off Payments */}
+                    {/* One-Off Income */}
                     <Panel
-                        header={<Text strong>One-Off Payments</Text>}
-                        key="oneOffPayments"
+                        header={<Text strong>One-Off Income</Text>}
+                        key="oneOffIncome"
                         style={panelStyle}
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                                {getStep('oneOffPayments').heading}
+                                {getStep('oneOffIncome').heading}
                             </Text>
                             <YesNo
-                                value={formData.oneOffPayments}
-                                onChange={val => updateField('oneOffPayments', val)}
+                                value={formData.oneOffIncome}
+                                onChange={val => updateField('oneOffIncome', val)}
                             />
 
-                            {formData.oneOffPayments && (
+                            {formData.oneOffIncome && (
                                 <div style={{ marginTop: 16 }}>
-                                    <Text strong style={{ display: 'block', marginBottom: 12 }}>
-                                        One-off Income
-                                    </Text>
                                     {formData.oneOffIn.map((item, idx) => (
                                         <div key={idx} style={{
                                             padding: 16,
@@ -1147,7 +1269,7 @@ export default function FinancesScreen() {
                                                     </Button>
                                                 </div>
                                             )}
-                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                 Name (optional)
                                             </Text>
                                             <Input
@@ -1159,7 +1281,7 @@ export default function FinancesScreen() {
                                                 }}
                                                 style={{ borderRadius: 8, marginBottom: 12 }}
                                             />
-                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                 Amount
                                             </Text>
                                             <Input
@@ -1174,7 +1296,7 @@ export default function FinancesScreen() {
                                                 }}
                                                 style={{ borderRadius: 8, marginBottom: 12 }}
                                             />
-                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                 Date
                                             </Text>
                                             <div style={{ display: 'flex', minWidth: 0 }}>
@@ -1191,6 +1313,7 @@ export default function FinancesScreen() {
                                                         WebkitAppearance: 'none',
                                                         width: '100%',
                                                         height: 34,
+                                                        boxShadow: 'none'
                                                     }}
                                                 />
                                             </div>
@@ -1204,14 +1327,32 @@ export default function FinancesScreen() {
                                                 { name: '', amount: '', date: '' }
                                             ])
                                         }}
-                                        style={{ width: '100%', marginBottom: 24 }}
+                                        style={{ width: '100%', }}
                                     >
-                                        + Add Income
+                                        + Add another income
                                     </Button>
+                                </div>
+                            )}
+                        </div>
+                    </Panel>
 
-                                    <Text strong style={{ display: 'block', marginBottom: 12 }}>
-                                        One-off Expenses
-                                    </Text>
+                    {/* One-Off Expenses */}
+                    <Panel
+                        header={<Text strong>One-Off Expenses</Text>}
+                        key="oneOffExpenses"
+                        style={panelStyle}
+                    >
+                        <div style={{ marginBottom: 16 }}>
+                            <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                                {getStep('oneOffExpenses').heading}
+                            </Text>
+                            <YesNo
+                                value={formData.oneOffExpenses}
+                                onChange={val => updateField('oneOffExpenses', val)}
+                            />
+
+                            {formData.oneOffExpenses && (
+                                <div style={{ marginTop: 16 }}>
                                     {formData.oneOffOut.map((item, idx) => (
                                         <div key={idx} style={{
                                             padding: 16,
@@ -1241,7 +1382,7 @@ export default function FinancesScreen() {
                                                     </Button>
                                                 </div>
                                             )}
-                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                 Name (optional)
                                             </Text>
                                             <Input
@@ -1253,7 +1394,7 @@ export default function FinancesScreen() {
                                                 }}
                                                 style={{ borderRadius: 8, marginBottom: 12 }}
                                             />
-                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                 Amount
                                             </Text>
                                             <Input
@@ -1268,7 +1409,7 @@ export default function FinancesScreen() {
                                                 }}
                                                 style={{ borderRadius: 8, marginBottom: 12 }}
                                             />
-                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 12 }}>
+                                            <Text type="secondary" style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>
                                                 Date
                                             </Text>
                                             <div style={{ display: 'flex', minWidth: 0 }}>
@@ -1285,6 +1426,7 @@ export default function FinancesScreen() {
                                                         WebkitAppearance: 'none',
                                                         width: '100%',
                                                         height: 34,
+                                                        boxShadow: 'none'
                                                     }}
                                                 />
                                             </div>
@@ -1300,7 +1442,7 @@ export default function FinancesScreen() {
                                         }}
                                         style={{ width: '100%' }}
                                     >
-                                        + Add Expense
+                                        + Add another expense
                                     </Button>
                                 </div>
                             )}

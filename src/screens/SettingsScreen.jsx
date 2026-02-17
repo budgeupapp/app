@@ -39,6 +39,8 @@ export default function SettingsScreen() {
             content: 'Failed to log out. Please try again.',
             duration: 5
           })
+        } else {
+          localStorage.clear()
         }
         // App.jsx will handle redirect after signOut and reset PostHog
       }
@@ -97,7 +99,8 @@ export default function SettingsScreen() {
             duration: 3
           })
 
-          // Sign out (which will also reset PostHog in App.jsx)
+          // Clear local storage and sign out (which will also reset PostHog in App.jsx)
+          localStorage.clear()
           await supabase.auth.signOut()
         } catch (error) {
           console.error('Error deleting account:', error)
@@ -119,6 +122,50 @@ export default function SettingsScreen() {
     }
   }
 
+  const handleInviteFriends = async () => {
+    // Track invite intent
+    posthog?.capture('invite_friends_clicked')
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      // Create invite link with referral code (user ID)
+      const referralCode = user?.id ? user.id.substring(0, 8) : ''
+      const inviteUrl = referralCode
+        ? `${window.location.origin}/signup?ref=${referralCode}`
+        : `${window.location.origin}/signup`
+
+      const shareData = {
+        title: 'You’ve been invited to Budge Up 🎉',
+        text: "Join Budge Up — the new budgeting app for students! 🌻✨\nSign up with my referral code to get started:",
+        url: inviteUrl
+      }
+
+      // Try native share API first
+      if (navigator.share && navigator.canShare(shareData)) {
+        await navigator.share(shareData)
+        posthog?.capture('invite_shared', { method: 'native_share' })
+      } else {
+        // Fallback: copy to clipboard
+        await navigator.clipboard.writeText(inviteUrl)
+        messageApi.success({
+          content: 'Invite link copied to clipboard!',
+          duration: 3
+        })
+        posthog?.capture('invite_shared', { method: 'clipboard' })
+      }
+    } catch (error) {
+      // User cancelled share or clipboard failed
+      if (error.name !== 'AbortError') {
+        console.error('Share failed:', error)
+        messageApi.error({
+          content: 'Failed to share invite link',
+          duration: 3
+        })
+      }
+    }
+  }
+
   const policyLinks = [
     { label: 'Privacy Policy', url: POLICY_URLS.privacy },
     { label: 'Terms of Service', url: POLICY_URLS.terms },
@@ -126,120 +173,145 @@ export default function SettingsScreen() {
   ]
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#ffffff',
-        padding: '24px 16px',
-        paddingBottom: 'calc(100px + env(safe-area-inset-bottom))'
-      }}
-    >
+    <div style={{
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      background: '#fff'
+    }}>
       {contextHolder}
 
-      <div style={{ maxWidth: 600, margin: '0 auto' }}>
-        {/* Header */}
-        <Title level={2} style={{ marginBottom: 32 }}>
-          Settings
-        </Title>
+      {/* STICKY HEADER */}
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 10,
+        background: '#fff',
+      }}>
+        <div style={{ padding: '16px 20px' }}>
+          <Title level={2} style={{ margin: 0, fontSize: 20 }}>
+            Settings
+          </Title>
+        </div>
+      </div>
 
-        {/* Legal & Privacy Section */}
+      {/* CONTENT WRAPPER */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        overflowX: 'hidden',
+        WebkitOverflowScrolling: 'touch',
+        padding: '0px 20px',
+        paddingBottom: 'calc(250px + env(safe-area-inset-bottom))'
+      }}>
+
+        {/* INVITE FRIENDS */}
         <div style={{ marginBottom: 40 }}>
           <Title level={4} style={{ marginBottom: 16, fontSize: 16 }}>
-            Legal & Privacy
+            Share Budge Up 🚀
           </Title>
 
-          <div style={{
-            background: '#fafafa',
-            borderRadius: 12,
-            overflow: 'hidden',
-            border: '1px solid #f0f0f0'
-          }}>
-            {policyLinks.map((link, index) => (
-              <a
-                key={link.label}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'block',
-                  padding: '16px 20px',
-                  color: '#262626',
-                  textDecoration: 'none',
-                  borderBottom: index < policyLinks.length - 1 ? '1px solid #f0f0f0' : 'none',
-                  transition: 'background 0.2s'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-              >
-                <Text>{link.label}</Text>
-                <span style={{ float: 'right', color: '#8c8c8c' }}>→</span>
-              </a>
-            ))}
-
-            <button
-              onClick={handleCookiePreferences}
-              style={{
-                width: '100%',
-                display: 'block',
-                padding: '16px 20px',
-                background: 'transparent',
-                border: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                transition: 'background 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
-              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-            >
-              <Text>Cookie Preferences</Text>
-              <span style={{ float: 'right', color: '#8c8c8c' }}>→</span>
-            </button>
-          </div>
+          <Button
+            type="default"
+            size="large"
+            block
+            onClick={handleInviteFriends}
+            style={{
+              borderRadius: 99,
+              height: 48,
+              backgroundColor: '#147B75',
+              borderColor: '#147B75',
+              color: '#fff',
+              fontSize: 17,
+              fontWeight: 600,
+            }}
+          >
+            Invite your friends
+          </Button>
         </div>
 
-        {/* Account Actions */}
+        {/* LEGAL */}
+        <Title level={4} style={{ marginBottom: 16, fontSize: 16 }}>
+          Legal & Privacy
+        </Title>
+
+        <div style={{
+          background: '#fafafa',
+          borderRadius: 12,
+          overflow: 'hidden',
+          border: '1px solid #f0f0f0',
+          marginBottom: 32
+        }}>
+          {policyLinks.map((link, index) => (
+            <a
+              key={link.label}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'block',
+                padding: '16px 20px',
+                color: '#262626',
+                textDecoration: 'none',
+                borderBottom: index < policyLinks.length - 1 ? '1px solid #f0f0f0' : 'none'
+              }}
+            >
+              <Text>{link.label}</Text>
+              <span style={{ float: 'right', color: '#8c8c8c' }}>→</span>
+            </a>
+          ))}
+
+          <button
+            onClick={handleCookiePreferences}
+            style={{
+              width: '100%',
+              display: 'block',
+              padding: '16px 20px',
+              background: 'transparent',
+              border: 'none',
+              textAlign: 'left',
+              cursor: 'pointer'
+            }}
+          >
+            <Text>Cookie Preferences</Text>
+            <span style={{ float: 'right', color: '#8c8c8c' }}>→</span>
+          </button>
+        </div>
+
+
+        {/* ACCOUNT ACTIONS */}
         <div style={{ marginBottom: 40 }}>
           <Title level={4} style={{ marginBottom: 16, fontSize: 16 }}>
             Account
           </Title>
 
           <Button
-            type="default"
-            size="large"
             block
             loading={loggingOut}
             onClick={handleLogout}
-            style={{
-              borderRadius: 8,
-              height: 48,
-              marginBottom: 12
-            }}
+            style={{ borderRadius: 8, height: 48, marginBottom: 12 }}
           >
             Log out
           </Button>
 
           <Button
             danger
-            type="default"
-            size="large"
             block
             loading={deletingAccount}
             onClick={handleDeleteAccount}
-            style={{
-              borderRadius: 8,
-              height: 48
-            }}
+            style={{ borderRadius: 8, height: 48 }}
           >
             Delete account
           </Button>
         </div>
 
-        {/* App Info */}
+        {/* APP INFO */}
         <div style={{ textAlign: 'center', marginTop: 40 }}>
           <Text type="secondary" style={{ fontSize: 13 }}>
             Budge Up v1.0.0
           </Text>
         </div>
+
       </div>
     </div>
   )
