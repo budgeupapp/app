@@ -98,7 +98,7 @@ export default function App() {
         setOnboardingLoading(true)
         try {
             const { data, error } = await supabase
-                .from('user_finances')
+                .from('user_profiles')
                 .select('user_id')
                 .eq('user_id', session.user.id)
                 .single()

@@ -76,7 +76,7 @@ export default function SettingsScreen() {
 
           // Delete user data from tables (cascade should handle most)
           const { error: dataError } = await supabase
-            .from('user_finances')
+            .from('user_profiles')
             .delete()
             .eq('user_id', user.id)
 

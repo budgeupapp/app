@@ -8,7 +8,7 @@ export async function fetchUserData(userId) {
     try {
         // Fetch financial profile
         const { data: profile, error: profileError } = await supabase
-            .from('user_finances')
+            .from('user_profiles')
             .select('*')
             .eq('user_id', userId)
             .single()

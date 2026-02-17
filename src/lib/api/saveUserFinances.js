@@ -20,7 +20,7 @@ export async function saveUserFinances(userId, profile) {
     }
 
     const { error } = await supabase
-        .from('user_finances')
+        .from('user_profiles')
         .upsert(data, { onConflict: 'user_id' })
 
     if (error) throw error

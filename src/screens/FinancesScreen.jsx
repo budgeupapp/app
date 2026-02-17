@@ -489,7 +489,7 @@ export default function FinancesScreen() {
 
             const currentData = formDataRef.current
 
-            // Save user_finances
+            // Save user_profiles
             await saveUserFinances(user.id, {
                 university: currentData.university,
                 balance: currentData.balance,
