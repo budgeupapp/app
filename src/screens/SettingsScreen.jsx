@@ -137,7 +137,7 @@ export default function SettingsScreen() {
 
       const shareData = {
         title: 'Join Budge Up 🎉',
-        text: `This app makes it way easier to manage student money. 🌻\n\nThought you’d find it useful — here’s my invite link:`,
+        text: `This app makes it way easier to manage student money ✨\n\nThought you’d find it useful — here’s my invite link!`,
         url: inviteUrl
       }
 
