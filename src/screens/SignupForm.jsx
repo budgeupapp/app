@@ -129,7 +129,7 @@ export default function SignupForm() {
         >
           <Input
             size="large"
-            placeholder="University email address"
+            placeholder="Personal email address"
             type="email"
             inputMode="email"
             autoComplete="username email"

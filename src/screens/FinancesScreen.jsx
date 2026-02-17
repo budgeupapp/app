@@ -7,6 +7,7 @@ import { saveUserFinances, saveCashflowForecast, fetchUserData } from '../lib/ap
 import NativeSelect from '../components/NativeSelect'
 import { usePostHog } from '@posthog/react'
 import {
+    STEPS,
     WEEKLY_SPEND_OPTIONS,
     UK_UNIVERSITIES,
     MONTH_LABELS,
@@ -17,6 +18,9 @@ import {
     PAYMENT_TYPE_OPTIONS,
     INITIAL_FORM_DATA
 } from '../config/onboardingConfig'
+
+// Lookup step config by id
+const getStep = (id) => STEPS.find(s => s.id === id) || {}
 
 const { Title, Text } = Typography
 const { Panel } = Collapse
@@ -540,7 +544,7 @@ export default function FinancesScreen() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                                Which university do you attend?
+                                {getStep('university').heading}
                             </Text>
                             <NativeSelect
                                 value={formData.university}
@@ -558,7 +562,7 @@ export default function FinancesScreen() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                                Current bank balance
+                                {getStep('balance').heading}
                             </Text>
                             <Input
                                 name="balance"
@@ -580,7 +584,7 @@ export default function FinancesScreen() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                                Money in savings
+                                {getStep('savings').heading}
                             </Text>
                             <Input
                                 name="savings"
@@ -602,7 +606,7 @@ export default function FinancesScreen() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                                Do you receive student loans?
+                                {getStep('studentLoan').heading}
                             </Text>
                             <YesNo
                                 value={formData.studentLoan}
@@ -723,7 +727,7 @@ export default function FinancesScreen() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                                Do you receive any bursaries?
+                                {getStep('bursary').heading}
                             </Text>
                             <YesNo
                                 value={formData.bursary}
@@ -800,7 +804,7 @@ export default function FinancesScreen() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                                Do you receive any other regular income?
+                                {getStep('otherIncome').heading}
                             </Text>
                             <YesNo
                                 value={formData.otherIncome}
@@ -951,7 +955,7 @@ export default function FinancesScreen() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                                Do you have any regular expenses?
+                                {getStep('regularExpense').heading}
                             </Text>
                             <YesNo
                                 value={formData.regularExpense}
@@ -1102,7 +1106,7 @@ export default function FinancesScreen() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                                Any one-off income or expenses coming up?
+                                {getStep('oneOffPayments').heading}
                             </Text>
                             <YesNo
                                 value={formData.oneOffPayments}
@@ -1311,7 +1315,7 @@ export default function FinancesScreen() {
                     >
                         <div style={{ marginBottom: 16 }}>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                                How much do you typically spend each week?
+                                {getStep('weeklySpend').heading}
                             </Text>
                             <Radio.Group
                                 value={formData.weeklySpend}

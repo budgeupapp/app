@@ -109,7 +109,7 @@ export default function LoginForm() {
         >
           <Input
             size="large"
-            placeholder="University email address"
+            placeholder="Personal email address"
             type="email"
             inputMode="email"
             autoComplete="username email"
