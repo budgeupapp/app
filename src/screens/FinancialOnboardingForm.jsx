@@ -800,9 +800,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     }
 
                     if (formData.loanKnowDates === true) {
-                        const hasValidDates = (formData.instalmentDates || []).some(d => !!d)
-                        if (!hasValidDates) {
-                            return 'Please enter at least one instalment date'
+                        const hasEmptyDates = !(formData.instalmentDates || []).length || (formData.instalmentDates || []).some(d => !d)
+                        if (hasEmptyDates) {
+                            return 'Missing dates for instalments'
                         }
                     }
 
@@ -816,6 +816,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 if (formData.bursary === true) {
                     if (!formData.bursaryAmount) {
                         return 'Please enter your yearly bursary amount (a rough estimate is fine)'
+                    }
+                    const hasEmptyBursaryDates = !formData.bursaryDates.length || formData.bursaryDates.some(d => !d)
+                    if (hasEmptyBursaryDates) {
+                        return 'Missing dates for instalments'
                     }
                 }
                 break

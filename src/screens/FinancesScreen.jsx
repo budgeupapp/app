@@ -121,89 +121,77 @@ export default function FinancesScreen() {
     // Check if there are unsaved changes
     const hasUnsavedChanges = JSON.stringify(formData) !== JSON.stringify(initialFormData)
 
-    // Check for incomplete entries (amount without date or date without amount)
     const getIncompleteFields = useCallback((data) => {
         const issues = []
 
         if (data.studentLoan) {
-            if (data.loanKnowDates === true) {
-                const hasAmount = !!data.loanAmount
-                const hasDates = (data.instalmentDates || []).some(d => !!d)
-                if (hasAmount && !hasDates) {
-                    issues.push('Student Loan: amount entered but no payment instalment dates set')
-                }
-                if (!hasAmount && hasDates) {
-                    issues.push('Student Loan: payment instalment dates set but no amount entered')
+            if (!data.loanAmount) {
+                issues.push('Student Loan: please enter your yearly loan amount')
+            }
+            if (data.loanKnowDates === null) {
+                issues.push('Student Loan: please select whether you know the exact instalment dates')
+            } else if (data.loanKnowDates === true) {
+                const hasEmptyDates = !(data.instalmentDates || []).length || (data.instalmentDates || []).some(d => !d)
+                if (hasEmptyDates) {
+                    issues.push('Student Loan: missing dates for instalments')
                 }
             } else if (data.loanKnowDates === false) {
-                if (data.loanAmount && data.loanMonths.length === 0) {
-                    issues.push('Student Loan: amount entered but no payment instalment months selected')
-                }
-                if (!data.loanAmount && data.loanMonths.length > 0) {
-                    issues.push('Student Loan: payment instalment months selected but no amount entered')
+                if (!data.loanMonths || data.loanMonths.length === 0) {
+                    issues.push('Student Loan: please select at least one instalment month')
                 }
             }
         }
 
         if (data.bursary) {
-            const hasAmount = !!data.bursaryAmount
-            const hasDates = data.bursaryDates.some(d => !!d)
-            if (hasAmount && !hasDates) {
-                issues.push('Bursary: amount entered but no payment instalment dates set')
+            if (!data.bursaryAmount) {
+                issues.push('Bursary: please enter your yearly bursary amount')
             }
-            if (!hasAmount && hasDates) {
-                issues.push('Bursary: payment instalment dates set but no amount entered')
+            const hasEmptyBursaryDates = !data.bursaryDates.length || data.bursaryDates.some(d => !d)
+            if (hasEmptyBursaryDates) {
+                issues.push('Bursary: missing dates for instalments')
             }
         }
 
         if (data.otherIncome) {
             data.otherIncomeItems.forEach((item, i) => {
-                const hasAmount = !!item.amount
-                const hasDate = !!item.date
-                if (hasAmount && !hasDate) {
-                    issues.push(`Other Regular Income ${i + 1}: amount entered but no start date set`)
+                if (!item.amount) {
+                    issues.push(`Other Regular Income ${i + 1}: please enter an amount`)
                 }
-                if (!hasAmount && hasDate) {
-                    issues.push(`Other Regular Income ${i + 1}: start date set but no amount entered`)
+                if (!item.date) {
+                    issues.push(`Other Regular Income ${i + 1}: please enter a start date`)
                 }
             })
         }
 
         if (data.regularExpense) {
             data.regularExpenseItems.forEach((item, i) => {
-                const hasAmount = !!item.amount
-                const hasDate = !!item.date
-                if (hasAmount && !hasDate) {
-                    issues.push(`Regular Expense ${i + 1}: amount entered but no start date set`)
+                if (!item.amount) {
+                    issues.push(`Regular Expense ${i + 1}: please enter an amount`)
                 }
-                if (!hasAmount && hasDate) {
-                    issues.push(`Regular Expense ${i + 1}: start date set but no amount entered`)
+                if (!item.date) {
+                    issues.push(`Regular Expense ${i + 1}: please enter a start date`)
                 }
             })
         }
 
         if (data.oneOffIncome) {
             data.oneOffIn.forEach((item, i) => {
-                const hasAmount = !!item.amount
-                const hasDate = !!item.date
-                if (hasAmount && !hasDate) {
-                    issues.push(`One-off Income ${i + 1}: amount entered but no date set`)
+                if (!item.amount) {
+                    issues.push(`One-off Income ${i + 1}: please enter an amount`)
                 }
-                if (!hasAmount && hasDate) {
-                    issues.push(`One-off Income ${i + 1}: date set but no amount entered`)
+                if (item.amount && !item.date) {
+                    issues.push(`One-off Income ${i + 1}: please enter a date`)
                 }
             })
         }
 
         if (data.oneOffExpenses) {
             data.oneOffOut.forEach((item, i) => {
-                const hasAmount = !!item.amount
-                const hasDate = !!item.date
-                if (hasAmount && !hasDate) {
-                    issues.push(`One-off Expense ${i + 1}: amount entered but no date set`)
+                if (!item.amount) {
+                    issues.push(`One-off Expense ${i + 1}: please enter an amount`)
                 }
-                if (!hasAmount && hasDate) {
-                    issues.push(`One-off Expense ${i + 1}: date set but no amount entered`)
+                if (item.amount && !item.date) {
+                    issues.push(`One-off Expense ${i + 1}: please enter a date`)
                 }
             })
         }
@@ -262,31 +250,43 @@ export default function FinancesScreen() {
                     content: (
                         <div>
                             <p>You have incomplete fields:</p>
-                            <ul style={{ paddingLeft: 20, margin: '8px 0' }}>
+                            <ul style={{ paddingLeft: 20, margin: '8px 0 16px' }}>
                                 {issues.map((issue, i) => (
                                     <li key={i} style={{ marginBottom: 4 }}>{issue}</li>
                                 ))}
                             </ul>
-                            <p>Do you want to stay and complete them, or discard and leave?</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <Button
+                                    type="primary"
+                                    block
+                                    onClick={() => {
+                                        analytics.track(FINANCE_EVENTS.UNSAVED_CONTINUE_EDITING, {
+                                            reason: 'incomplete_fields'
+                                        })
+                                        Modal.destroyAll()
+                                    }}
+                                    style={{ backgroundColor: '#147B75', borderColor: '#147B75' }}
+                                >
+                                    Stay & complete
+                                </Button>
+                                <Button
+                                    block
+                                    danger
+                                    onClick={() => {
+                                        analytics.track(FINANCE_EVENTS.UNSAVED_DISCARD, {
+                                            reason: 'incomplete_fields'
+                                        })
+                                        Modal.destroyAll()
+                                        navigate(href)
+                                    }}
+                                >
+                                    Discard & leave
+                                </Button>
+                            </div>
                         </div>
                     ),
-                    okText: 'Stay',
-                    cancelText: 'Discard & leave',
                     closable: false,
-                    okButtonProps: {
-                        style: { backgroundColor: '#147B75', borderColor: '#147B75' }
-                    },
-                    onOk: () => {
-                        analytics.track(FINANCE_EVENTS.UNSAVED_CONTINUE_EDITING, {
-                            reason: 'incomplete_fields'
-                        })
-                    },
-                    onCancel: () => {
-                        analytics.track(FINANCE_EVENTS.UNSAVED_DISCARD, {
-                            reason: 'incomplete_fields'
-                        })
-                        navigate(href)
-                    }
+                    footer: null
                 })
             } else {
                 // Track warning shown
@@ -298,8 +298,8 @@ export default function FinancesScreen() {
                     title: 'Unsaved changes',
                     content: (
                         <div>
-                            <p>You have unsaved changes. Save your changes before leaving?</p>
-                            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <p style={{ marginBottom: 16 }}>You have unsaved changes. Save your changes before leaving?</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                 <Button
                                     type="primary"
                                     block
@@ -507,22 +507,30 @@ export default function FinancesScreen() {
         const { silent = false } = options
         const issues = getIncompleteFields(formDataRef.current)
         if (issues.length > 0) {
-            Modal.warning({
+            Modal.confirm({
                 title: 'Incomplete fields',
                 content: (
                     <div>
                         <p>Please complete the following before saving:</p>
-                        <ul style={{ paddingLeft: 20, margin: '8px 0' }}>
+                        <ul style={{ paddingLeft: 20, margin: '8px 0 16px' }}>
                             {issues.map((issue, i) => (
                                 <li key={i} style={{ marginBottom: 4 }}>{issue}</li>
                             ))}
                         </ul>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <Button
+                                type="primary"
+                                block
+                                onClick={() => Modal.destroyAll()}
+                                style={{ backgroundColor: '#147B75', borderColor: '#147B75' }}
+                            >
+                                Got it
+                            </Button>
+                        </div>
                     </div>
                 ),
-                okText: 'OK',
-                okButtonProps: {
-                    style: { backgroundColor: '#147B75', borderColor: '#147B75' }
-                }
+                closable: false,
+                footer: null
             })
             return
         }
@@ -778,15 +786,18 @@ export default function FinancesScreen() {
                                                 }
                                             } else {
                                                 // Switching to "No, I don't know exact dates"
-                                                // Extract months from instalmentDates and set loanMonths
                                                 updateField('loanKnowDates', val)
                                                 if (formData.instalmentDates?.length) {
+                                                    // Extract months from existing exact dates
                                                     const months = formData.instalmentDates
                                                         .map(getMonthKeyFromDate)
                                                         .filter(Boolean)
                                                     if (months.length) {
                                                         updateField('loanMonths', months)
                                                     }
+                                                } else if (!formData.loanMonths?.length) {
+                                                    // No prior selection — use defaults
+                                                    updateField('loanMonths', ['september', 'january', 'april'])
                                                 }
                                             }
                                         }}

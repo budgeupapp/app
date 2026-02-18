@@ -313,10 +313,13 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
                     }}>
                         <button
                             onClick={() => {
-                                setPage(Math.max(0, currentPage - 1));   // Track view change
+                                const newPage = Math.max(0, currentPage - 1)
+                                setPage(newPage)
                                 analytics.track(DASHBOARD_EVENTS.FORECAST_VIEW_CHANGED, {
-                                    view_type: value,
-                                    previous_view_type: timeView
+                                    view_type: newPage,
+                                    previous_view_type: currentPage,
+                                    time_view: timeView,
+                                    direction: 'back'
                                 })
                             }}
                             disabled={currentPage === 0}
@@ -342,10 +345,13 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
                         </span>
                         <button
                             onClick={() => {
-                                setPage(Math.min(totalPages - 1, currentPage + 1));   // Track view change
+                                const newPage = Math.min(totalPages - 1, currentPage + 1)
+                                setPage(newPage)
                                 analytics.track(DASHBOARD_EVENTS.FORECAST_VIEW_CHANGED, {
-                                    view_type: value,
-                                    previous_view_type: timeView
+                                    view_type: newPage,
+                                    previous_view_type: currentPage,
+                                    time_view: timeView,
+                                    direction: 'forward'
                                 })
                             }}
                             disabled={currentPage >= totalPages - 1}
