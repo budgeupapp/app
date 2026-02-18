@@ -65,6 +65,7 @@ export default function LoginForm() {
         onClick: () => messageApi.destroy()
       })
     } else {
+      localStorage.setItem('login_initiated', 'true')
       setLastEmail(email)
       setCooldownSeconds(60)
       messageApi.success({

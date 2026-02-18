@@ -26,7 +26,8 @@ import {
     OTHER_INCOME_FREQ_OPTIONS,
     REGULAR_FREQ_OPTIONS,
     PAYMENT_TYPE_OPTIONS,
-    INITIAL_FORM_DATA
+    INITIAL_FORM_DATA,
+    DEFAULT_BURSARY_DATES
 } from '../config/onboardingConfig'
 
 // Lookup step config by id
@@ -550,9 +551,11 @@ export default function FinancesScreen() {
             await saveCashflowForecast(user.id, currentData)
 
             // Track finances saved event
+            const { loan_amount: _la, ...loanProps } = getStudentLoanProperties(currentData)
+            const { bursary_amount: _ba, ...bursaryProps } = getBursaryProperties(currentData)
             analytics.track(FINANCE_EVENTS.SAVED, {
-                ...getStudentLoanProperties(currentData),
-                ...getBursaryProperties(currentData),
+                ...loanProps,
+                ...bursaryProps,
                 has_other_income: currentData.otherIncome,
                 has_regular_expenses: currentData.regularExpense,
                 has_one_off_income: currentData.oneOffIncome,
@@ -649,10 +652,6 @@ export default function FinancesScreen() {
                             <NativeSelect
                                 value={formData.university}
                                 onChange={val => {
-                                    analytics.track(FINANCE_EVENTS.UNIVERSITY_CHANGED, {
-                                        from_university: formData.university,
-                                        to_university: val
-                                    })
                                     updateField('university', val)
                                 }}
                                 options={UK_UNIVERSITIES}
@@ -678,9 +677,6 @@ export default function FinancesScreen() {
                                 value={formData.balance}
                                 onChange={e => {
                                     const newValue = formatMoney(e.target.value)
-                                    analytics.track(FINANCE_EVENTS.BALANCE_UPDATED, {
-                                        new_balance_value: newValue
-                                    })
                                     updateField('balance', newValue)
                                 }}
                                 style={{ borderRadius: 8 }}
@@ -706,9 +702,6 @@ export default function FinancesScreen() {
                                 value={formData.savings}
                                 onChange={e => {
                                     const newValue = formatMoney(e.target.value)
-                                    analytics.track(FINANCE_EVENTS.SAVINGS_UPDATED, {
-                                        new_savings_value: newValue
-                                    })
                                     updateField('savings', newValue)
                                 }}
                                 style={{ borderRadius: 8 }}
@@ -911,6 +904,14 @@ export default function FinancesScreen() {
                                 onChange={val => {
                                     if (val === true) {
                                         analytics.track(LOAN_EVENTS.BURSARY_ADDED)
+                                        if (formData.bursaryDates.length === 0) {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                bursary: true,
+                                                bursaryDates: [...DEFAULT_BURSARY_DATES]
+                                            }))
+                                            return
+                                        }
                                     } else {
                                         analytics.track(LOAN_EVENTS.BURSARY_REMOVED)
                                     }
@@ -1573,7 +1574,9 @@ export default function FinancesScreen() {
                             </Text>
                             <Radio.Group
                                 value={formData.weeklySpend}
-                                onChange={e => updateField('weeklySpend', e.target.value)}
+                                onChange={e => {
+                                    updateField('weeklySpend', e.target.value)
+                                }}
                                 style={{ width: '100%' }}
                             >
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

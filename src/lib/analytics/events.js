@@ -41,9 +41,6 @@ export const FINANCE_EVENTS = {
   UNSAVED_WARNING_SHOWN: 'finances_unsaved_warning_shown',
   UNSAVED_CONTINUE_EDITING: 'finances_stay_and_edit',
   UNSAVED_DISCARD: 'finances_discard_changes',
-  UNIVERSITY_CHANGED: 'settings_university_changed',
-  BALANCE_UPDATED: 'settings_balance_updated',
-  SAVINGS_UPDATED: 'settings_savings_updated',
 }
 
 // Student Loan & Bursary Events
@@ -84,6 +81,7 @@ export const DASHBOARD_EVENTS = {
   FORECAST_VIEW_CHANGED: 'forecast_view_changed',
   SAVINGS_BUFFER_ACTIONED: 'savings_buffer_actioned'
 }
+
 
 // Settings Events
 export const SETTINGS_EVENTS = {

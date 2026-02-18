@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
+
+// Detect magic link callback before React processes/clears the URL
+const authCallbackPending =
+    window.location.hash.includes('access_token') ||
+    new URLSearchParams(window.location.search).has('code')
 import { Spin } from 'antd'
 import { analytics, AUTH_EVENTS, SESSION_EVENTS, getSessionProperties } from './lib/analytics/index.js'
 
@@ -81,11 +86,13 @@ export default function App() {
                     if (signupEmail === session.user.email && isRecentSignup) {
                         setProcessingSignup(true)
                         analytics.track(AUTH_EVENTS.SIGNUP_COMPLETED)
+                        localStorage.setItem('signup_onboarding_pending', 'true')
                         await saveSignupConsents(session.user.id)
                         localStorage.removeItem('signup_email')
                         localStorage.removeItem('signup_timestamp')
                         setProcessingSignup(false)
-                    } else {
+                    } else if (authCallbackPending || localStorage.getItem('login_initiated')) {
+                        localStorage.removeItem('login_initiated')
                         analytics.track(AUTH_EVENTS.LOGIN_COMPLETED)
                     }
                 }
@@ -142,7 +149,7 @@ export default function App() {
 
     /* ---------------- LOADING STATE ---------------- */
 
-    if (loading || onboardingLoading || processingSignup) {
+    if (loading || onboardingLoading || processingSignup || (session?.user?.id && hasCompletedOnboarding === null)) {
         return (
             <div
                 style={{
@@ -175,7 +182,7 @@ export default function App() {
 
     /* ---------------- ONBOARDING NOT COMPLETE ---------------- */
 
-    if (!hasCompletedOnboarding) {
+    if (hasCompletedOnboarding === false) {
         if (showLoadingScreen) {
             return (
                 <LoadingScreen

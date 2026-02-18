@@ -589,7 +589,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
     }, [])
 
     useEffect(() => {
+        if (!localStorage.getItem('signup_onboarding_pending')) return
         trackOnce('onboarding_started_tracked', () => {
+            localStorage.removeItem('signup_onboarding_pending')
             analytics.track(ONBOARDING_EVENTS.STARTED, {
                 total_steps: STEPS.length
             })
