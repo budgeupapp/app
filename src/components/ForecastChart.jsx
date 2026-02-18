@@ -17,8 +17,8 @@ function getTickInterval(dataLength, timeView) {
     if (timeView === 'day') return 0 // show every day for weekly
     if (timeView === 'term') {
         if (dataLength <= 10) return 0
-        if (dataLength <= 60) return Math.floor(dataLength / 6)
-        return Math.floor(dataLength / 8)
+        if (dataLength <= 60) return Math.floor(dataLength / 4)
+        return Math.floor(dataLength / 5)
     }
     if (dataLength <= 10) return 0
     if (dataLength <= 30) return Math.floor(dataLength / 6) - 1

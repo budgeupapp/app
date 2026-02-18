@@ -153,47 +153,31 @@ export default function FinancesScreen() {
         }
 
         if (data.otherIncome) {
-            data.otherIncomeItems.forEach((item, i) => {
-                if (!item.amount) {
-                    issues.push(`Other Regular Income ${i + 1}: please enter an amount`)
-                }
-                if (!item.date) {
-                    issues.push(`Other Regular Income ${i + 1}: please enter a start date`)
-                }
-            })
+            const missingAmount = data.otherIncomeItems.some(item => !item.amount)
+            const missingDate = data.otherIncomeItems.some(item => !item.date)
+            if (missingAmount) issues.push('Other Regular Income: please enter an amount for each item')
+            if (missingDate) issues.push('Other Regular Income: please enter a start date for each item')
         }
 
         if (data.regularExpense) {
-            data.regularExpenseItems.forEach((item, i) => {
-                if (!item.amount) {
-                    issues.push(`Regular Expense ${i + 1}: please enter an amount`)
-                }
-                if (!item.date) {
-                    issues.push(`Regular Expense ${i + 1}: please enter a start date`)
-                }
-            })
+            const missingAmount = data.regularExpenseItems.some(item => !item.amount)
+            const missingDate = data.regularExpenseItems.some(item => !item.date)
+            if (missingAmount) issues.push('Regular Expenses: please enter an amount for each item')
+            if (missingDate) issues.push('Regular Expenses: please enter a start date for each item')
         }
 
         if (data.oneOffIncome) {
-            data.oneOffIn.forEach((item, i) => {
-                if (!item.amount) {
-                    issues.push(`One-off Income ${i + 1}: please enter an amount`)
-                }
-                if (item.amount && !item.date) {
-                    issues.push(`One-off Income ${i + 1}: please enter a date`)
-                }
-            })
+            const missingAmount = data.oneOffIn.some(item => !item.amount)
+            const missingDate = data.oneOffIn.some(item => !item.date)
+            if (missingAmount) issues.push('One-off Income: please enter an amount for each item')
+            if (missingDate) issues.push('One-off Income: please enter a date for each item')
         }
 
         if (data.oneOffExpenses) {
-            data.oneOffOut.forEach((item, i) => {
-                if (!item.amount) {
-                    issues.push(`One-off Expense ${i + 1}: please enter an amount`)
-                }
-                if (item.amount && !item.date) {
-                    issues.push(`One-off Expense ${i + 1}: please enter a date`)
-                }
-            })
+            const missingAmount = data.oneOffOut.some(item => !item.amount)
+            const missingDate = data.oneOffOut.some(item => !item.date)
+            if (missingAmount) issues.push('One-off Expenses: please enter an amount for each item')
+            if (missingDate) issues.push('One-off Expenses: please enter a date for each item')
         }
 
         return issues
@@ -250,7 +234,7 @@ export default function FinancesScreen() {
                     content: (
                         <div>
                             <p>You have incomplete fields:</p>
-                            <ul style={{ paddingLeft: 20, margin: '8px 0 16px' }}>
+                            <ul style={{ paddingLeft: 20, margin: '8px 0 16px', maxHeight: 200, overflowY: 'auto' }}>
                                 {issues.map((issue, i) => (
                                     <li key={i} style={{ marginBottom: 4 }}>{issue}</li>
                                 ))}
@@ -512,7 +496,7 @@ export default function FinancesScreen() {
                 content: (
                     <div>
                         <p>Please complete the following before saving:</p>
-                        <ul style={{ paddingLeft: 20, margin: '8px 0 16px' }}>
+                        <ul style={{ paddingLeft: 20, margin: '8px 0 16px', maxHeight: 200, overflowY: 'auto' }}>
                             {issues.map((issue, i) => (
                                 <li key={i} style={{ marginBottom: 4 }}>{issue}</li>
                             ))}
