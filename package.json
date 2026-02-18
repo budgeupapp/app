@@ -10,14 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@posthog/react": "^1.7.1",
+    "@posthog/react": "^1.8.0",
     "@supabase/supabase-js": "^2.45.0",
     "@tailwindcss/typography": "^0.5.19",
     "@untitledui/icons": "^0.0.21",
     "antd": "^6.2.3",
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.19",
-    "posthog-js": "^1.347.2",
+    "posthog-js": "^1.350.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-helmet": "^6.1.0",

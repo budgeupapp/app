@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { Spin } from 'antd'
-import { usePostHog } from '@posthog/react'
+import { analytics, AUTH_EVENTS } from './lib/analytics/index.js'
 
 import LoginForm from './screens/LoginForm'
 import SignupForm from './screens/SignupForm'
@@ -18,7 +18,6 @@ import MoneyAdviceSvg from './assets/money-advice.svg'
 import { saveSignupConsents } from './lib/api'
 
 export default function App() {
-    const posthog = usePostHog()
     const [session, setSession] = useState(null)
     const [loading, setLoading] = useState(true)
     const [processingSignup, setProcessingSignup] = useState(false)
@@ -41,7 +40,7 @@ export default function App() {
             setSession(data.session)
             // Identify user if already logged in
             if (data.session?.user) {
-                posthog?.identify(data.session.user.id, {
+                analytics.identify(data.session.user.id, {
                     email: data.session.user.email
                 })
             }
@@ -54,8 +53,8 @@ export default function App() {
 
                 // Handle new signup consent insertion
                 if (event === 'SIGNED_IN' && session?.user) {
-                    // Identify the user in PostHog
-                    posthog?.identify(session.user.id, {
+                    // Identify the user
+                    analytics.identify(session.user.id, {
                         email: session.user.email
                     })
 
@@ -68,19 +67,19 @@ export default function App() {
 
                     if (signupEmail === session.user.email && isRecentSignup) {
                         setProcessingSignup(true)
-                        posthog?.capture('user_signed_up')
+                        analytics.track(AUTH_EVENTS.SIGNUP_COMPLETED)
                         await saveSignupConsents(session.user.id)
                         localStorage.removeItem('signup_email')
                         localStorage.removeItem('signup_timestamp')
                         setProcessingSignup(false)
                     } else {
-                        posthog?.capture('user_logged_in')
+                        analytics.track(AUTH_EVENTS.LOGIN_COMPLETED)
                     }
                 }
 
-                // Reset PostHog on sign out
+                // Reset analytics on sign out
                 if (event === 'SIGNED_OUT') {
-                    posthog?.reset()
+                    analytics.reset()
                 }
             }
         )
@@ -88,7 +87,7 @@ export default function App() {
         return () => {
             listener?.subscription.unsubscribe()
         }
-    }, [posthog])
+    }, [])
 
     /* ---------------- ONBOARDING CHECK ---------------- */
 

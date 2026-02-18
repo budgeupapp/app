@@ -4,7 +4,15 @@ import StepProgress from '../components/StepProgress'
 import NativeSelect from '../components/NativeSelect'
 import { supabase } from '../lib/supabaseClient'
 import { saveCashflowForecast, saveUserFinances } from '../lib/api'
-import { usePostHog } from '@posthog/react'
+import {
+    analytics,
+    ONBOARDING_EVENTS,
+    AUTH_EVENTS,
+    getOnboardingStepProperties,
+    getUserProperties,
+    getStudentLoanProperties,
+    getBursaryProperties
+} from '../lib/analytics/index.js'
 import {
     STEPS,
     WEEKLY_SPEND_OPTIONS,
@@ -496,7 +504,6 @@ const OneOffItemList = ({ items, onChange, type }) => {
 /* ---------- MAIN COMPONENT ---------- */
 
 export default function FinancialOnboardingForm({ onComplete }) {
-    const posthog = usePostHog()
     const pageRef = useRef(null)
     const subQuestionRef = useRef(null)
     const scrollAreaRef = useRef(null)
@@ -565,7 +572,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     useEffect(() => {
         if (currentStepId === STEPS[0].id) {
-            posthog?.capture('onboarding_started')
+            analytics.track(ONBOARDING_EVENTS.STARTED)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []) // Only run on mount
@@ -587,11 +594,13 @@ export default function FinancialOnboardingForm({ onComplete }) {
         removeBlur()
         if (!isLastStep) {
             // Track step completion
-            posthog?.capture('onboarding_step_completed', {
-                step_id: currentStep.id,
-                step_number: currentIndex + 1,
-                total_steps: STEPS.length
-            })
+            analytics.track(ONBOARDING_EVENTS.STEP_COMPLETED,
+                getOnboardingStepProperties({
+                    id: currentStep.id,
+                    number: currentIndex + 1,
+                    heading: currentStep.heading
+                }, STEPS.length)
+            )
             setCurrentStepId(STEPS[currentIndex + 1].id)
             scrollAreaRef.current?.scrollTo({ top: 0 })
         } else {
@@ -911,7 +920,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             if (referredBy) {
                 localStorage.removeItem('referral_code')
                 // Track successful referral conversion
-                posthog?.capture('referral_completed', {
+                analytics.track(AUTH_EVENTS.REFERRAL_SIGNUP_COMPLETED, {
                     referral_code: referredBy
                 })
             }
@@ -919,10 +928,17 @@ export default function FinancialOnboardingForm({ onComplete }) {
             localStorage.removeItem(STORAGE_KEY)
 
             // Track onboarding completed
-            posthog?.capture('onboarding_completed', {
-                university: formData.university,
-                has_student_loan: formData.studentLoan,
-                has_bursary: formData.bursary,
+            analytics.track(ONBOARDING_EVENTS.COMPLETED, {
+                ...getUserProperties({
+                    university: formData.university,
+                    balance: formData.balance,
+                    savings: formData.savings,
+                    weeklySpend: formData.weeklySpend,
+                    studentLoan: formData.studentLoan,
+                    bursary: formData.bursary
+                }),
+                ...getStudentLoanProperties(formData),
+                ...getBursaryProperties(formData),
                 has_other_income: formData.otherIncome,
                 has_regular_expenses: formData.regularExpense,
                 has_one_off_income: formData.oneOffIncome,
@@ -936,7 +952,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             }
         } catch (err) {
             console.error(err)
-            posthog?.captureException(err)
+            analytics.error(err, { context: 'onboarding_submission' })
             messageApi.error({
                 content: 'Something went wrong saving your data',
                 duration: 10,

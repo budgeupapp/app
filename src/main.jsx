@@ -6,7 +6,7 @@ import './index.css'
 import 'antd/dist/reset.css'
 
 import posthog from 'posthog-js'
-import { PostHogProvider, PostHogErrorBoundary } from '@posthog/react'
+import { PostHogProvider } from '@posthog/react'
 
 // Initialize PostHog
 posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_KEY, {
@@ -17,20 +17,18 @@ posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_KEY, {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <PostHogProvider client={posthog}>
-      <PostHogErrorBoundary>
-        <ConfigProvider
-          theme={{
-            token: {
-              colorPrimary: '#147B75',
-              colorInfo: '#147B75',
-              colorSuccess: '#147B75',
-              fontFamily: 'Nunito, system-ui, sans-serif'
-            }
-          }}
-        >
-          <App />
-        </ConfigProvider>
-      </PostHogErrorBoundary>
+      <ConfigProvider
+        theme={{
+          token: {
+            colorPrimary: '#147B75',
+            colorInfo: '#147B75',
+            colorSuccess: '#147B75',
+            fontFamily: 'Nunito, system-ui, sans-serif'
+          }
+        }}
+      >
+        <App />
+      </ConfigProvider>
     </PostHogProvider>
   </React.StrictMode>
 )

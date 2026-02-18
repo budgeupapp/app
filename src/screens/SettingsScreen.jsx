@@ -3,12 +3,11 @@ import { Button, Typography, Modal, message } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { POLICY_URLS } from '../lib/policyVersions'
-import { usePostHog } from '@posthog/react'
+import { analytics, AUTH_EVENTS, SETTINGS_EVENTS, getErrorProperties } from '../lib/analytics/index.js'
 
 const { Title, Text } = Typography
 
 export default function SettingsScreen() {
-  const posthog = usePostHog()
   const navigate = useNavigate()
   const [loggingOut, setLoggingOut] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
@@ -16,7 +15,7 @@ export default function SettingsScreen() {
 
   const handleLogout = async () => {
     // Track logout intent
-    posthog?.capture('logout_clicked')
+    analytics.track(AUTH_EVENTS.LOGOUT)
 
     Modal.confirm({
       title: 'Log out?',
@@ -42,14 +41,14 @@ export default function SettingsScreen() {
         } else {
           localStorage.clear()
         }
-        // App.jsx will handle redirect after signOut and reset PostHog
+        // App.jsx will handle redirect after signOut and reset analytics
       }
     })
   }
 
   const handleDeleteAccount = async () => {
     // Track delete account intent
-    posthog?.capture('delete_account_clicked')
+    analytics.track(SETTINGS_EVENTS.DELETE_ACCOUNT_CLICKED)
 
     Modal.confirm({
       title: 'Delete account permanently?',
@@ -92,19 +91,19 @@ export default function SettingsScreen() {
           }
 
           // Track successful account deletion before sign out
-          posthog?.capture('account_deleted')
+          analytics.track(SETTINGS_EVENTS.ACCOUNT_DELETED)
 
           messageApi.success({
             content: 'Account deleted successfully',
             duration: 3
           })
 
-          // Clear local storage and sign out (which will also reset PostHog in App.jsx)
+          // Clear local storage and sign out (which will also reset analytics in App.jsx)
           localStorage.clear()
           await supabase.auth.signOut()
         } catch (error) {
           console.error('Error deleting account:', error)
-          posthog?.captureException(error)
+          analytics.error(error, getErrorProperties(error, { context: 'account_deletion' }))
           messageApi.error({
             content: 'Failed to delete account. Please contact support.',
             duration: 10
@@ -124,7 +123,7 @@ export default function SettingsScreen() {
 
   const handleInviteFriends = async () => {
     // Track invite intent
-    posthog?.capture('invite_friends_clicked')
+    analytics.track(SETTINGS_EVENTS.INVITE_FRIENDS_CLICKED)
 
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -137,14 +136,14 @@ export default function SettingsScreen() {
 
       const shareData = {
         title: 'Join Budge Up 🎉',
-        text: `This app makes it way easier to manage student money ✨\n\nThought you’d find it useful — here’s my invite link!`,
+        text: `This app makes it way easier to manage student money ✨\n\nThought you'd find it useful — here's my invite link!`,
         url: inviteUrl
       }
 
       // Try native share API first
       if (navigator.share && navigator.canShare(shareData)) {
         await navigator.share(shareData)
-        posthog?.capture('invite_shared', { method: 'native_share' })
+        analytics.track(SETTINGS_EVENTS.INVITE_SHARED, { method: 'native_share' })
       } else {
         // Fallback: copy to clipboard
         await navigator.clipboard.writeText(inviteUrl)
@@ -152,7 +151,7 @@ export default function SettingsScreen() {
           content: 'Invite link copied to clipboard!',
           duration: 3
         })
-        posthog?.capture('invite_shared', { method: 'clipboard' })
+        analytics.track(SETTINGS_EVENTS.INVITE_SHARED, { method: 'clipboard' })
       }
     } catch (error) {
       // User cancelled share or clipboard failed

@@ -5,7 +5,14 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { saveUserFinances, saveCashflowForecast, fetchUserData } from '../lib/api'
 import NativeSelect from '../components/NativeSelect'
-import { usePostHog } from '@posthog/react'
+import {
+    analytics,
+    FINANCE_EVENTS,
+    getStudentLoanProperties,
+    getBursaryProperties,
+    getErrorProperties
+} from '../lib/analytics/index.js'
+
 import {
     STEPS,
     WEEKLY_SPEND_OPTIONS,
@@ -99,7 +106,6 @@ const YesNo = ({ value, onChange }) => (
 )
 
 export default function FinancesScreen() {
-    const posthog = usePostHog()
     const navigate = useNavigate()
     const location = useLocation()
     const [loading, setLoading] = useState(true)
@@ -507,9 +513,9 @@ export default function FinancesScreen() {
             await saveCashflowForecast(user.id, currentData)
 
             // Track finances saved event
-            posthog?.capture('finances_saved', {
-                has_student_loan: currentData.studentLoan,
-                has_bursary: currentData.bursary,
+            analytics.track(FINANCE_EVENTS.SAVED, {
+                ...getStudentLoanProperties(currentData),
+                ...getBursaryProperties(currentData),
                 has_other_income: currentData.otherIncome,
                 has_regular_expenses: currentData.regularExpense,
                 has_one_off_income: currentData.oneOffIncome,
@@ -524,7 +530,7 @@ export default function FinancesScreen() {
             await loadUserData()
         } catch (error) {
             console.error('Error saving:', error)
-            posthog?.captureException(error)
+            analytics.error(error, getErrorProperties(error, { context: 'finances_save' }))
             messageApi.error('Failed to save changes')
         } finally {
             setSaving(false)

@@ -4,17 +4,17 @@ import { Button, Form, Input, Checkbox, Typography, message } from 'antd'
 import { Link, useSearchParams } from 'react-router-dom'
 import AuthContainer from '../components/AuthContainer'
 import { POLICY_URLS } from '../lib/policyVersions'
-import { usePostHog } from '@posthog/react'
+import { analytics, AUTH_EVENTS, getEmailDomain } from '../lib/analytics/index.js'
 
 const { Text } = Typography
 
 export default function SignupForm() {
-  const posthog = usePostHog()
   const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const [lastEmail, setLastEmail] = useState('')
   const [consentChecked, setConsentChecked] = useState(false)
+  const [isExistingUser, setIsExistingUser] = useState(false)
   const [messageApi, contextHolder] = message.useMessage({
     maxCount: 1
   })
@@ -25,11 +25,11 @@ export default function SignupForm() {
     if (refCode) {
       localStorage.setItem('referral_code', refCode)
       // Track that user arrived via referral
-      posthog?.capture('referral_signup_started', {
+      analytics.track(AUTH_EVENTS.REFERRAL_SIGNUP_STARTED, {
         referral_code: refCode
       })
     }
-  }, [searchParams, posthog])
+  }, [searchParams])
 
   useEffect(() => {
     if (cooldownSeconds > 0) {
@@ -53,9 +53,38 @@ export default function SignupForm() {
 
     setLoading(true)
 
+    // First, check if account already exists by trying to send OTP without creating user
+    const { error: checkError } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: window.location.origin
+      }
+    })
+
+    // If no error, user exists - send them a login link
+    if (!checkError) {
+      setLoading(false)
+      setLastEmail(email)
+      setIsExistingUser(true)
+      setCooldownSeconds(60)
+      messageApi.info({
+        content: 'You already have an account. Check your inbox for login link (and spam/junk folder).',
+        duration: 10,
+        style: { fontSize: 15, cursor: 'pointer' },
+        onClick: () => messageApi.destroy()
+      })
+
+      analytics.track(AUTH_EVENTS.LOGIN_STARTED, {
+        email_domain: getEmailDomain(email),
+        context: 'attempted_signup_with_existing_account'
+      })
+      return
+    }
+
     // Track signup attempt
-    posthog?.capture('signup_started', {
-      email_domain: email.split('@')[1]
+    analytics.track(AUTH_EVENTS.SIGNUP_STARTED, {
+      email_domain: getEmailDomain(email)
     })
 
     // Store signup intent in localStorage
@@ -65,6 +94,7 @@ export default function SignupForm() {
     // Get referral code from localStorage
     const referralCode = localStorage.getItem('referral_code')
 
+    // Proceed with signup
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -84,9 +114,9 @@ export default function SignupForm() {
       localStorage.removeItem('signup_timestamp')
 
       // Track signup failure
-      posthog?.capture('signup_failed', {
+      analytics.track(AUTH_EVENTS.SIGNUP_FAILED, {
         error_message: error.message,
-        email_domain: email.split('@')[1]
+        email_domain: getEmailDomain(email)
       })
 
       // Provide clearer error messages for common issues
@@ -117,8 +147,12 @@ export default function SignupForm() {
   }
 
   const getButtonText = () => {
-    if (loading) return 'Sending signup link...'
-    if (cooldownSeconds > 0) return `Check inbox for signup link (${cooldownSeconds}s)`
+    if (loading) return isExistingUser ? 'Sending login link...' : 'Sending signup link...'
+    if (cooldownSeconds > 0) {
+      return isExistingUser
+        ? `Check inbox for login link (${cooldownSeconds}s)`
+        : `Check inbox for signup link (${cooldownSeconds}s)`
+    }
     return 'Create account'
   }
 
@@ -133,6 +167,7 @@ export default function SignupForm() {
         onValuesChange={(changedValues) => {
           if (changedValues.email && changedValues.email !== lastEmail) {
             setCooldownSeconds(0)
+            setIsExistingUser(false)
             messageApi.destroy()
           }
         }}

@@ -1,13 +1,12 @@
 import { Typography, Button } from 'antd'
 import MoneyAdviceSvg from '../assets/money-advice.svg'
-import { usePostHog } from '@posthog/react'
 import { useState } from 'react'
+import { analytics, SUPPORT_EVENTS } from '../lib/analytics/index.js'
 
 const { Title, Paragraph } = Typography
 
 export default function MoneyAdviceScreen() {
     const [loaded, setLoaded] = useState(false);
-    const posthog = usePostHog()
 
     return (
         <div>
@@ -68,7 +67,7 @@ export default function MoneyAdviceScreen() {
                     href="https://www.bristol.ac.uk/students/support/finances/advice/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={() => posthog?.capture('money_advice_clicked')}
+                    onClick={() => analytics.track(SUPPORT_EVENTS.MONEY_ADVICE_CLICKED)}
                     style={{
                         background: '#147B75',
                         borderColor: '#147B75',

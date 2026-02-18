@@ -3,12 +3,11 @@ import { supabase } from '../lib/supabaseClient'
 import { Button, Form, Input, Typography, message } from 'antd'
 import { Link } from 'react-router-dom'
 import AuthContainer from '../components/AuthContainer'
-import { usePostHog } from '@posthog/react'
+import { analytics, AUTH_EVENTS, getEmailDomain } from '../lib/analytics/index.js'
 
 const { Text } = Typography
 
 export default function LoginForm() {
-  const posthog = usePostHog()
   const [loading, setLoading] = useState(false)
   const [cooldownSeconds, setCooldownSeconds] = useState(0)
   const [lastEmail, setLastEmail] = useState('')
@@ -29,8 +28,8 @@ export default function LoginForm() {
     setLoading(true)
 
     // Track login attempt
-    posthog?.capture('login_started', {
-      email_domain: email.split('@')[1]
+    analytics.track(AUTH_EVENTS.LOGIN_STARTED, {
+      email_domain: getEmailDomain(email)
     })
 
     const { error } = await supabase.auth.signInWithOtp({
@@ -45,9 +44,9 @@ export default function LoginForm() {
 
     if (error) {
       // Track login failure
-      posthog?.capture('login_failed', {
+      analytics.track(AUTH_EVENTS.LOGIN_FAILED, {
         error_message: error.message,
-        email_domain: email.split('@')[1]
+        email_domain: getEmailDomain(email)
       })
 
       // Provide clearer error messages for common issues
