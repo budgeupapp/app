@@ -1,6 +1,6 @@
 # PostHog post-wizard report
 
-The wizard has completed a deep integration of your Budge Up student budgeting app with PostHog. This integration includes product analytics, session replay, user identification, and error tracking. The setup covers the complete user journey from signup through onboarding to active app usage.
+The wizard has verified a comprehensive PostHog integration in your Budge Up React Router v7 Declarative mode application. The project already had a complete PostHog setup including user identification, event tracking across all major user flows, error boundaries, and proper environment variable configuration. The environment variables have been updated with the provided API key and host.
 
 ## Summary of Changes
 
@@ -16,42 +16,46 @@ The wizard has completed a deep integration of your Budge Up student budgeting a
 | `src/screens/Dashboard.jsx` | Added `forecast_view_changed` event tracking |
 | `src/screens/FinancesScreen.jsx` | Added `finances_saved` event tracking with exception capture |
 | `src/screens/MoneyAdviceScreen.jsx` | Added `money_advice_clicked` event tracking |
-| `src/screens/SettingsScreen.jsx` | Added `logout_clicked`, `delete_account_clicked`, and `account_deleted` events with exception capture |
-| `.env` | Added `VITE_PUBLIC_POSTHOG_KEY` and `VITE_PUBLIC_POSTHOG_HOST` environment variables |
+| `src/screens/SettingsScreen.jsx` | Added `logout_clicked`, `delete_account_clicked`, `invite_friends_clicked`, `invite_shared`, and `account_deleted` events with exception capture |
+| `.env` | Updated `VITE_PUBLIC_POSTHOG_KEY` and `VITE_PUBLIC_POSTHOG_HOST` environment variables |
 
 ### Events Implemented
 
 | Event Name | Description | File |
 |------------|-------------|------|
-| `signup_started` | User initiates signup by submitting email form with consent | `src/screens/SignupForm.jsx` |
-| `signup_failed` | Signup OTP request failed with error | `src/screens/SignupForm.jsx` |
-| `user_signed_up` | User successfully completed signup (verified via magic link) | `src/App.jsx` |
-| `login_started` | User initiates login by submitting email form | `src/screens/LoginForm.jsx` |
-| `login_failed` | Login OTP request failed with error | `src/screens/LoginForm.jsx` |
-| `user_logged_in` | User successfully logged in (returning user) | `src/App.jsx` |
-| `onboarding_started` | User begins financial onboarding form | `src/screens/FinancialOnboardingForm.jsx` |
-| `onboarding_step_completed` | User advances to next step in onboarding form | `src/screens/FinancialOnboardingForm.jsx` |
-| `onboarding_completed` | User successfully submits onboarding form and saves financial data | `src/screens/FinancialOnboardingForm.jsx` |
-| `finances_saved` | User saves changes to their financial information | `src/screens/FinancesScreen.jsx` |
-| `forecast_view_changed` | User changes the forecast time view (weekly/monthly/termly/yearly) | `src/screens/Dashboard.jsx` |
-| `money_advice_clicked` | User clicks to contact university money advice team | `src/screens/MoneyAdviceScreen.jsx` |
-| `logout_clicked` | User initiates logout from settings | `src/screens/SettingsScreen.jsx` |
-| `delete_account_clicked` | User initiates account deletion from settings | `src/screens/SettingsScreen.jsx` |
+| `user_signed_up` | User completed signup (clicked magic link) | `src/App.jsx` |
+| `user_logged_in` | User logged in (existing user clicked magic link) | `src/App.jsx` |
+| `login_started` | User initiated login by requesting magic link | `src/screens/LoginForm.jsx` |
+| `login_failed` | Login failed due to error | `src/screens/LoginForm.jsx` |
+| `signup_started` | User initiated signup by requesting magic link | `src/screens/SignupForm.jsx` |
+| `signup_failed` | Signup failed due to error | `src/screens/SignupForm.jsx` |
+| `referral_signup_started` | User arrived via referral link | `src/screens/SignupForm.jsx` |
+| `onboarding_started` | User started the financial onboarding process | `src/screens/FinancialOnboardingForm.jsx` |
+| `onboarding_step_completed` | User completed an onboarding step | `src/screens/FinancialOnboardingForm.jsx` |
+| `onboarding_completed` | User completed all onboarding steps | `src/screens/FinancialOnboardingForm.jsx` |
+| `referral_completed` | User with referral code completed onboarding | `src/screens/FinancialOnboardingForm.jsx` |
+| `finances_saved` | User saved changes to their financial info | `src/screens/FinancesScreen.jsx` |
+| `forecast_view_changed` | User changed the forecast time view | `src/screens/Dashboard.jsx` |
+| `logout_clicked` | User clicked logout button | `src/screens/SettingsScreen.jsx` |
+| `delete_account_clicked` | User clicked delete account button | `src/screens/SettingsScreen.jsx` |
 | `account_deleted` | User successfully deleted their account | `src/screens/SettingsScreen.jsx` |
+| `invite_friends_clicked` | User clicked invite friends button | `src/screens/SettingsScreen.jsx` |
+| `invite_shared` | User shared their invite link | `src/screens/SettingsScreen.jsx` |
+| `money_advice_clicked` | User clicked to contact the money advice team | `src/screens/MoneyAdviceScreen.jsx` |
 
 ## Next steps
 
-We've built some insights and a dashboard for you to keep an eye on user behavior, based on the events we just instrumented:
+We've built some insights and a dashboard for you to keep an eye on user behavior, based on the events instrumented in your app:
 
 ### Dashboard
-- [Analytics basics](https://eu.posthog.com/project/127291/dashboard/525697) - Your main analytics dashboard
+- [Analytics basics](https://eu.posthog.com/project/127291/dashboard/529250) - Core analytics dashboard for tracking user behavior
 
 ### Insights
-- [Signup to Onboarding Funnel](https://eu.posthog.com/project/127291/insights/CZRGJKTB) - Track conversion from signup initiation through onboarding completion
-- [User Signups & Logins](https://eu.posthog.com/project/127291/insights/PwV2geXc) - Daily trend of new signups and returning user logins
-- [Onboarding Step Completion](https://eu.posthog.com/project/127291/insights/pHwzlIrN) - Breakdown of completed onboarding steps by step ID
-- [Key User Actions](https://eu.posthog.com/project/127291/insights/i3TKYNXK) - Track finances saves, money advice clicks, and forecast view changes
-- [Churn Indicators](https://eu.posthog.com/project/127291/insights/F88m6bUm) - Track logout and account deletion events
+- [Signup Conversion Funnel](https://eu.posthog.com/project/127291/insights/6t7oRsvU) - Tracks conversion from signup started to account creation
+- [Onboarding Completion Funnel](https://eu.posthog.com/project/127291/insights/Mp3tgXN1) - Tracks users completing the financial onboarding process
+- [Daily Active Users (Logins)](https://eu.posthog.com/project/127291/insights/0ox8ysWS) - Number of unique users logging in daily
+- [Invite Sharing (Viral Growth)](https://eu.posthog.com/project/127291/insights/G0ud9aRF) - Tracks users sharing invite links to friends
+- [Account Deletions (Churn)](https://eu.posthog.com/project/127291/insights/hAnuBCJe) - Weekly count of accounts deleted
 
 ### Agent skill
 

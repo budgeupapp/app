@@ -1496,7 +1496,9 @@ export default function FinancesScreen() {
                         marginTop: 24,
                         borderRadius: 8,
                         height: 52,
-                        fontSize: 16
+                        fontSize: 16,
+                        fontSize: 18,
+                        fontWeight: 600,
                     }}
                 >
                     Save Changes
