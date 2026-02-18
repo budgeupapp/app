@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button, Typography, Modal, message } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
@@ -9,13 +9,32 @@ const { Title, Text } = Typography
 
 export default function SettingsScreen() {
   const navigate = useNavigate()
+  const trackedRef = useRef(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
   const [messageApi, contextHolder] = message.useMessage({ maxCount: 1 })
 
+  // Track settings viewed and load user email
+  useEffect(() => {
+    if (!trackedRef.current) {
+      trackedRef.current = true
+      analytics.track(SETTINGS_EVENTS.VIEWED)
+    }
+
+    // Load user email
+    const loadUserEmail = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.email) {
+        setUserEmail(user.email)
+      }
+    }
+    loadUserEmail()
+  }, [])
+
   const handleLogout = async () => {
-    // Track logout intent
-    analytics.track(AUTH_EVENTS.LOGOUT)
+    // Track logout button click (intent)
+    analytics.track(AUTH_EVENTS.LOGOUT_CLICKED)
 
     Modal.confirm({
       title: 'Log out?',
@@ -30,7 +49,9 @@ export default function SettingsScreen() {
       },
       onOk: async () => {
         setLoggingOut(true)
+
         const { error } = await supabase.auth.signOut()
+
         setLoggingOut(false)
 
         if (error) {
@@ -39,9 +60,11 @@ export default function SettingsScreen() {
             duration: 5
           })
         } else {
+          // Track actual logout success
+          analytics.track(AUTH_EVENTS.LOGOUT)
+
           localStorage.clear()
         }
-        // App.jsx will handle redirect after signOut and reset analytics
       }
     })
   }
@@ -280,6 +303,22 @@ export default function SettingsScreen() {
           <Title level={4} style={{ marginBottom: 16, fontSize: 16 }}>
             Account
           </Title>
+
+          {/* User Email */}
+          {(
+            <div style={{
+              background: '#fafafa',
+              borderRadius: 12,
+              padding: '16px 20px',
+              marginBottom: 16,
+              border: '1px solid #f0f0f0'
+            }}>
+
+              <Text style={{ fontSize: 15 }}>
+                {userEmail || 'Loading...'}
+              </Text>
+            </div>
+          )}
 
           <Button
             block

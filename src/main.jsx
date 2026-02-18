@@ -6,29 +6,35 @@ import './index.css'
 import 'antd/dist/reset.css'
 
 import posthog from 'posthog-js'
-import { PostHogProvider } from '@posthog/react'
+import { supabase } from './lib/supabaseClient'
 
-// Initialize PostHog
+// Fetch the existing Supabase session (reads from localStorage — effectively sync)
+// so PostHog can be bootstrapped with the user identity before init. This prevents
+// the anonymous→identified session rotation that causes two session_started events.
+const { data: { session } } = await supabase.auth.getSession()
+
 posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_KEY, {
   api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
-  defaults: '2025-05-24',
+
+  capture_pageview: true,
+  capture_pageleave: true,
+
+
 })
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <PostHogProvider client={posthog}>
-      <ConfigProvider
-        theme={{
-          token: {
-            colorPrimary: '#147B75',
-            colorInfo: '#147B75',
-            colorSuccess: '#147B75',
-            fontFamily: 'Nunito, system-ui, sans-serif'
-          }
-        }}
-      >
-        <App />
-      </ConfigProvider>
-    </PostHogProvider>
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: '#147B75',
+          colorInfo: '#147B75',
+          colorSuccess: '#147B75',
+          fontFamily: 'Nunito, system-ui, sans-serif'
+        }
+      }}
+    >
+      <App />
+    </ConfigProvider>
   </React.StrictMode>
 )

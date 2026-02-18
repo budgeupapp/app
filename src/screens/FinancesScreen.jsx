@@ -8,9 +8,12 @@ import NativeSelect from '../components/NativeSelect'
 import {
     analytics,
     FINANCE_EVENTS,
+    LOAN_EVENTS,
+    TRANSACTION_EVENTS,
     getStudentLoanProperties,
     getBursaryProperties,
-    getErrorProperties
+    getErrorProperties,
+    getFinanceFieldProperties
 } from '../lib/analytics/index.js'
 
 import {
@@ -216,7 +219,13 @@ export default function FinancesScreen() {
     initialFormDataRef.current = initialFormData
     const handleSaveRef = useRef(null)
 
+    const trackedRef = useRef(false)
+
     useEffect(() => {
+        if (!trackedRef.current) {
+            trackedRef.current = true
+            analytics.track(FINANCE_EVENTS.SCREEN_VIEWED)
+        }
         loadUserData()
     }, [])
 
@@ -241,6 +250,12 @@ export default function FinancesScreen() {
 
             const issues = getIncompleteFields(formDataRef.current)
             if (issues.length > 0) {
+                // Track warning shown
+                analytics.track(FINANCE_EVENTS.UNSAVED_WARNING_SHOWN, {
+                    reason: 'incomplete_fields',
+                    incomplete_field_count: issues.length
+                })
+
                 Modal.confirm({
                     title: 'Incomplete fields',
                     content: (
@@ -260,12 +275,24 @@ export default function FinancesScreen() {
                     okButtonProps: {
                         style: { backgroundColor: '#147B75', borderColor: '#147B75' }
                     },
-                    onOk: () => { },
+                    onOk: () => {
+                        analytics.track(FINANCE_EVENTS.UNSAVED_CONTINUE_EDITING, {
+                            reason: 'incomplete_fields'
+                        })
+                    },
                     onCancel: () => {
+                        analytics.track(FINANCE_EVENTS.UNSAVED_DISCARD, {
+                            reason: 'incomplete_fields'
+                        })
                         navigate(href)
                     }
                 })
             } else {
+                // Track warning shown
+                analytics.track(FINANCE_EVENTS.UNSAVED_WARNING_SHOWN, {
+                    reason: 'unsaved_changes'
+                })
+
                 Modal.confirm({
                     title: 'Unsaved changes',
                     content: (
@@ -300,6 +327,9 @@ export default function FinancesScreen() {
                                 <Button
                                     block
                                     onClick={() => {
+                                        analytics.track(FINANCE_EVENTS.UNSAVED_CONTINUE_EDITING, {
+                                            reason: 'unsaved_changes'
+                                        })
                                         Modal.destroyAll()
                                     }}
                                 >
@@ -462,6 +492,13 @@ export default function FinancesScreen() {
     }
 
     const updateField = (key, value) => {
+        const oldValue = formData[key]
+
+        // Track field update
+        analytics.track(FINANCE_EVENTS.FIELD_UPDATED,
+            getFinanceFieldProperties(key, oldValue, value)
+        )
+
         setFormData(prev => ({ ...prev, [key]: value }))
     }
 
@@ -530,6 +567,13 @@ export default function FinancesScreen() {
             await loadUserData()
         } catch (error) {
             console.error('Error saving:', error)
+
+            // Track save failed
+            analytics.track(FINANCE_EVENTS.SAVE_FAILED, {
+                error_message: error.message,
+                error_type: error.name
+            })
+
             analytics.error(error, getErrorProperties(error, { context: 'finances_save' }))
             messageApi.error('Failed to save changes')
         } finally {
@@ -604,7 +648,13 @@ export default function FinancesScreen() {
                             </Text>
                             <NativeSelect
                                 value={formData.university}
-                                onChange={val => updateField('university', val)}
+                                onChange={val => {
+                                    analytics.track(FINANCE_EVENTS.UNIVERSITY_CHANGED, {
+                                        from_university: formData.university,
+                                        to_university: val
+                                    })
+                                    updateField('university', val)
+                                }}
                                 options={UK_UNIVERSITIES}
                             />
                         </div>
@@ -626,7 +676,13 @@ export default function FinancesScreen() {
                                 placeholder="0"
                                 prefix="£"
                                 value={formData.balance}
-                                onChange={e => updateField('balance', formatMoney(e.target.value))}
+                                onChange={e => {
+                                    const newValue = formatMoney(e.target.value)
+                                    analytics.track(FINANCE_EVENTS.BALANCE_UPDATED, {
+                                        new_balance_value: newValue
+                                    })
+                                    updateField('balance', newValue)
+                                }}
                                 style={{ borderRadius: 8 }}
                             />
                         </div>
@@ -648,7 +704,13 @@ export default function FinancesScreen() {
                                 placeholder="0"
                                 prefix="£"
                                 value={formData.savings}
-                                onChange={e => updateField('savings', formatMoney(e.target.value))}
+                                onChange={e => {
+                                    const newValue = formatMoney(e.target.value)
+                                    analytics.track(FINANCE_EVENTS.SAVINGS_UPDATED, {
+                                        new_savings_value: newValue
+                                    })
+                                    updateField('savings', newValue)
+                                }}
                                 style={{ borderRadius: 8 }}
                             />
                         </div>
@@ -666,7 +728,14 @@ export default function FinancesScreen() {
                             </Text>
                             <YesNo
                                 value={formData.studentLoan}
-                                onChange={val => updateField('studentLoan', val)}
+                                onChange={val => {
+                                    if (val === true) {
+                                        analytics.track(LOAN_EVENTS.STUDENT_LOAN_ADDED)
+                                    } else {
+                                        analytics.track(LOAN_EVENTS.STUDENT_LOAN_REMOVED)
+                                    }
+                                    updateField('studentLoan', val)
+                                }}
                             />
 
                             {formData.studentLoan && (
@@ -680,7 +749,13 @@ export default function FinancesScreen() {
                                         placeholder="0"
                                         prefix="£"
                                         value={formData.loanAmount}
-                                        onChange={e => updateField('loanAmount', formatMoney(e.target.value))}
+                                        onChange={e => {
+                                            const newValue = formatMoney(e.target.value)
+                                            analytics.track(LOAN_EVENTS.STUDENT_LOAN_UPDATED, {
+                                                new_loan_amount: newValue
+                                            })
+                                            updateField('loanAmount', newValue)
+                                        }}
                                         style={{ borderRadius: 8, marginBottom: 16 }}
                                     />
 
@@ -690,6 +765,12 @@ export default function FinancesScreen() {
                                     <YesNo
                                         value={formData.loanKnowDates}
                                         onChange={val => {
+                                            analytics.track(LOAN_EVENTS.STUDENT_LOAN_DATE_MODE_CHANGED, {
+                                                knows_exact_dates: val,
+                                                from_mode: formData.loanKnowDates === true ? 'exact_dates' : 'months_only',
+                                                to_mode: val === true ? 'exact_dates' : 'months_only'
+                                            })
+
                                             if (val === true) {
                                                 // Switching to "Yes, I know exact dates"
                                                 // Convert loanMonths to instalmentDates if instalmentDates is empty
@@ -748,6 +829,7 @@ export default function FinancesScreen() {
                                                             size="small"
                                                             danger
                                                             onClick={() => {
+                                                                analytics.track(LOAN_EVENTS.STUDENT_LOAN_INSTALMENT_REMOVED)
                                                                 const newDates = (formData.instalmentDates || []).filter((_, i) => i !== idx)
                                                                 updateField('instalmentDates', newDates)
                                                             }}
@@ -760,6 +842,7 @@ export default function FinancesScreen() {
                                             <Button
                                                 type="dashed"
                                                 onClick={() => {
+                                                    analytics.track(LOAN_EVENTS.STUDENT_LOAN_INSTALMENT_ADDED)
                                                     updateField('instalmentDates', [...(formData.instalmentDates || []), ''])
                                                 }}
                                                 style={{ width: '100%' }}
@@ -825,7 +908,14 @@ export default function FinancesScreen() {
                             </Text>
                             <YesNo
                                 value={formData.bursary}
-                                onChange={val => updateField('bursary', val)}
+                                onChange={val => {
+                                    if (val === true) {
+                                        analytics.track(LOAN_EVENTS.BURSARY_ADDED)
+                                    } else {
+                                        analytics.track(LOAN_EVENTS.BURSARY_REMOVED)
+                                    }
+                                    updateField('bursary', val)
+                                }}
                             />
 
                             {formData.bursary && (
@@ -838,7 +928,13 @@ export default function FinancesScreen() {
                                         inputMode="decimal"
                                         prefix="£"
                                         value={formData.bursaryAmount}
-                                        onChange={e => updateField('bursaryAmount', formatMoney(e.target.value))}
+                                        onChange={e => {
+                                            const newValue = formatMoney(e.target.value)
+                                            analytics.track(LOAN_EVENTS.BURSARY_UPDATED, {
+                                                new_bursary_amount: newValue
+                                            })
+                                            updateField('bursaryAmount', newValue)
+                                        }}
                                         style={{ borderRadius: 8, marginBottom: 16 }}
                                     />
 
@@ -870,6 +966,7 @@ export default function FinancesScreen() {
                                                     size="small"
                                                     danger
                                                     onClick={() => {
+                                                        analytics.track(LOAN_EVENTS.BURSARY_INSTALMENT_REMOVED)
                                                         const newDates = formData.bursaryDates.filter((_, i) => i !== idx)
                                                         updateField('bursaryDates', newDates)
                                                     }}
@@ -882,6 +979,7 @@ export default function FinancesScreen() {
                                     <Button
                                         type="dashed"
                                         onClick={() => {
+                                            analytics.track(LOAN_EVENTS.BURSARY_INSTALMENT_ADDED)
                                             updateField('bursaryDates', [...formData.bursaryDates, ''])
                                         }}
                                         style={{ width: '100%' }}
@@ -938,6 +1036,7 @@ export default function FinancesScreen() {
                                                             size="small"
                                                             danger
                                                             onClick={() => {
+                                                                analytics.track(TRANSACTION_EVENTS.RECURRING_INCOME_REMOVED)
                                                                 const newItems = formData.otherIncomeItems.filter((_, i) => i !== originalIdx)
                                                                 updateField('otherIncomeItems', newItems)
                                                             }}
@@ -1047,6 +1146,7 @@ export default function FinancesScreen() {
                                     <Button
                                         type="dashed"
                                         onClick={() => {
+                                            analytics.track(TRANSACTION_EVENTS.RECURRING_INCOME_ADDED)
                                             updateField('otherIncomeItems', [
                                                 ...formData.otherIncomeItems,
                                                 { type: 'part_time_job', amount: '', date: '', frequency: 'monthly', endDate: '' }
@@ -1106,6 +1206,7 @@ export default function FinancesScreen() {
                                                             size="small"
                                                             danger
                                                             onClick={() => {
+                                                                analytics.track(TRANSACTION_EVENTS.RECURRING_EXPENSE_REMOVED)
                                                                 const newItems = formData.regularExpenseItems.filter((_, i) => i !== originalIdx)
                                                                 updateField('regularExpenseItems', newItems)
                                                             }}
@@ -1215,6 +1316,7 @@ export default function FinancesScreen() {
                                     <Button
                                         type="dashed"
                                         onClick={() => {
+                                            analytics.track(TRANSACTION_EVENTS.RECURRING_EXPENSE_ADDED)
                                             updateField('regularExpenseItems', [
                                                 ...formData.regularExpenseItems,
                                                 { amount: '', date: '', frequency: 'monthly', type: 'rent', endDate: '' }
@@ -1267,6 +1369,7 @@ export default function FinancesScreen() {
                                                         size="small"
                                                         danger
                                                         onClick={() => {
+                                                            analytics.track(TRANSACTION_EVENTS.ONE_OFF_INCOME_REMOVED)
                                                             const newItems = formData.oneOffIn.filter((_, i) => i !== idx)
                                                             updateField('oneOffIn', newItems)
                                                         }}
@@ -1328,6 +1431,7 @@ export default function FinancesScreen() {
                                     <Button
                                         type="dashed"
                                         onClick={() => {
+                                            analytics.track(TRANSACTION_EVENTS.ONE_OFF_INCOME_ADDED)
                                             updateField('oneOffIn', [
                                                 ...formData.oneOffIn,
                                                 { name: '', amount: '', date: '' }
@@ -1380,6 +1484,7 @@ export default function FinancesScreen() {
                                                         size="small"
                                                         danger
                                                         onClick={() => {
+                                                            analytics.track(TRANSACTION_EVENTS.ONE_OFF_EXPENSE_REMOVED)
                                                             const newItems = formData.oneOffOut.filter((_, i) => i !== idx)
                                                             updateField('oneOffOut', newItems)
                                                         }}
@@ -1441,6 +1546,7 @@ export default function FinancesScreen() {
                                     <Button
                                         type="dashed"
                                         onClick={() => {
+                                            analytics.track(TRANSACTION_EVENTS.ONE_OFF_EXPENSE_ADDED)
                                             updateField('oneOffOut', [
                                                 ...formData.oneOffOut,
                                                 { name: '', amount: '', date: '' }

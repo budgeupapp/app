@@ -504,9 +504,18 @@ const OneOffItemList = ({ items, onChange, type }) => {
 /* ---------- MAIN COMPONENT ---------- */
 
 export default function FinancialOnboardingForm({ onComplete }) {
+    const startedRef = useRef(false)
+    const trackOnce = (key, callback) => {
+        if (sessionStorage.getItem(key)) return
+        sessionStorage.setItem(key, '1')
+        callback()
+    }
+    const stepStartRef = useRef(Date.now())
     const pageRef = useRef(null)
     const subQuestionRef = useRef(null)
     const scrollAreaRef = useRef(null)
+    // Ref always holding the latest step state — used by event listeners that
+    // close over an empty-dep effect and would otherwise read stale values.
     const [modal, modalContextHolder] = Modal.useModal()
     const [messageApi, messageContextHolder] = message.useMessage({
         maxCount: 1
@@ -554,11 +563,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
         return saved.some(m => !DEFAULT_LOAN_MONTHS.includes(m))
     })
 
-    const resetForm = () => {
-        localStorage.removeItem(STORAGE_KEY)
-        setFormData({ ...INITIAL_FORM_DATA })
-    }
-
     /* --- Persist to localStorage --- */
 
     useEffect(() => {
@@ -571,36 +575,90 @@ export default function FinancialOnboardingForm({ onComplete }) {
     /* --- Track onboarding started (only once at the first step) --- */
 
     useEffect(() => {
-        if (currentStepId === STEPS[0].id) {
-            analytics.track(ONBOARDING_EVENTS.STARTED)
+        const identifyUser = async () => {
+            const { data: { user } } = await supabase.auth.getUser()
+
+            if (user) {
+                analytics.identify(user.id, {
+                    email: user.email
+                })
+            }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []) // Only run on mount
 
-    /* --- Helpers --- */
+        identifyUser()
+    }, [])
 
-    const updateField = (key, value) =>
-        setFormData(prev => ({ ...prev, [key]: value }))
+    useEffect(() => {
+        trackOnce('onboarding_started_tracked', () => {
+            analytics.track(ONBOARDING_EVENTS.STARTED, {
+                total_steps: STEPS.length
+            })
+        })
+    }, [])
+
+    /* --- Track step viewed when step changes --- */
+
+    useEffect(() => {
+        stepStartRef.current = Date.now()
+    }, [currentStepId])
+
+    const lastTrackedStepRef = useRef(null)
+
+    useEffect(() => {
+        if (!currentStepId) return
+
+        const key = `onboarding_step_viewed_${currentStepId}`
+
+        trackOnce(key, () => {
+            const stepIndex = STEPS.findIndex(s => s.id === currentStepId)
+            const step = STEPS[stepIndex]
+
+            if (!step) return
+
+            analytics.track(
+                ONBOARDING_EVENTS.STEP_VIEWED,
+                getOnboardingStepProperties(
+                    {
+                        id: step.id,
+                        number: stepIndex + 1,
+                        heading: step.heading
+                    },
+                    STEPS.length
+                )
+            )
+        })
+    }, [currentStepId])
 
     const currentIndex = STEPS.findIndex(s => s.id === currentStepId)
     const currentStep = STEPS[currentIndex]
     const progress = ((currentIndex + 1) / STEPS.length) * 100
     const isLastStep = currentIndex === STEPS.length - 1
 
+    /* --- Helpers --- */
+
+    const updateField = (key, value) => {
+        setFormData(prev => ({ ...prev, [key]: value }))
+    }
+
+
     /* --- Navigation --- */
 
-    const goNext = () => {
+    const goNext = ({ skipped = false } = {}) => {
         messageApi.destroy()
         removeBlur()
         if (!isLastStep) {
             // Track step completion
-            analytics.track(ONBOARDING_EVENTS.STEP_COMPLETED,
-                getOnboardingStepProperties({
+            analytics.track(ONBOARDING_EVENTS.STEP_COMPLETED, {
+                ...getOnboardingStepProperties({
                     id: currentStep.id,
                     number: currentIndex + 1,
-                    heading: currentStep.heading
-                }, STEPS.length)
-            )
+                    heading: currentStep.heading,
+                    skipped: skipped
+                }, STEPS.length),
+
+                duration_ms: Date.now() - stepStartRef.current
+            })
+
             setCurrentStepId(STEPS[currentIndex + 1].id)
             scrollAreaRef.current?.scrollTo({ top: 0 })
         } else {
@@ -611,6 +669,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const goBack = () => {
         messageApi.destroy()
         if (currentIndex > 0) {
+            // Track going back
+            analytics.track(ONBOARDING_EVENTS.STEP_BACK,
+                getOnboardingStepProperties({
+                    id: currentStep.id,
+                    number: currentIndex + 1,
+                    heading: currentStep.heading
+                }, STEPS.length)
+            )
             setCurrentStepId(STEPS[currentIndex - 1].id)
             scrollAreaRef.current?.scrollTo({ top: 0 })
         }
@@ -821,7 +887,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
             cancelText: 'Go back',
             mask: false,
             onCancel: removeBlur,
-            onOk: goNext
+            onOk: () => {
+                goNext({ skipped: true })
+            }
         })
     }
 
@@ -928,6 +996,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             localStorage.removeItem(STORAGE_KEY)
 
             // Track onboarding completed
+
             analytics.track(ONBOARDING_EVENTS.COMPLETED, {
                 ...getUserProperties({
                     university: formData.university,
@@ -952,7 +1021,17 @@ export default function FinancialOnboardingForm({ onComplete }) {
             }
         } catch (err) {
             console.error(err)
+
+            // Track onboarding error
+            analytics.track(ONBOARDING_EVENTS.ERROR, {
+                error_message: err.message,
+                error_type: err.name,
+                step_id: currentStep.id,
+                step_number: currentIndex + 1
+            })
+
             analytics.error(err, { context: 'onboarding_submission' })
+
             messageApi.error({
                 content: 'Something went wrong saving your data',
                 duration: 10,

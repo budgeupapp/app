@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
 import { Spin } from 'antd'
-import { analytics, AUTH_EVENTS } from './lib/analytics/index.js'
+import { analytics, AUTH_EVENTS, SESSION_EVENTS, getSessionProperties } from './lib/analytics/index.js'
 
 import LoginForm from './screens/LoginForm'
 import SignupForm from './screens/SignupForm'
@@ -18,10 +18,11 @@ import MoneyAdviceSvg from './assets/money-advice.svg'
 import { saveSignupConsents } from './lib/api'
 
 export default function App() {
+    const sessionTrackedRef = useRef(false)
     const [session, setSession] = useState(null)
     const [loading, setLoading] = useState(true)
     const [processingSignup, setProcessingSignup] = useState(false)
-    const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false)
+    const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(null)
     const [onboardingLoading, setOnboardingLoading] = useState(true)
     const [showLoadingScreen, setShowLoadingScreen] = useState(false)
 
@@ -32,6 +33,18 @@ export default function App() {
         const img = new Image()
         img.src = MoneyAdviceSvg
     }, [])
+
+    /* ---------------- SESSION TRACKING ---------------- */
+
+    useEffect(() => {
+        // Track session start (guard prevents StrictMode double-fire)
+        if (!sessionTrackedRef.current) {
+            sessionTrackedRef.current = true
+            analytics.track(SESSION_EVENTS.STARTED, getSessionProperties())
+        }
+    }, [])
+
+
 
     /* ---------------- AUTH ---------------- */
 
@@ -91,25 +104,27 @@ export default function App() {
 
     /* ---------------- ONBOARDING CHECK ---------------- */
 
+    // update checkOnboarding
     const checkOnboarding = async () => {
         if (!session) return
 
         setOnboardingLoading(true)
+
         try {
             const { data, error } = await supabase
                 .from('user_profiles')
                 .select('user_id')
                 .eq('user_id', session.user.id)
-                .single()
+                .maybeSingle() // important
 
-            // PGRST116 = no rows found, which means onboarding not complete
-            if (error && error.code !== 'PGRST116') {
-                console.error('Error checking onboarding status:', error)
+            if (error) {
+                console.error(error)
+                setHasCompletedOnboarding(false)
+            } else {
+                setHasCompletedOnboarding(!!data)
             }
-
-            setHasCompletedOnboarding(!!data)
         } catch (err) {
-            console.error('Error in checkOnboarding:', err)
+            console.error(err)
             setHasCompletedOnboarding(false)
         } finally {
             setOnboardingLoading(false)
@@ -117,12 +132,12 @@ export default function App() {
     }
 
     useEffect(() => {
-        if (!session) {
+        if (session?.user?.id) {
+            checkOnboarding()
+        } else {
+            setHasCompletedOnboarding(null)
             setOnboardingLoading(false)
-            return
         }
-
-        checkOnboarding()
     }, [session?.user?.id])
 
     /* ---------------- LOADING STATE ---------------- */
@@ -142,6 +157,7 @@ export default function App() {
             </div>
         )
     }
+
 
     /* ---------------- NOT AUTHENTICATED ---------------- */
 
@@ -170,14 +186,13 @@ export default function App() {
                     }}
                 />
             )
-        }
-
-        return (
-            <FinancialOnboardingForm
-                user={session.user}
-                onComplete={() => setShowLoadingScreen(true)}
-            />
-        )
+        } else
+            return (
+                <FinancialOnboardingForm
+                    user={session.user}
+                    onComplete={() => setShowLoadingScreen(true)}
+                />
+            )
     }
 
     /* ---------------- AUTHENTICATED & ONBOARDED - MAIN APP ---------------- */

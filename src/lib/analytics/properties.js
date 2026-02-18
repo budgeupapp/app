@@ -60,6 +60,7 @@ export function getOnboardingStepProperties(step, totalSteps) {
     step_id: step.id,
     step_number: step.number || 0,
     step_name: step.heading || 'Unknown',
+    step_skipped: !!step.skipped,
     total_steps: totalSteps,
     progress_percentage: totalSteps > 0 ? Math.round((step.number / totalSteps) * 100) : 0
   }

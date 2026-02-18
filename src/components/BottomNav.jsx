@@ -4,6 +4,7 @@ import {
     MessageQuestionCircle,
     Settings01
 } from "@untitledui/icons";
+import { analytics, MONEY_ADVICE_EVENTS } from '../lib/analytics/index.js'
 import './BottomNav.css'
 
 export default function BottomNav() {
@@ -47,7 +48,13 @@ export default function BottomNav() {
                     <div
                         key={tab.key}
                         data-href={tab.path}
-                        onClick={() => navigate(tab.path)}
+                        onClick={() => {
+                            if (isActive(tab.path)) return
+                            if (tab.path === '/support') {
+                                analytics.track(MONEY_ADVICE_EVENTS.VIEWED)
+                            }
+                            navigate(tab.path)
+                        }}
                         className={`nav-tab ${isActive(tab.path) ? 'active' : ''}`}
                     >
                         <div className="nav-icon">

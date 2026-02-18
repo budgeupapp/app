@@ -53,6 +53,40 @@ body {
 }
 
 
+/* Disable button click animation layer */
+.ant-btn::after,
+.ant-btn-clicked::after {
+  animation: none !important;
+  transition: none !important;
+  opacity: 0 !important;
+}
+
+/* Disable wave ripple completely */
+.ant-wave,
+.ant-wave::after {
+  animation: none !important;
+  transition: none !important;
+  display: none !important;
+}
+
+/* Disable focus animation */
+.ant-btn:focus,
+.ant-btn:active,
+.ant-btn:focus-visible {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Disable modal/drawer fade/slide */
+.ant-motion-collapse,
+.ant-motion-collapse-active,
+.ant-motion-collapse-leave,
+.ant-motion-collapse-enter {
+  animation: none !important;
+  transition: none !important;
+}
+
+
 .blur-behind-modal {
   filter: blur(6px);
   transition: filter 0.2s ease;
@@ -94,6 +128,8 @@ button:focus {
 *:focus-visible {
   outline: none !important;
 }
+
+
 
 /* Also remove Safari tap highlight */
 * {

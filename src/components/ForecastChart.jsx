@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceLine, ReferenceDot, ResponsiveContainer } from 'recharts'
 import { format, parseISO } from 'date-fns'
+import { analytics, DASHBOARD_EVENTS } from '../lib/analytics/index.js'
 
 function getPageSize(timeView) {
     switch (timeView) {
@@ -282,7 +283,16 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
                         <input
                             type="checkbox"
                             checked={showSavings}
-                            onChange={(e) => setShowSavings(e.target.checked)}
+                            onChange={(e) => {
+                                const isChecked = e.target.checked
+                                setShowSavings(isChecked)
+
+                                // Track savings buffer toggle
+                                analytics.track(DASHBOARD_EVENTS.SAVINGS_BUFFER_ACTIONED, {
+                                    action: isChecked ? 'enabled' : 'disabled',
+                                    savings_buffer_amount: savingsBuffer
+                                })
+                            }}
                             style={{
                                 width: 14,
                                 height: 14,
@@ -302,7 +312,13 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
                         gap: 8
                     }}>
                         <button
-                            onClick={() => setPage(Math.max(0, currentPage - 1))}
+                            onClick={() => {
+                                setPage(Math.max(0, currentPage - 1));   // Track view change
+                                analytics.track(DASHBOARD_EVENTS.FORECAST_VIEW_CHANGED, {
+                                    view_type: value,
+                                    previous_view_type: timeView
+                                })
+                            }}
                             disabled={currentPage === 0}
                             style={{
                                 background: 'none',
@@ -311,7 +327,7 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
                                 cursor: currentPage === 0 ? 'default' : 'pointer',
                                 opacity: currentPage === 0 ? 0.25 : 1,
                                 fontSize: 16,
-                                color: '#333',
+                                color: '#8b8b8b',
                                 display: 'flex',
                                 alignItems: 'center'
                             }}
@@ -325,7 +341,13 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
                             {pageLabel()}
                         </span>
                         <button
-                            onClick={() => setPage(Math.min(totalPages - 1, currentPage + 1))}
+                            onClick={() => {
+                                setPage(Math.min(totalPages - 1, currentPage + 1));   // Track view change
+                                analytics.track(DASHBOARD_EVENTS.FORECAST_VIEW_CHANGED, {
+                                    view_type: value,
+                                    previous_view_type: timeView
+                                })
+                            }}
                             disabled={currentPage >= totalPages - 1}
                             style={{
                                 background: 'none',
@@ -334,7 +356,7 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
                                 cursor: currentPage >= totalPages - 1 ? 'default' : 'pointer',
                                 opacity: currentPage >= totalPages - 1 ? 0.25 : 1,
                                 fontSize: 16,
-                                color: '#333',
+                                color: '#8b8b8b',
                                 display: 'flex',
                                 alignItems: 'center'
                             }}
@@ -351,8 +373,22 @@ export default function ForecastChart({ data, timeView, savingsBuffer = 0, onVis
             {/* Chart */}
             <div
                 ref={chartContainerRef}
-                onTouchStart={() => setTooltipActive(true)}
-                onMouseDown={() => setTooltipActive(true)}
+                onTouchStart={() => {
+                    setTooltipActive(true)
+                    // Track graph interaction
+                    analytics.track(DASHBOARD_EVENTS.GRAPH_INTERACTED, {
+                        interaction_type: 'touch',
+                        time_view: timeView
+                    })
+                }}
+                onMouseDown={() => {
+                    setTooltipActive(true)
+                    // Track graph interaction
+                    analytics.track(DASHBOARD_EVENTS.GRAPH_INTERACTED, {
+                        interaction_type: 'click',
+                        time_view: timeView
+                    })
+                }}
                 style={{ touchAction: 'pan-y' }}
             >
                 <ResponsiveContainer width="100%" height={220}>

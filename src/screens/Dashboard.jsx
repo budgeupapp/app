@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Spin, Typography } from 'antd'
 import { addYears, format, parseISO } from 'date-fns'
 import ForecastChart from '../components/ForecastChart'
@@ -44,7 +44,9 @@ function calculateTotals(forecast) {
     return { totalIncome, totalExpense }
 }
 
+
 export default function Dashboard() {
+    const trackedRef = useRef(false)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(null)
     const [timeView, setTimeView] = useState('term')
@@ -55,6 +57,10 @@ export default function Dashboard() {
     const [visibleTotals, setVisibleTotals] = useState({ totalIncome: 0, totalExpense: 0 })
 
     useEffect(() => {
+        if (!trackedRef.current) {
+            trackedRef.current = true
+            analytics.track(DASHBOARD_EVENTS.VIEWED)
+        }
         loadUserData()
     }, [])
 
@@ -165,10 +171,18 @@ export default function Dashboard() {
                     <NativeSegmented
                         value={timeView}
                         onChange={(value) => {
-                            analytics.track(DASHBOARD_EVENTS.FORECAST_VIEW_CHANGED, {
-                                view_type: value,
-                                previous_view_type: timeView
-                            })
+                            // Track specific forecast view
+                            const eventMap = {
+                                day: DASHBOARD_EVENTS.WEEKLY_FORECAST_VIEWED,
+                                month: DASHBOARD_EVENTS.MONTHLY_FORECAST_VIEWED,
+                                term: DASHBOARD_EVENTS.TERMLY_FORECAST_VIEWED,
+                                year: DASHBOARD_EVENTS.YEARLY_FORECAST_VIEWED
+                            }
+
+                            if (eventMap[value]) {
+                                analytics.track(eventMap[value])
+                            }
+
                             setTimeView(value)
                         }}
                         options={TIME_OPTIONS}

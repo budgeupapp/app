@@ -1,7 +1,7 @@
 import { Typography, Button } from 'antd'
 import MoneyAdviceSvg from '../assets/money-advice.svg'
 import { useState } from 'react'
-import { analytics, SUPPORT_EVENTS } from '../lib/analytics/index.js'
+import { analytics, MONEY_ADVICE_EVENTS } from '../lib/analytics/index.js'
 
 const { Title, Paragraph } = Typography
 
@@ -67,7 +67,7 @@ export default function MoneyAdviceScreen() {
                     href="https://www.bristol.ac.uk/students/support/finances/advice/"
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={() => analytics.track(SUPPORT_EVENTS.MONEY_ADVICE_CLICKED)}
+                    onClick={() => analytics.track(MONEY_ADVICE_EVENTS.BUTTON_CLICKED)}
                     style={{
                         background: '#147B75',
                         borderColor: '#147B75',
