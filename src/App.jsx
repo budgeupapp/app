@@ -244,8 +244,9 @@ export default function App() {
                 {/* Redirect root to dashboard */}
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-                {/* Redirect login to dashboard */}
+                {/* Redirect login/signup to dashboard */}
                 <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/signup" element={<Navigate to="/dashboard" replace />} />
 
                 {/* 404 page for invalid routes */}
                 <Route path="*" element={<NotFound />} />
