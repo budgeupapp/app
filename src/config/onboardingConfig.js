@@ -3,8 +3,13 @@
 export const STEPS = [
     {
         id: 'university',
-        heading: 'Which university do you attend?',
-        subtitle: "This helps us connect you with your university's financial support team."
+        heading: 'Where do you go to university?',
+        subtitle: 'This helps us match your budget to your term dates and connect you with university support if needed.'
+    },
+    {
+        id: 'termDates',
+        heading: 'Have we got your term dates right?',
+        subtitle: "If we've got anything wrong, tap on the date to edit it."
     },
     {
         id: 'balance',
@@ -243,8 +248,28 @@ export const PAYMENT_TYPE_OPTIONS = [
 
 export const DEFAULT_BURSARY_DATES = ['2025-10-27', '2026-02-09', '2026-03-30']
 
+export const INITIAL_TERM_DATES = {
+    terms: [
+        {
+            id: 'term1',
+            name: 'Term 1',
+            start: '2025-09-22',
+            end: '2025-12-12',
+            breaks: [{ id: 'b1', start: '2025-10-27', end: '2025-11-01' }]
+        },
+        {
+            id: 'term2',
+            name: 'Term 2',
+            start: '2026-01-19',
+            end: '2026-05-01',
+            breaks: []
+        }
+    ]
+}
+
 export const INITIAL_FORM_DATA = {
     university: 'University of Bristol',
+    termDates: { ...INITIAL_TERM_DATES },
     balance: '',
     savings: '',
 

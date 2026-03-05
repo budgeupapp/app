@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { Button, Input, Modal, Radio, Typography, message } from 'antd'
 import StepProgress from '../components/StepProgress'
 import NativeSelect from '../components/NativeSelect'
+import universityIllustration from '../assets/university-illustration.svg'
+import TermDatesStep from './TermDatesStep'
+import TermGraph from '../components/TermGraph'
 import { supabase } from '../lib/supabaseClient'
 import { saveCashflowForecast, saveUserFinances } from '../lib/api'
 import {
@@ -524,6 +527,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const addBlur = () => pageRef.current?.classList.add('blur-behind-modal')
     const removeBlur = () => pageRef.current?.classList.remove('blur-behind-modal')
 
+    const [uniSlideOut, setUniSlideOut] = useState(false)
+
     /* --- State with localStorage restore --- */
 
     const [formData, setFormData] = useState(() => {
@@ -645,6 +650,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     /* --- Navigation --- */
 
+
     const goNext = ({ skipped = false } = {}) => {
         messageApi.destroy()
         removeBlur()
@@ -697,6 +703,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
         switch (currentStep.id) {
             case 'university':
                 return !formData.university
+            case 'termDates':
+                return false
             case 'balance':
                 return !formData.balance
             case 'savings':
@@ -897,6 +905,23 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 goNext({ skipped: true })
             }
         })
+    }
+
+    const handleUniversityConfirm = () => {
+        const error = checkRequiredFields()
+        if (error) {
+            messageApi.warning({ content: error, duration: 5, style: { fontSize: 15 } })
+            return
+        }
+
+        setUniSlideOut(true)
+        setTimeout(() => {
+            goNext()
+        }, 450)
+
+        setTimeout(() => {
+            setUniSlideOut(false)
+        }, 650)
     }
 
     const handleNext = () => {
@@ -1625,6 +1650,129 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     /* ---------- RENDER ---------- */
 
+    // university + termDates share a single render block so TermDatesStep stays
+    // mounted throughout the transition — prevents the flash on step switch
+    if (currentStep.id === 'university' || currentStep.id === 'termDates') {
+        return (
+            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden' }}>
+                {/* Single TermDatesStep — never unmounts during the transition */}
+                <TermDatesStep
+                    termData={formData.termDates}
+                    updateTermDates={(data) => updateField('termDates', data)}
+                    onNext={handleNext}
+                    onBack={goBack}
+                    revealed={currentStep.id === 'termDates' || uniSlideOut}
+                />
+
+                {/* University overlay — only present during university step, already invisible by the time it unmounts */}
+                {currentStep.id === 'university' && (
+                    <>
+                        {/* White backdrop fades away to reveal TermDatesStep */}
+                        <div style={{
+                            position: 'absolute',
+                            inset: 0,
+                            background: '#fff',
+                            opacity: uniSlideOut ? 0 : 1,
+                            transition: 'opacity 0.45s ease',
+                            pointerEvents: 'none',
+                        }} />
+
+                        {/* University card — top contracts down into form card position */}
+                        <div style={{
+                            position: 'absolute',
+                            top: uniSlideOut ? 185 : 0,
+                            left: 19,
+                            right: 19,
+                            bottom: 12,
+                            overflow: 'hidden',
+                            borderRadius: 20,
+                            boxShadow: '0 0 15px rgba(0,0,0,0.1)',
+                            background: '#fff',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            transition: 'top 0.45s cubic-bezier(.22,1,.36,1)'
+                        }}>
+                            {/* Content fades out as card contracts */}
+                            <div style={{
+                                opacity: uniSlideOut ? 0 : 1,
+                                transition: 'opacity 0.5s ease',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                flex: 1,
+                                minHeight: 0,
+                            }}>
+                                <div style={{ padding: '18px 24px 0' }}>
+                                    <h2 style={{
+                                        fontSize: 25,
+                                        fontWeight: 700,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        color: '#000',
+                                        margin: '0 0 12px',
+                                        lineHeight: 1.3,
+                                    }}>
+                                        Where do you go to university?
+                                    </h2>
+                                    <p style={{
+                                        fontSize: 15,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        color: '#5e5e5e',
+                                        margin: '0 0 24px',
+                                        lineHeight: 1.5,
+                                    }}>
+                                        This helps us match your budget to your term dates and connect you with university support if needed.
+                                    </p>
+                                    <NativeSelect
+                                        value={formData.university}
+                                        onChange={(value) => updateField('university', value)}
+                                        options={UK_UNIVERSITIES.map(uni => ({ value: uni, label: uni }))}
+                                        placeholder="Select your university"
+                                        style={{ fontSize: 17, height: '40px' }}
+                                    />
+                                </div>
+                                <div style={{
+                                    flex: 1,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '16px 24px 0',
+                                    minHeight: 0,
+                                }}>
+                                    <img
+                                        src={universityIllustration}
+                                        alt=""
+                                        style={{ width: '100%', maxWidth: 303, height: 'auto', objectFit: 'contain' }}
+                                    />
+                                </div>
+                                <div style={{ padding: '16px 24px 28px' }}>
+                                    <button
+                                        onClick={handleUniversityConfirm}
+                                        style={{
+                                            width: '100%',
+                                            height: 50,
+                                            background: '#147b75',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: 50,
+                                            fontSize: 18,
+                                            fontWeight: 700,
+                                            fontFamily: 'Nunito, sans-serif',
+                                            cursor: 'pointer',
+                                            letterSpacing: 0,
+                                        }}
+                                    >
+                                        Confirm University
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )
+                }
+            </div >
+        )
+    }
+
+
     return (
         <div ref={pageRef} className="page-shell" style={{
             position: 'fixed',
@@ -1635,11 +1783,19 @@ export default function FinancialOnboardingForm({ onComplete }) {
             width: '100%',
             height: '100%',
             overflow: 'hidden',
-            touchAction: 'none'
+            touchAction: 'none',
+            display: 'flex',
+            flexDirection: 'column',
         }}>
+            {modalContextHolder}
+            {messageContextHolder}
+
+            {/* Term graph — shown for all non-university steps */}
+            <TermGraph terms={formData.termDates?.terms || []} />
+
             <div
                 style={{
-                    height: '100%',
+                    flex: 1,
                     display: 'flex',
                     flexDirection: 'column',
                     padding: '0px 23px',
@@ -1649,12 +1805,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     overflow: 'hidden'
                 }}
             >
-                {modalContextHolder}
-                {messageContextHolder}
-
-                {/* Fixed progress bar */}
-                <StepProgress progress={progress} />
-
                 {/* Scrollable area containing question and form */}
                 <div
                     ref={scrollAreaRef}
@@ -1665,7 +1815,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         display: 'flex',
                         flexDirection: 'column',
                         paddingTop: 24,
-                        paddingRight: 20,
                         touchAction: 'pan-y',
                         WebkitOverflowScrolling: 'touch',
                     }}

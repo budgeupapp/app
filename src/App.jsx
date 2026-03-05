@@ -1,3 +1,6 @@
+// DEV: set to 'onboarding' or 'dashboard' to bypass login and jump to that view. Set to null for normal behaviour.
+const DEV_VIEW = 'onboarding'
+
 import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
@@ -9,8 +12,9 @@ const authCallbackPending =
 import { Spin } from 'antd'
 import { analytics, AUTH_EVENTS, SESSION_EVENTS, getSessionProperties } from './lib/analytics/index.js'
 
-import LoginForm from './screens/LoginForm'
-import SignupForm from './screens/SignupForm'
+// DEV: commented out with login bypass
+// import LoginForm from './screens/LoginForm'
+// import SignupForm from './screens/SignupForm'
 import FinancialOnboardingForm from './screens/FinancialOnboardingForm'
 import LoadingScreen from './screens/LoadingScreen'
 import Dashboard from './screens/Dashboard'
@@ -168,21 +172,22 @@ export default function App() {
 
     /* ---------------- NOT AUTHENTICATED ---------------- */
 
-    if (!session) {
-        return (
-            <BrowserRouter>
-                <Routes>
-                    <Route path="/login" element={<LoginForm />} />
-                    <Route path="/signup" element={<SignupForm />} />
-                    <Route path="*" element={<Navigate to="/signup" replace />} />
-                </Routes>
-            </BrowserRouter>
-        )
-    }
+    // DEV: bypass login
+    // if (!session) {
+    //     return (
+    //         <BrowserRouter>
+    //             <Routes>
+    //                 <Route path="/login" element={<LoginForm />} />
+    //                 <Route path="/signup" element={<SignupForm />} />
+    //                 <Route path="*" element={<Navigate to="/signup" replace />} />
+    //             </Routes>
+    //         </BrowserRouter>
+    //     )
+    // }
 
     /* ---------------- ONBOARDING NOT COMPLETE ---------------- */
 
-    if (hasCompletedOnboarding === false) {
+    if (DEV_VIEW === 'onboarding' || hasCompletedOnboarding === false) {
         if (showLoadingScreen) {
             return (
                 <LoadingScreen
@@ -196,7 +201,7 @@ export default function App() {
         } else
             return (
                 <FinancialOnboardingForm
-                    user={session.user}
+                    user={session?.user}
                     onComplete={() => setShowLoadingScreen(true)}
                 />
             )
