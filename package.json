@@ -20,6 +20,7 @@
     "posthog-js": "^1.350.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-feather": "^2.0.10",
     "react-helmet": "^6.1.0",
     "react-router-dom": "^7.13.0",
     "recharts": "^3.7.0",

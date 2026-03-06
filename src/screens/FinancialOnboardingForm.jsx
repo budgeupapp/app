@@ -5,6 +5,8 @@ import NativeSelect from '../components/NativeSelect'
 import universityIllustration from '../assets/university-illustration.svg'
 import TermDatesStep from './TermDatesStep'
 import TermGraph from '../components/TermGraph'
+import BankBalanceStep from './BankBalanceStep'
+import RegularIncomeStep from './RegularIncomeStep'
 import { supabase } from '../lib/supabaseClient'
 import { saveCashflowForecast, saveUserFinances } from '../lib/api'
 import {
@@ -528,6 +530,23 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const removeBlur = () => pageRef.current?.classList.remove('blur-behind-modal')
 
     const [uniSlideOut, setUniSlideOut] = useState(false)
+    const [uniSlideIn, setUniSlideIn] = useState(false)
+    const transitionRef = useRef(null) // guards against overlapping transitions
+    const [graphAnimated, setGraphAnimated] = useState(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+            return saved.currentStepId === 'termDates' || saved.currentStepId === 'balance'
+        } catch { return false }
+    })
+    const [activePanel, setActivePanel] = useState(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
+            if (saved.currentStepId === 'regularIncome') return 2
+            if (saved.currentStepId === 'balance') return 1
+            return 0
+        } catch { return 0 }
+    })
+    const [expandedTerm, setExpandedTerm] = useState('_init')
 
     /* --- State with localStorage restore --- */
 
@@ -908,20 +927,73 @@ export default function FinancialOnboardingForm({ onComplete }) {
     }
 
     const handleUniversityConfirm = () => {
+        if (transitionRef.current) return // block during active transition
         const error = checkRequiredFields()
         if (error) {
             messageApi.warning({ content: error, duration: 5, style: { fontSize: 15 } })
             return
         }
 
-        setUniSlideOut(true)
-        setTimeout(() => {
-            goNext()
-        }, 450)
+        // Instantly switch — both cards are white at the same position so the
+        // swap is imperceptible. The only visible animation is TermGraph growing in.
+        goNext()
+        setGraphAnimated(true)
+    }
 
-        setTimeout(() => {
-            setUniSlideOut(false)
-        }, 650)
+    const handleTermDatesBack = () => {
+        if (transitionRef.current) return // block double-tap
+        setUniSlideIn(true)
+        setUniSlideOut(true)
+        const t1 = setTimeout(() => setUniSlideOut(false), 16)
+        const t2 = setTimeout(() => {
+            goBack()
+            setUniSlideIn(false)
+            setGraphAnimated(false)
+            transitionRef.current = null
+        }, 550)
+        transitionRef.current = () => { clearTimeout(t1); clearTimeout(t2) }
+    }
+
+    const handleTermDatesNext = () => {
+        if (transitionRef.current) return
+        if (isCurrentStepBlank()) { confirmSkip(); return }
+        const error = checkRequiredFields()
+        if (error) {
+            messageApi.warning({ content: error, duration: 5, style: { fontSize: 15, cursor: 'pointer' }, onClick: () => messageApi.destroy() })
+            return
+        }
+        goNext()
+        setTimeout(() => setActivePanel(1), 16)
+    }
+
+    const handlePanelBack = () => {
+        if (transitionRef.current) return
+        const prev = activePanel - 1
+        setActivePanel(prev)
+        const t = setTimeout(() => {
+            goBack()
+            transitionRef.current = null
+        }, 420)
+        transitionRef.current = () => clearTimeout(t)
+    }
+
+    const handlePanelNext = () => {
+        if (transitionRef.current) return
+        if (isCurrentStepBlank()) { confirmSkip(); return }
+        const error = checkRequiredFields()
+        if (error) {
+            messageApi.warning({ content: error, duration: 5, style: { fontSize: 15, cursor: 'pointer' }, onClick: () => messageApi.destroy() })
+            return
+        }
+        goNext()
+        // If going to another panel step, slide to it
+        const nextStep = STEPS[currentIndex + 1]
+        if (nextStep && ['balance', 'regularIncome'].includes(nextStep.id)) {
+            setTimeout(() => setActivePanel(activePanel + 1), 16)
+        } else {
+            // Leaving the panel group — reset for next time
+            setActivePanel(0)
+        }
     }
 
     const handleNext = () => {
@@ -1647,55 +1719,162 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 return null
         }
     }
-
     /* ---------- RENDER ---------- */
 
     // university + termDates share a single render block so TermDatesStep stays
     // mounted throughout the transition — prevents the flash on step switch
-    if (currentStep.id === 'university' || currentStep.id === 'termDates') {
-        return (
-            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden' }}>
-                {/* Single TermDatesStep — never unmounts during the transition */}
-                <TermDatesStep
-                    termData={formData.termDates}
-                    updateTermDates={(data) => updateField('termDates', data)}
-                    onNext={handleNext}
-                    onBack={goBack}
-                    revealed={currentStep.id === 'termDates' || uniSlideOut}
-                />
+    const PANEL_STEPS = ['termDates', 'balance', 'regularIncome']
+    const PANEL_LABELS = ['Confirm Term Dates', 'Confirm Bank Balance', 'Confirm Regular Income']
+    const inPanelGroup = currentStep.id === 'university' || PANEL_STEPS.includes(currentStep.id) || activePanel > 0
 
-                {/* University overlay — only present during university step, already invisible by the time it unmounts */}
-                {currentStep.id === 'university' && (
+    if (inPanelGroup) {
+        const terms = formData.termDates?.terms || []
+        const balanceNum = parseFloat(String(formData.balance || '0').replace(/,/g, '')) || 0
+        const activeExpanded = expandedTerm === '_init' ? (terms[0]?.id ?? null) : expandedTerm
+
+        // Determine which handler to use based on active panel
+        const panelOnNext = activePanel === 0 ? handleTermDatesNext : handlePanelNext
+        const panelOnBack = activePanel === 0 ? handleTermDatesBack : handlePanelBack
+
+        return (
+            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                {/* Single TermGraph — props change based on panel */}
+                <div style={{
+                    height: graphAnimated ? 185 : 0,
+                    opacity: graphAnimated ? 1 : 0,
+                    transform: graphAnimated ? 'translateY(0)' : 'translateY(-8px)',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                    transition: graphAnimated
+                        ? 'height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.45s ease, transform 0.45s cubic-bezier(.22,1,.36,1)'
+                        : 'height 0.35s ease, opacity 0.25s ease, transform 0.25s ease',
+                }}>
+                    <TermGraph
+                        terms={terms}
+                        expandedTerm={activePanel === 0 ? activeExpanded : undefined}
+                        balance={activePanel >= 1 ? balanceNum : undefined}
+                    />
+                </div>
+
+                {/* Form card with sliding panels */}
+                <div style={{
+                    margin: '0px 19px 12px',
+                    flex: 1,
+                    background: '#fff',
+                    borderRadius: 20,
+                    boxShadow: '0 0 15px rgba(0,0,0,0.1)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    minHeight: 0,
+                }}>
+                    {/* Panel content area */}
+                    <div style={{ flex: 1, position: 'relative', overflow: 'hidden', minHeight: 0 }}>
+                        {PANEL_STEPS.map((panelId, i) => (
+                            <div key={panelId} style={{
+                                position: 'absolute', inset: 0,
+                                display: 'flex', flexDirection: 'column',
+                                transform: i < activePanel ? 'translateY(-100%)'
+                                    : i > activePanel ? 'translateY(100%)'
+                                        : 'translateY(0)',
+                                transition: 'transform 0.6s cubic-bezier(.22,1,.36,1)',
+                                background: '#fff',
+                            }}>
+                                {panelId === 'termDates' && (
+                                    <TermDatesStep
+                                        termData={formData.termDates}
+                                        updateTermDates={(data) => updateField('termDates', data)}
+                                        expandedTerm={activeExpanded}
+                                        onExpandedTermChange={setExpandedTerm}
+                                    />
+                                )}
+                                {panelId === 'balance' && (
+                                    <BankBalanceStep
+                                        balance={formData.balance}
+                                        updateBalance={(val) => updateField('balance', val)}
+                                    />
+                                )}
+                                {panelId === 'regularIncome' && (
+                                    <RegularIncomeStep
+                                        incomeSources={formData.incomeSources || []}
+                                        updateIncomeSources={(val) => updateField('incomeSources', val)}
+                                    />
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Bottom buttons */}
+                    <div style={{
+                        flexShrink: 0,
+                        padding: '10px 19px 24px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        borderTop: '1px solid #f3f3f3',
+                    }}>
+                        <button
+                            onClick={panelOnBack}
+                            style={{
+                                width: 50, height: 50, borderRadius: 50,
+                                border: 'none', background: '#f0f0f0',
+                                cursor: 'pointer', flexShrink: 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                        >
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M12 15L7 10L12 5" stroke="#4b4a4a"
+                                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
+                        <button
+                            onClick={panelOnNext}
+                            style={{
+                                flex: 1, height: 50,
+                                background: '#147b75', color: '#fff',
+                                border: 'none', borderRadius: 50,
+                                fontSize: 18, fontWeight: 700,
+                                fontFamily: 'Nunito, sans-serif',
+                                cursor: 'pointer', letterSpacing: 0,
+                            }}
+                        >
+                            {PANEL_LABELS[activePanel]}
+                        </button>
+                    </div>
+                </div>
+
+                {/* University overlay — present during university step and reverse slide-in */}
+                {(currentStep.id === 'university' || uniSlideIn) && (
                     <>
-                        {/* White backdrop fades away to reveal TermDatesStep */}
+                        {/* White backdrop — only in steady-state university step, not during reverse slide */}
                         <div style={{
-                            position: 'absolute',
+                            position: 'fixed',
                             inset: 0,
                             background: '#fff',
-                            opacity: uniSlideOut ? 0 : 1,
-                            transition: 'opacity 0.45s ease',
                             pointerEvents: 'none',
+                            zIndex: 5,
+                            opacity: uniSlideIn ? 0 : 1,
+                            transition: 'opacity 0.3s ease',
                         }} />
 
                         {/* University card — top contracts down into form card position */}
                         <div style={{
-                            position: 'absolute',
-                            top: uniSlideOut ? 185 : 0,
+                            position: 'fixed',
+                            top: uniSlideOut ? 185 : 10,
                             left: 19,
                             right: 19,
                             bottom: 12,
+                            zIndex: 6,
                             overflow: 'hidden',
                             borderRadius: 20,
                             boxShadow: '0 0 15px rgba(0,0,0,0.1)',
                             background: '#fff',
                             display: 'flex',
                             flexDirection: 'column',
-                            transition: 'top 0.45s cubic-bezier(.22,1,.36,1)'
+                            transition: 'top 0.55s cubic-bezier(0.25, 1, 0.5, 1)'
                         }}>
                             {/* Content fades out as card contracts */}
                             <div style={{
-                                opacity: uniSlideOut ? 0 : 1,
-                                transition: 'opacity 0.5s ease',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 flex: 1,
@@ -1743,7 +1922,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         style={{ width: '100%', maxWidth: 303, height: 'auto', objectFit: 'contain' }}
                                     />
                                 </div>
-                                <div style={{ padding: '16px 24px 28px' }}>
+                                <div style={{ padding: '10px 19px 24px' }}>
                                     <button
                                         onClick={handleUniversityConfirm}
                                         style={{
@@ -1758,6 +1937,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             fontFamily: 'Nunito, sans-serif',
                                             cursor: 'pointer',
                                             letterSpacing: 0,
+                                            transform: uniSlideOut ? 'scaleX(0.82)' : 'scaleX(1)',
+                                            transformOrigin: 'right center',
+                                            transition: 'transform 0.45s cubic-bezier(.22,1,.36,1)',
                                         }}
                                     >
                                         Confirm University
@@ -1773,101 +1955,4 @@ export default function FinancialOnboardingForm({ onComplete }) {
     }
 
 
-    return (
-        <div ref={pageRef} className="page-shell" style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            width: '100%',
-            height: '100%',
-            overflow: 'hidden',
-            touchAction: 'none',
-            display: 'flex',
-            flexDirection: 'column',
-        }}>
-            {modalContextHolder}
-            {messageContextHolder}
-
-            {/* Term graph — shown for all non-university steps */}
-            <TermGraph terms={formData.termDates?.terms || []} />
-
-            <div
-                style={{
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    padding: '0px 23px',
-                    maxWidth: 480,
-                    margin: '0 auto',
-                    width: '100%',
-                    overflow: 'hidden'
-                }}
-            >
-                {/* Scrollable area containing question and form */}
-                <div
-                    ref={scrollAreaRef}
-                    style={{
-                        flex: 1,
-                        overflowY: 'auto',
-                        overflowX: 'hidden',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        paddingTop: 24,
-                        touchAction: 'pan-y',
-                        WebkitOverflowScrolling: 'touch',
-                    }}
-                >
-                    {/* Question section */}
-                    <div style={{ flexShrink: 0 }}>
-                        <Title level={3} style={{ marginBottom: 4 }}>
-                            {currentStep.heading}
-                        </Title>
-                        <Text
-                            type="secondary"
-                            style={{ display: 'block', marginBottom: 24 }}
-                        >
-                            {currentStep.subtitle}
-                        </Text>
-                    </div>
-
-                    {/* Form content */}
-                    <div>
-                        {renderStepContent()}
-                    </div>
-                </div>
-
-                {/* Fixed navigation buttons */}
-                <div
-                    style={{
-                        display: 'flex',
-                        gap: 12,
-                        paddingBottom: 16,
-                        paddingTop: 16,
-                        flexShrink: 0
-                    }}
-                >
-                    {currentIndex > 0 && (
-                        <Button
-                            size="large"
-                            onClick={goBack}
-                            style={{ flex: 1 }}
-                        >
-                            Back
-                        </Button>
-                    )}
-                    <Button
-                        type="primary"
-                        size="large"
-                        onClick={handleNext}
-                        loading={submitting}
-                        style={{ flex: 1 }}
-                    >
-                        {isLastStep ? 'Submit' : 'Next'}
-                    </Button>
-                </div>
-            </div>
-        </div>
-    )
 }

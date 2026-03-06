@@ -17,6 +17,11 @@ export const STEPS = [
         subtitle: 'Your best estimate is fine.'
     },
     {
+        id: 'regularIncome',
+        heading: 'Where do you regularly receive money from?',
+        subtitle: 'Select any income you receive regularly, even if only during term time or holidays.'
+    },
+    {
         id: 'savings',
         heading: 'How much money do you have in savings?',
         subtitle:
@@ -271,6 +276,7 @@ export const INITIAL_FORM_DATA = {
     university: 'University of Bristol',
     termDates: { ...INITIAL_TERM_DATES },
     balance: '',
+    incomeSources: [],
     savings: '',
 
     studentLoan: null,

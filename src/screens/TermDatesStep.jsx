@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import TermGraph, { fmt, weeksBetween, daysBetween } from '../components/TermGraph'
+import { useState, useRef, useEffect } from 'react'
+import { fmt, weeksBetween, daysBetween } from '../components/TermGraph'
 
 /* ---------- DATE ROW
    Invisible input[type=date] covers the whole row — tap anywhere opens the native picker.
@@ -14,7 +14,7 @@ function DateRow({ label, value, onChange, last = false }) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '9px 16px',
+                    padding: '5px 12px',
                     pointerEvents: 'none',
                 }}>
                     <span style={{
@@ -25,29 +25,20 @@ function DateRow({ label, value, onChange, last = false }) {
 
                     {/* Teal pill — clearly signals tap-to-edit */}
                     <div style={{
-                        background: '#e8f4f3',
                         borderRadius: 8,
-                        padding: '4px 10px',
+                        padding: '4px 2px',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 5,
                     }}>
                         <span style={{
-                            fontSize: 12,
-                            fontWeight: 700,
+                            fontSize: 13,
+                            fontWeight: 600,
                             color: '#147b75',
+                            borderBottom: '1px dotted rgba(20,123,117,0.45)',
+                            paddingBottom: 1,
                             fontFamily: 'Nunito, sans-serif',
                         }}>{fmt(value)}</span>
-                        {/* Pencil icon */}
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path
-                                d="M6.5 1.5L8.5 3.5L3 9H1V7L6.5 1.5Z"
-                                stroke="#147b75"
-                                strokeWidth="1.2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                            />
-                        </svg>
                     </div>
                 </div>
                 {/* Invisible input covers entire row */}
@@ -66,7 +57,6 @@ function DateRow({ label, value, onChange, last = false }) {
                     }}
                 />
             </div>
-            {!last && <div style={{ height: 1, background: '#f3f3f3', marginLeft: 16 }} />}
         </>
     )
 }
@@ -89,13 +79,37 @@ function Chevron({ open }) {
 /* ---------- TERM ACCORDION ---------- */
 
 function TermAccordion({ term, expanded, onToggle, onUpdate }) {
+    const ref = useRef(null)
+    const prevExpanded = useRef(expanded)
+    useEffect(() => {
+        if (expanded && !prevExpanded.current) {
+            // small delay so the accordion content renders before scrolling
+            setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+        }
+        prevExpanded.current = expanded
+    }, [expanded])
+
     const weeks = weeksBetween(term.start, term.end)
 
-    const updateDate = (field, v) => onUpdate({ ...term, [field]: v })
+    const updateDate = (field, v) => {
+        const updated = { ...term, [field]: v }
+        // If end is before start, move the other date to match
+        if (updated.end < updated.start) {
+            if (field === 'start') updated.end = v
+            else updated.start = v
+        }
+        onUpdate(updated)
+    }
 
     const updateBreak = (i, field, v) => {
         const breaks = [...term.breaks]
-        breaks[i] = { ...breaks[i], [field]: v }
+        const brk = { ...breaks[i], [field]: v }
+        // If end is before start, move the other date to match
+        if (brk.end < brk.start) {
+            if (field === 'start') brk.end = v
+            else brk.start = v
+        }
+        breaks[i] = brk
         onUpdate({ ...term, breaks })
     }
 
@@ -112,7 +126,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate }) {
     }
 
     return (
-        <div style={{ border: '1px solid #f3f3f3', borderRadius: 10, background: '#fff' }}>
+        <div ref={ref} style={{ border: '1px solid #f3f3f3', borderRadius: 10, background: '#fff' }}>
 
             {/* ── Header (2-line) ── */}
             <div onClick={onToggle} style={{ padding: '10px 12px', cursor: 'pointer' }}>
@@ -150,17 +164,16 @@ function TermAccordion({ term, expanded, onToggle, onUpdate }) {
                         const days = daysBetween(brk.start, brk.end)
                         return (
                             <div key={brk.id || i}>
-                                <div style={{ height: 1, background: '#f3f3f3' }} />
                                 <div style={{
                                     background: 'rgba(243,243,243,0.8)',
-                                    margin: '8px 10px',
+                                    margin: '5px 10px',
                                     borderRadius: 10,
                                     overflow: 'hidden',
                                 }}>
                                     {/* Break header */}
                                     <div style={{
                                         display: 'flex', alignItems: 'center',
-                                        padding: '8px 16px 6px', gap: 6,
+                                        padding: '8px 12px 4px 12px', gap: 6,
                                     }}>
                                         <span style={{
                                             fontSize: 12, fontWeight: 700, color: '#4b4a4a',
@@ -188,7 +201,6 @@ function TermAccordion({ term, expanded, onToggle, onUpdate }) {
                     })}
 
                     {/* ── Add break ── */}
-                    <div style={{ height: 1, background: '#f3f3f3' }} />
                     <div style={{ padding: '8px 10px' }}>
                         <button
                             onClick={addBreak}
@@ -216,9 +228,10 @@ function TermAccordion({ term, expanded, onToggle, onUpdate }) {
 
 /* ---------- MAIN ---------- */
 
-export default function TermDatesStep({ termData, updateTermDates, onNext, onBack, revealed = false }) {
-    const [expandedTerm, setExpandedTerm] = useState(termData?.terms?.[0]?.id ?? null)
-
+export default function TermDatesStep({
+    termData, updateTermDates,
+    expandedTerm, onExpandedTermChange,
+}) {
     const updateTerm = (updated) => {
         const terms = termData.terms.map(t => t.id === updated.id ? updated : t)
         updateTermDates({ ...termData, terms })
@@ -227,106 +240,46 @@ export default function TermDatesStep({ termData, updateTermDates, onNext, onBac
     const terms = termData?.terms || []
 
     return (
-        <div style={{
-            position: 'fixed', inset: 0,
-            display: 'flex', flexDirection: 'column',
-            background: '#fff',
-        }}>
-            {/* Graph card */}
-            <TermGraph terms={terms} expandedTerm={expandedTerm} />
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            {/* Title */}
+            <div style={{ padding: '18px 24px 12px', flexShrink: 0 }}>
+                <h2 style={{
+                    fontSize: 25, fontWeight: 700,
+                    fontFamily: 'Nunito, sans-serif',
+                    color: '#000', margin: '0 0 8px', lineHeight: 1.3,
+                }}>
+                    University term dates
+                </h2>
+                <p style={{
+                    fontSize: 15, fontFamily: 'Nunito, sans-serif',
+                    color: '#5e5e5e', margin: 0, lineHeight: 1.5,
+                }}>
+                    If we've got anything wrong, tap on the date to edit it.
+                </p>
+            </div>
 
-            {/* Form card */}
+            {/* Scrollable terms */}
             <div style={{
-                margin: '12px 19px 12px',
                 flex: 1,
-                background: '#fff',
-                borderRadius: 20,
-                boxShadow: '0 0 15px rgba(0,0,0,0.1)',
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch',
+                padding: '0 19px 16px',
                 display: 'flex',
                 flexDirection: 'column',
-                overflow: 'hidden',
-                minHeight: 0,
-                opacity: revealed ? 1 : 0,
-                transition: 'opacity 2s ease'
+                gap: 10,
             }}>
-                {/* Title — fixed inside card */}
-                <div style={{ padding: '18px 24px 12px', flexShrink: 0 }}>
-                    <h2 style={{
-                        fontSize: 25, fontWeight: 700,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#000', margin: '0 0 8px', lineHeight: 1.3,
-                    }}>
-                        Uni term dates
-                    </h2>
-                    <p style={{
-                        fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                        color: '#5e5e5e', margin: 0, lineHeight: 1.5,
-                    }}>
-                        If we've got anything wrong, tap on the date to edit it.
-                    </p>
-                </div>
-
-                {/* Scrollable terms */}
-                <div style={{
-                    flex: 1,
-                    overflowY: 'auto',
-                    overflowX: 'hidden',
-                    WebkitOverflowScrolling: 'touch',
-                    padding: '0 19px 16px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 10,
-                }}>
-                    {terms.map(term => (
-                        <TermAccordion
-                            key={term.id}
-                            term={term}
-                            expanded={expandedTerm === term.id}
-                            onToggle={() => setExpandedTerm(
-                                expandedTerm === term.id ? null : term.id
-                            )}
-                            onUpdate={updateTerm}
-                        />
-                    ))}
-                </div>
-
-                {/* Bottom buttons — fixed inside card */}
-                <div style={{
-                    flexShrink: 0,
-                    padding: '10px 19px 24px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    borderTop: '1px solid #f3f3f3',
-                }}>
-                    <button
-                        onClick={onBack}
-                        style={{
-                            width: 50, height: 50, borderRadius: 50,
-                            border: 'none', background: '#f0f0f0',
-                            cursor: 'pointer', flexShrink: 0,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                    >
-                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                            <path d="M12 15L7 10L12 5" stroke="#4b4a4a"
-                                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                    </button>
-                    <button
-                        onClick={onNext}
-                        style={{
-                            flex: 1, height: 50,
-                            background: '#147b75', color: '#fff',
-                            border: 'none', borderRadius: 50,
-                            fontSize: 18, fontWeight: 700,
-                            fontFamily: 'Nunito, sans-serif',
-                            cursor: 'pointer', letterSpacing: 0,
-                        }}
-                    >
-                        Confirm Term Dates
-                    </button>
-                </div>
+                {terms.map(term => (
+                    <TermAccordion
+                        key={term.id}
+                        term={term}
+                        expanded={expandedTerm === term.id}
+                        onToggle={() => onExpandedTermChange?.(
+                            expandedTerm === term.id ? null : term.id
+                        )}
+                        onUpdate={updateTerm}
+                    />
+                ))}
             </div>
         </div>
     )

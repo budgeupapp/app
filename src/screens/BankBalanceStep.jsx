@@ -1,0 +1,112 @@
+import { useState } from 'react'
+
+/* ---------- HELPERS ---------- */
+
+function formatDisplay(raw) {
+    if (!raw) return ''
+    const neg = raw.startsWith('-')
+    const abs = neg ? raw.slice(1) : raw
+    const [whole, ...rest] = abs.split('.')
+    const formatted = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    const result = rest.length ? `${formatted}.${rest.join('.')}` : formatted
+    return neg ? `-${result}` : result
+}
+
+/* ---------- MAIN ---------- */
+
+export default function BankBalanceStep({ balance, updateBalance }) {
+    const [rawAmount, setRawAmount] = useState(() => {
+        const n = parseFloat(String(balance || '').replace(/,/g, ''))
+        return n ? String(n) : ''
+    })
+
+    const negative = rawAmount.startsWith('-')
+
+    const toggleSign = () => {
+        const next = negative ? rawAmount.slice(1) : `-${rawAmount || '0'}`
+        setRawAmount(next)
+        const num = parseFloat(next || '0') || 0
+        updateBalance(String(num || ''))
+    }
+
+    const handleChange = (e) => {
+        let val = e.target.value.replace(/[^0-9.\-]/g, '')
+        // allow minus only at start
+        if (val.indexOf('-') > 0) val = val.replace(/-/g, '')
+        if (val.startsWith('-')) val = '-' + val.slice(1).replace(/-/g, '')
+        const parts = val.replace(/^-/, '').split('.')
+        if (parts.length > 2) val = (val.startsWith('-') ? '-' : '') + parts[0] + '.' + parts.slice(1).join('')
+        setRawAmount(val)
+        const num = parseFloat(val || '0') || 0
+        updateBalance(String(num || ''))
+    }
+
+    return (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px 16px' }}>
+            <h2 style={{
+                fontSize: 25, fontWeight: 700,
+                fontFamily: 'Nunito, sans-serif',
+                color: '#000', margin: '0 0 8px', lineHeight: 1.3,
+            }}>
+                Bank balance
+            </h2>
+            <p style={{
+                fontSize: 15, fontFamily: 'Nunito, sans-serif',
+                color: '#5e5e5e', margin: '0 0 24px', lineHeight: 1.5,
+            }}>
+                Add up all your accounts and enter the total — your best estimate is fine.
+            </p>
+
+            {/* Amount input */}
+            <div style={{
+                display: 'flex', alignItems: 'center',
+                background: '#f7f7f7', borderRadius: 10,
+                padding: '0 14px', height: 50, gap: 8,
+            }}>
+                <button
+                    onClick={toggleSign}
+                    style={{
+                        background: negative ? '#EC8C17' : '#e8f4f3',
+                        color: negative ? '#fff' : '#147b75',
+                        border: 'none', borderRadius: 6,
+                        width: 28, height: 28,
+                        fontSize: 16, fontWeight: 700,
+                        cursor: 'pointer', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontFamily: 'Nunito, sans-serif',
+                    }}
+                >
+                    {negative ? '−' : '+'}
+                </button>
+
+                <span style={{
+                    fontSize: 20, fontWeight: 600,
+                    color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
+                }}>£</span>
+
+                <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={formatDisplay(rawAmount)}
+                    onChange={handleChange}
+                    style={{
+                        flex: 1, border: 'none',
+                        background: 'transparent',
+                        fontSize: 20, fontWeight: 500,
+                        fontFamily: 'Nunito, sans-serif',
+                        color: rawAmount.startsWith('-') ? '#EC8C17' : '#147b75',
+                        outline: 'none', padding: 0,
+                    }}
+                />
+            </div>
+
+            <p style={{
+                fontSize: 11, fontFamily: 'Nunito, sans-serif',
+                color: '#9f9c9c', margin: '8px 0 0',
+            }}>
+                Don't include any savings or overdraft here.
+            </p>
+        </div>
+    )
+}
