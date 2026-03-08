@@ -22,6 +22,20 @@ posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_KEY, {
 
 })
 
+// Prevent page-level scrolling on iOS — only allow scroll inside scrollable containers
+document.addEventListener('touchmove', (e) => {
+  let el = e.target
+  while (el && el !== document.body) {
+    const style = window.getComputedStyle(el)
+    const overflowY = style.getPropertyValue('overflow-y')
+    if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+      return // allow scroll inside this container
+    }
+    el = el.parentElement
+  }
+  e.preventDefault()
+}, { passive: false })
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ConfigProvider

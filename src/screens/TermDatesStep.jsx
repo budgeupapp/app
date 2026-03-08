@@ -8,40 +8,29 @@ import { fmt, weeksBetween, daysBetween } from '../components/TermGraph'
 
 function DateRow({ label, value, onChange, last = false }) {
     return (
-        <>
-            <div style={{ position: 'relative' }}>
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '5px 12px',
-                    pointerEvents: 'none',
-                }}>
-                    <span style={{
-                        fontSize: 12,
-                        color: '#9f9c9c',
-                        fontFamily: 'Nunito, sans-serif',
-                    }}>{label}</span>
+        <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '5px 12px',
+        }}>
+            <span style={{
+                fontSize: 12,
+                color: '#9f9c9c',
+                fontFamily: 'Nunito, sans-serif',
+            }}>{label}</span>
 
-                    {/* Teal pill — clearly signals tap-to-edit */}
-                    <div style={{
-                        borderRadius: 8,
-                        padding: '4px 2px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 5,
-                    }}>
-                        <span style={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: '#147b75',
-                            borderBottom: '1px dotted rgba(20,123,117,0.45)',
-                            paddingBottom: 1,
-                            fontFamily: 'Nunito, sans-serif',
-                        }}>{fmt(value)}</span>
-                    </div>
-                </div>
-                {/* Invisible input covers entire row */}
+            {/* Teal date — tap to edit, input only covers the date text */}
+            <div style={{ position: 'relative' }}>
+                <span style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#147b75',
+                    borderBottom: '1px dotted rgba(20,123,117,0.45)',
+                    paddingBottom: 1,
+                    fontFamily: 'Nunito, sans-serif',
+                    pointerEvents: 'none',
+                }}>{fmt(value)}</span>
                 <input
                     type="date"
                     value={value}
@@ -53,11 +42,11 @@ function DateRow({ label, value, onChange, last = false }) {
                         width: '100%',
                         height: '100%',
                         cursor: 'pointer',
-                        fontSize: 16, // prevent iOS zoom
+                        fontSize: 16,
                     }}
                 />
             </div>
-        </>
+        </div>
     )
 }
 
@@ -78,7 +67,7 @@ function Chevron({ open }) {
 
 /* ---------- TERM ACCORDION ---------- */
 
-function TermAccordion({ term, expanded, onToggle, onUpdate }) {
+function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete }) {
     const ref = useRef(null)
     const prevExpanded = useRef(expanded)
     useEffect(() => {
@@ -220,6 +209,20 @@ function TermAccordion({ term, expanded, onToggle, onUpdate }) {
                             Add Break
                         </button>
                     </div>
+                    {canDelete && (
+                        <div style={{ padding: '0 10px 8px', textAlign: 'center' }}>
+                            <span
+                                onClick={onDelete}
+                                style={{
+                                    fontSize: 10, fontWeight: 600,
+                                    fontFamily: 'Nunito, sans-serif',
+                                    color: '#9f9c9c', cursor: 'pointer',
+                                }}
+                            >
+                                Delete term
+                            </span>
+                        </div>
+                    )}
                 </>
             )}
         </div>
@@ -235,6 +238,32 @@ export default function TermDatesStep({
     const updateTerm = (updated) => {
         const terms = termData.terms.map(t => t.id === updated.id ? updated : t)
         updateTermDates({ ...termData, terms })
+    }
+
+    const deleteTerm = (id) => {
+        const filtered = termData.terms.filter(t => t.id !== id)
+        updateTermDates({ ...termData, terms: filtered })
+        if (expandedTerm === id) onExpandedTermChange?.(null)
+    }
+
+    const addTerm = () => {
+        const existing = termData?.terms || []
+        const num = existing.length + 1
+        // Default: 2 weeks after last term ends, 12 weeks long
+        const lastEnd = existing.length > 0
+            ? new Date(existing[existing.length - 1].end + 'T00:00:00')
+            : new Date(2026, 0, 1)
+        const start = new Date(lastEnd.getTime() + 14 * 24 * 60 * 60 * 1000)
+        const end = new Date(start.getTime() + 84 * 24 * 60 * 60 * 1000)
+        const newTerm = {
+            id: `term_${Date.now()}`,
+            name: `Term ${num}`,
+            start: start.toISOString().slice(0, 10),
+            end: end.toISOString().slice(0, 10),
+            breaks: [],
+        }
+        updateTermDates({ ...termData, terms: [...existing, newTerm] })
+        onExpandedTermChange?.(newTerm.id)
     }
 
     const terms = termData?.terms || []
@@ -278,8 +307,30 @@ export default function TermDatesStep({
                             expandedTerm === term.id ? null : term.id
                         )}
                         onUpdate={updateTerm}
+                        onDelete={() => deleteTerm(term.id)}
+                        canDelete={terms.length > 1}
                     />
                 ))}
+
+                {/* Add term button */}
+                <button
+                    onClick={addTerm}
+                    style={{
+                        width: '100%', height: 38,
+                        background: 'none',
+                        border: '1px dashed #147b75',
+                        borderRadius: 10,
+                        fontSize: 13, fontWeight: 700,
+                        fontFamily: 'Nunito, sans-serif',
+                        color: '#147b75', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', gap: 6,
+                        flexShrink: 0,
+                    }}
+                >
+                    <span style={{ fontSize: 20, lineHeight: 1, marginTop: -1 }}>+</span>
+                    Add Term
+                </button>
             </div>
         </div>
     )

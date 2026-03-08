@@ -22,6 +22,16 @@ export const STEPS = [
         subtitle: 'Select any income you receive regularly, even if only during term time or holidays.'
     },
     {
+        id: 'maintenanceLoan',
+        heading: 'How much is your maintenance loan?',
+        subtitle: "If you're not 100% sure, your best estimate will do!"
+    },
+    {
+        id: 'rent',
+        heading: 'How much is your accommodation rent?',
+        subtitle: 'Include your total rent amount — we\'ll work out the rest.'
+    },
+    {
         id: 'savings',
         heading: 'How much money do you have in savings?',
         subtitle:
@@ -285,6 +295,11 @@ export const INITIAL_FORM_DATA = {
     loanKnowDates: false,
     loanDates: {},
     instalmentDates: [],
+    instalmentAmounts: {},
+
+    rentAmount: '',
+    rentFrequency: 'monthly',
+    rentNextDate: '',
 
     bursary: null,
     bursaryAmount: '',

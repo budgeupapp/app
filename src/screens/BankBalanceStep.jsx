@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 /* ---------- HELPERS ---------- */
 
@@ -60,7 +60,7 @@ export default function BankBalanceStep({ balance, updateBalance }) {
             {/* Amount input */}
             <div style={{
                 display: 'flex', alignItems: 'center',
-                background: '#f7f7f7', borderRadius: 10,
+                borderRadius: 10, border: '1px solid #e8e8e8',
                 padding: '0 14px', height: 50, gap: 8,
             }}>
                 <button
@@ -90,12 +90,16 @@ export default function BankBalanceStep({ balance, updateBalance }) {
                     placeholder="0.00"
                     value={formatDisplay(rawAmount)}
                     onChange={handleChange}
+                    onFocus={(e) => {
+                        const input = e.target
+                        setTimeout(() => input.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400)
+                    }}
                     style={{
                         flex: 1, border: 'none',
                         background: 'transparent',
                         fontSize: 20, fontWeight: 500,
                         fontFamily: 'Nunito, sans-serif',
-                        color: rawAmount.startsWith('-') ? '#EC8C17' : '#147b75',
+                        color: '#000',
                         outline: 'none', padding: 0,
                     }}
                 />
