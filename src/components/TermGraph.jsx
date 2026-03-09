@@ -631,27 +631,30 @@ export default function TermGraph({ terms, expandedTerm, balance, overdraft, eve
             {(onToggleIncome || onToggleExpenses) && (
                 <div style={{
                     position: 'absolute', top: 12, right: 8, zIndex: 10,
-                    display: 'flex', gap: 4,
+                    display: 'flex', gap: 5,
                 }}>
                     {onToggleIncome && (
                         <button
                             onClick={onToggleIncome}
                             style={{
-                                background: showIncome ? 'rgba(20,123,117,0.15)' : 'rgba(0,0,0,0.04)',
-                                border: 'none', borderRadius: 12, cursor: 'pointer',
-                                padding: '3px 7px', display: 'flex', alignItems: 'center', gap: 3,
-                                transition: 'background 0.2s ease',
+                                background: showIncome ? 'rgba(20,123,117,0.12)' : '#fff',
+                                border: showIncome ? '1.5px solid #147b75' : '1.5px solid #ddd',
+                                borderRadius: 14, cursor: 'pointer',
+                                padding: '3px 8px 3px 6px', display: 'flex', alignItems: 'center', gap: 4,
+                                transition: 'all 0.2s ease',
                             }}
                         >
-                            <div style={{
-                                width: 6, height: 6, borderRadius: '50%',
-                                background: showIncome ? '#147b75' : '#ccc',
-                                transition: 'background 0.2s ease',
-                            }} />
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={showIncome ? '#147b75' : '#bbb'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                {showIncome ? (
+                                    <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></>
+                                ) : (
+                                    <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></>
+                                )}
+                            </svg>
                             <span style={{
-                                fontSize: 8, fontWeight: 600,
+                                fontSize: 9, fontWeight: 700,
                                 fontFamily: 'Nunito, sans-serif',
-                                color: showIncome ? '#147b75' : '#aaa',
+                                color: showIncome ? '#147b75' : '#999',
                             }}>Income</span>
                         </button>
                     )}
@@ -659,21 +662,24 @@ export default function TermGraph({ terms, expandedTerm, balance, overdraft, eve
                         <button
                             onClick={onToggleExpenses}
                             style={{
-                                background: showExpenses ? 'rgba(224,100,112,0.15)' : 'rgba(0,0,0,0.04)',
-                                border: 'none', borderRadius: 12, cursor: 'pointer',
-                                padding: '3px 7px', display: 'flex', alignItems: 'center', gap: 3,
-                                transition: 'background 0.2s ease',
+                                background: showExpenses ? 'rgba(224,100,112,0.12)' : '#fff',
+                                border: showExpenses ? '1.5px solid #e06470' : '1.5px solid #ddd',
+                                borderRadius: 14, cursor: 'pointer',
+                                padding: '3px 8px 3px 6px', display: 'flex', alignItems: 'center', gap: 4,
+                                transition: 'all 0.2s ease',
                             }}
                         >
-                            <div style={{
-                                width: 6, height: 6, borderRadius: '50%',
-                                background: showExpenses ? '#e06470' : '#ccc',
-                                transition: 'background 0.2s ease',
-                            }} />
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={showExpenses ? '#e06470' : '#bbb'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                {showExpenses ? (
+                                    <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></>
+                                ) : (
+                                    <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></>
+                                )}
+                            </svg>
                             <span style={{
-                                fontSize: 8, fontWeight: 600,
+                                fontSize: 9, fontWeight: 700,
                                 fontFamily: 'Nunito, sans-serif',
-                                color: showExpenses ? '#e06470' : '#aaa',
+                                color: showExpenses ? '#e06470' : '#999',
                             }}>Expenses</span>
                         </button>
                     )}

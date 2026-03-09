@@ -839,7 +839,7 @@ export default function Dashboard() {
 
     const [showBalanceEditor, setShowBalanceEditor] = useState(false)
     const [showBalanceHistory, setShowBalanceHistory] = useState(false)
-    const [showIncome, setShowIncome] = useState(true)
+    const [showIncome, setShowIncome] = useState(false)
     const [showExpenses, setShowExpenses] = useState(true)
     const [expandedSource, setExpandedSource] = useState(null)
     const [activeTab, setActiveTab] = useState('fixed')
