@@ -69,11 +69,27 @@ function Chevron({ open }) {
 
 function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete }) {
     const ref = useRef(null)
+    const contentRef = useRef(null)
+    const [contentHeight, setContentHeight] = useState(0)
     const prevExpanded = useRef(expanded)
+
+    useEffect(() => {
+        if (expanded) {
+            // Measure content height when expanding
+            const measure = () => {
+                if (contentRef.current) {
+                    setContentHeight(contentRef.current.scrollHeight)
+                }
+            }
+            measure()
+            // Re-measure after a frame in case content is still rendering
+            requestAnimationFrame(measure)
+        }
+    }, [expanded, term.breaks.length])
+
     useEffect(() => {
         if (expanded && !prevExpanded.current) {
-            // small delay so the accordion content renders before scrolling
-            setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+            setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
         }
         prevExpanded.current = expanded
     }, [expanded])
@@ -139,8 +155,13 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                 </div>
             </div>
 
-            {expanded && (
-                <>
+            <div style={{
+                maxHeight: expanded ? contentHeight + 20 : 0,
+                opacity: expanded ? 1 : 0,
+                overflow: 'hidden',
+                transition: 'max-height 0.3s ease, opacity 0.2s ease',
+            }}>
+                <div ref={contentRef}>
                     {/* ── Separator below header ── */}
                     <div style={{ height: 1, background: '#f3f3f3' }} />
 
@@ -225,8 +246,8 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                             </span>
                         </div>
                     )}
-                </>
-            )}
+                </div>
+            </div>
         </div>
     )
 }
