@@ -1,0 +1,26 @@
+{
+  "name": "Budge Up",
+  "short_name": "Budge Up",
+  "description": "Money clarity for student life",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#147B75",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "1000x1000",
+      "type": "image/png"
+    }
+  ]
+}
