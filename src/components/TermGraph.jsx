@@ -1009,11 +1009,12 @@ export default function TermGraph({ terms, expandedTerm, balance, overdraft, eve
                                 })
                         })()}
 
-                        {/* Colored vertical step lines at income events — fade in with dots */}
+                        {/* Colored vertical step lines at events — fade in with dots */}
                         {balanceVisible && showToday && steppedPath && steppedPath.dots
-                            .filter(dot => !dot.event.noDot && dot.event.type === 'income' && !hiddenEventTypes.includes(dot.event.editType))
+                            .filter(dot => !dot.event.noDot && !hiddenEventTypes.includes(dot.event.editType))
                             .map((dot, i) => {
-                                const color = '#147b75'
+                                const isIncome = dot.event.type === 'income'
+                                const color = isIncome ? '#147b75' : '#e06470'
                                 const topY = Math.min(dot.yBefore, dot.yAfter)
                                 const height = Math.abs(dot.yAfter - dot.yBefore)
                                 const delay = 0.25 + i * 0.12

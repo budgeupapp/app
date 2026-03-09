@@ -123,6 +123,14 @@ function isInTerm(dateStr, terms) {
     return false
 }
 
+function distributeEvenly(total, count) {
+    if (count <= 0) return []
+    const per = Math.round(total / count)
+    const amounts = Array(count).fill(per)
+    amounts[count - 1] = total - per * (count - 1)
+    return amounts
+}
+
 function buildGraphEvents(formData) {
     const events = []
     const terms = formData.termDates?.terms || []
@@ -225,18 +233,19 @@ function buildGraphEvents(formData) {
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     let count = 0; let tmp = new Date(d); while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 86400000) }
-                    const wa = count > 0 ? Math.round(workAmt / count) : workAmt
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: wa, type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    const amounts = distributeEvenly(workAmt, count); let idx = 0
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    const ma = Math.round(workAmt / 12)
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: ma, type: 'income', label: 'Work', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income`, editType: 'work' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    let mCount = 0; let mt = new Date(d); while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dom) }
+                    const amounts = distributeEvenly(workAmt, mCount); let idx = 0
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'income', label: 'Work', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income`, editType: 'work' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
-                    const overrides = formData.workTermDates || {}; const tAmt = Math.round(workAmt / (terms.length || 1))
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: tAmt, type: 'income', label: 'Work', sublabel: `${term.name} income`, editType: 'work' }) }
+                    const overrides = formData.workTermDates || {}; const amounts = distributeEvenly(workAmt, terms.length)
+                    for (let ti = 0; ti < terms.length; ti++) { const term = terms[ti]; const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: amounts[ti], type: 'income', label: 'Work', sublabel: `${term.name} income`, editType: 'work' }) }
                 } else if (freq === 'yearly') {
                     events.push({ date: formData.workNextDate || '2025-09-01', amount: workAmt, type: 'income', label: 'Work', sublabel: 'Yearly income', editType: 'work' })
                 }
@@ -278,18 +287,19 @@ function buildGraphEvents(formData) {
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     let count = 0; let tmp = new Date(d); while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 86400000) }
-                    const wa = count > 0 ? Math.round(otherAmt / count) : otherAmt
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: wa, type: 'income', label: lbl, sublabel: 'Weekly', editType: 'otherIncome' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    const amounts = distributeEvenly(otherAmt, count); let idx = 0
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'income', label: lbl, sublabel: 'Weekly', editType: 'otherIncome' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    const ma = Math.round(otherAmt / 12)
                     let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: ma, type: 'income', label: lbl, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}`, editType: 'otherIncome' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    let mCount = 0; let mt = new Date(d); while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dom) }
+                    const amounts = distributeEvenly(otherAmt, mCount); let idx = 0
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'income', label: lbl, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}`, editType: 'otherIncome' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
-                    const overrides = formData.otherIncomeTermDates || {}; const tAmt = Math.round(otherAmt / (terms.length || 1))
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: tAmt, type: 'income', label: lbl, sublabel: `${term.name}`, editType: 'otherIncome' }) }
+                    const overrides = formData.otherIncomeTermDates || {}; const amounts = distributeEvenly(otherAmt, terms.length)
+                    for (let ti = 0; ti < terms.length; ti++) { const term = terms[ti]; const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: amounts[ti], type: 'income', label: lbl, sublabel: `${term.name}`, editType: 'otherIncome' }) }
                 } else if (freq === 'yearly') {
                     events.push({ date: formData.otherIncomeNextDate || '2025-09-01', amount: otherAmt, type: 'income', label: lbl, sublabel: 'Yearly income', editType: 'otherIncome' })
                 }
@@ -320,10 +330,10 @@ function buildGraphEvents(formData) {
     if (rentAmt > 0 && formData.rentFrequency) {
         const rentDates = generateRentDates(formData.rentFrequency, formData.rentNextDate, formData)
         const isYearly = formData.rentEntryMode === 'yearly'
-        const perPayment = isYearly ? (rentDates.length > 0 ? Math.round(rentAmt / rentDates.length) : rentAmt) : rentAmt
-        for (const date of rentDates) {
-            const dt = new Date(date + 'T00:00:00')
-            events.push({ date, amount: perPayment, type: 'expense', label: 'Rent', sublabel: `${dt.toLocaleDateString('en-GB', { month: 'long' })} rent`, editType: 'rent' })
+        const rentAmounts = isYearly ? distributeEvenly(rentAmt, rentDates.length) : rentDates.map(() => rentAmt)
+        for (let ri = 0; ri < rentDates.length; ri++) {
+            const date = rentDates[ri]; const dt = new Date(date + 'T00:00:00')
+            events.push({ date, amount: rentAmounts[ri], type: 'expense', label: 'Rent', sublabel: `${dt.toLocaleDateString('en-GB', { month: 'long' })} rent`, editType: 'rent' })
         }
     }
 
@@ -338,18 +348,33 @@ function buildGraphEvents(formData) {
                 let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                 while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                 while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                if (billsMode === 'yearly') { let count = 0; let tmp = new Date(d); while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 86400000) }; amt = count > 0 ? Math.round(billsAmt / count) : billsAmt }
-                while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amt, type: 'expense', label: 'Bills', sublabel: 'Weekly bills', editType: 'bills' }); d = new Date(d.getTime() + 7 * 86400000) }
+                if (billsMode === 'yearly') {
+                    let count = 0; let tmp = new Date(d); while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 86400000) }
+                    const amounts = distributeEvenly(billsAmt, count); let idx = 0
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: 'Bills', sublabel: 'Weekly bills', editType: 'bills' }); d = new Date(d.getTime() + 7 * 86400000) }
+                } else {
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amt, type: 'expense', label: 'Bills', sublabel: 'Weekly bills', editType: 'bills' }); d = new Date(d.getTime() + 7 * 86400000) }
+                }
             } else if (freq === 'monthly') {
-                if (billsMode === 'yearly') amt = Math.round(billsAmt / 12)
                 let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                 while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                 while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                 const dom = d.getDate()
-                while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amt, type: 'expense', label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`, editType: 'bills' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                if (billsMode === 'yearly') {
+                    let mCount = 0; let mt = new Date(d); while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dom) }
+                    const amounts = distributeEvenly(billsAmt, mCount); let idx = 0
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`, editType: 'bills' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                } else {
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amt, type: 'expense', label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`, editType: 'bills' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                }
             } else if (freq === 'termly') {
-                const overrides = formData.billsTermDates || {}; const tAmt = billsMode === 'yearly' ? Math.round(billsAmt / (terms.length || 1)) : amt
-                for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: tAmt, type: 'expense', label: 'Bills', sublabel: `${term.name} bills`, editType: 'bills' }) }
+                const overrides = formData.billsTermDates || {}
+                if (billsMode === 'yearly') {
+                    const amounts = distributeEvenly(billsAmt, terms.length)
+                    for (let ti = 0; ti < terms.length; ti++) { const term = terms[ti]; const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: amounts[ti], type: 'expense', label: 'Bills', sublabel: `${term.name} bills`, editType: 'bills' }) }
+                } else {
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: amt, type: 'expense', label: 'Bills', sublabel: `${term.name} bills`, editType: 'bills' }) }
+                }
             } else if (freq === 'yearly') {
                 events.push({ date: formData.billsNextDate || '2025-09-01', amount: billsAmt, type: 'expense', label: 'Bills', sublabel: 'Yearly bills', editType: 'bills' })
             }
@@ -367,21 +392,30 @@ function buildGraphEvents(formData) {
             if (uniFreq === 'yearly') {
                 events.push({ date: formData.uniFeesNextDate || '2025-10-27', amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
             } else if (uniFreq === 'monthly') {
-                const monthlyAmt = uniMode === 'yearly' ? Math.round(uniAmt / 12) : uniAmt
                 let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date('2025-10-27T00:00:00')
                 while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                 while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                 const dom = d.getDate()
-                while (d <= ayEnd) {
-                    events.push({ date: d.toISOString().split('T')[0], amount: monthlyAmt, type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' })
-                    d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                if (uniMode === 'yearly') {
+                    let mCount = 0; let mt = new Date(d); while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dom) }
+                    const amounts = distributeEvenly(uniAmt, mCount); let idx = 0
+                    while (d <= ayEnd) {
+                        events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' })
+                        d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    }
+                } else {
+                    while (d <= ayEnd) {
+                        events.push({ date: d.toISOString().split('T')[0], amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' })
+                        d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    }
                 }
             } else if (uniFreq === 'termly') {
                 const overrides = formData.uniFeesTermDates || {}
-                const tAmt = uniMode === 'yearly' ? Math.round(uniAmt / (terms.length || 1)) : uniAmt
-                for (const term of terms) {
-                    const date = overrides[term.id] || term.start
-                    if (date) events.push({ date, amount: tAmt, type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' })
+                if (uniMode === 'yearly') {
+                    const amounts = distributeEvenly(uniAmt, terms.length)
+                    for (let ti = 0; ti < terms.length; ti++) { const term = terms[ti]; const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: amounts[ti], type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' }) }
+                } else {
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' }) }
                 }
             }
         }
@@ -401,25 +435,25 @@ function buildGraphEvents(formData) {
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     let count = 0; let tmp = new Date(d)
                     while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 86400000) }
-                    const wAmt = count > 0 ? Math.round(savAmt / count) : savAmt
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: wAmt, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    const amounts = distributeEvenly(savAmt, count); let idx = 0
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    const mAmt = Math.round(savAmt / 12)
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: mAmt, type: 'expense', label: 'Savings', sublabel: 'Monthly savings', editType: 'savingsInv' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    let mCount = 0; let mt = new Date(d); while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dom) }
+                    const amounts = distributeEvenly(savAmt, mCount); let idx = 0
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: 'Savings', sublabel: 'Monthly savings', editType: 'savingsInv' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.savingsInvTermDates || {}
-                    const termCount = terms.length || 1
-                    const tAmt = Math.round(savAmt / termCount)
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: tAmt, type: 'expense', label: 'Savings', sublabel: `${term.name} savings`, editType: 'savingsInv' }) }
+                    const amounts = distributeEvenly(savAmt, terms.length)
+                    for (let ti = 0; ti < terms.length; ti++) { const term = terms[ti]; const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: amounts[ti], type: 'expense', label: 'Savings', sublabel: `${term.name} savings`, editType: 'savingsInv' }) }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.savingsInvQuarterlyDates || {}
                     const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
-                    const qAmt = Math.round(savAmt / 4)
-                    for (let i = 0; i < 4; i++) { events.push({ date: qDates[i] || QD[i], amount: qAmt, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' }) }
+                    const amounts = distributeEvenly(savAmt, 4)
+                    for (let i = 0; i < 4; i++) { events.push({ date: qDates[i] || QD[i], amount: amounts[i], type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' }) }
                 }
             } else {
                 if (freq === 'weekly') {

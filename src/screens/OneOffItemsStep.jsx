@@ -133,24 +133,8 @@ export default function OneOffItemsStep({ items, updateItems, compact = false })
                             flexDirection: 'column',
                             gap: 8,
                         }}>
-                            {/* Row 1: Name + Direction toggle + Delete */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <input
-                                    type="text"
-                                    placeholder="Item name"
-                                    value={item.name}
-                                    onChange={(e) => updateItem(i, 'name', e.target.value)}
-                                    onFocus={handleFocus}
-                                    onBlur={handleBlur}
-                                    style={{
-                                        flex: 1, border: 'none',
-                                        background: 'transparent',
-                                        fontSize: 15, fontWeight: 700,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#000', outline: 'none', padding: 0,
-                                        minWidth: 0,
-                                    }}
-                                />
+                            {/* Row 1: Direction toggle + Delete */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <button
                                     onClick={() => toggleDirection(i)}
                                     style={{
@@ -167,7 +151,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false })
                                     }}
                                 >
                                     <ArrowCircleIcon direction={item.direction || 'out'} />
-                                    {(item.direction || 'out') === 'in' ? 'In' : 'Out'}
+                                    {(item.direction || 'out') === 'in' ? 'Income' : 'Expense'}
                                 </button>
                                 <button
                                     onClick={() => removeItem(i)}
@@ -182,57 +166,100 @@ export default function OneOffItemsStep({ items, updateItems, compact = false })
                                 </button>
                             </div>
 
-                            {/* Row 2: Amount + Date */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {/* Row 2: Name */}
+                            <div>
+                                <span style={{
+                                    fontSize: 10, fontWeight: 600, color: '#9f9c9c',
+                                    fontFamily: 'Nunito, sans-serif',
+                                    marginBottom: 3, display: 'block',
+                                }}>Item name</span>
                                 <div style={{
-                                    display: 'flex', alignItems: 'center',
                                     background: '#f5f5f5', borderRadius: 5,
-                                    padding: '0 8px', height: 28, gap: 3,
-                                    width: 90, flexShrink: 0,
+                                    padding: '0 8px', height: 32,
+                                    display: 'flex', alignItems: 'center',
                                 }}>
-                                    <span style={{
-                                        fontSize: 12, fontWeight: 600,
-                                        color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
-                                    }}>£</span>
                                     <input
                                         type="text"
-                                        inputMode="decimal"
-                                        placeholder="0"
-                                        value={formatDisplay(item.amount)}
-                                        onChange={(e) => updateItem(i, 'amount', cleanNum(e.target.value))}
+                                        placeholder="e.g. Birthday money, Holiday"
+                                        value={item.name}
+                                        onChange={(e) => updateItem(i, 'name', e.target.value)}
                                         onFocus={handleFocus}
                                         onBlur={handleBlur}
                                         style={{
                                             flex: 1, border: 'none',
                                             background: 'transparent',
-                                            fontSize: 12, fontWeight: 700,
+                                            fontSize: 14, fontWeight: 700,
                                             fontFamily: 'Nunito, sans-serif',
                                             color: '#000', outline: 'none', padding: 0,
-                                            width: 0, minWidth: 0,
+                                            minWidth: 0,
                                         }}
                                     />
                                 </div>
-                                <div style={{
-                                    display: 'flex', alignItems: 'center',
-                                    border: '1px solid #f3f3f3', borderRadius: 5,
-                                    height: 28, overflow: 'hidden',
-                                    flexShrink: 0,
-                                }}>
-                                    <input
-                                        type="date"
-                                        value={item.date}
-                                        onChange={(e) => updateItem(i, 'date', e.target.value)}
-                                        onFocus={handleFocus}
-                                        onBlur={handleBlur}
-                                        style={{
-                                            border: 'none', background: 'transparent',
-                                            fontSize: 11, fontWeight: 600,
-                                            fontFamily: 'Nunito, sans-serif',
-                                            color: item.date ? '#000' : '#aaa',
-                                            outline: 'none', padding: '0 8px',
-                                            height: '100%',
-                                        }}
-                                    />
+                            </div>
+
+                            {/* Row 3: Amount + Date */}
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <div style={{ flex: 1 }}>
+                                    <span style={{
+                                        fontSize: 10, fontWeight: 600, color: '#9f9c9c',
+                                        fontFamily: 'Nunito, sans-serif',
+                                        marginBottom: 3, display: 'block',
+                                    }}>Amount</span>
+                                    <div style={{
+                                        display: 'flex', alignItems: 'center',
+                                        background: '#f5f5f5', borderRadius: 5,
+                                        padding: '0 8px', height: 32, gap: 3,
+                                    }}>
+                                        <span style={{
+                                            fontSize: 12, fontWeight: 600,
+                                            color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
+                                        }}>£</span>
+                                        <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            placeholder="0"
+                                            value={formatDisplay(item.amount)}
+                                            onChange={(e) => updateItem(i, 'amount', cleanNum(e.target.value))}
+                                            onFocus={handleFocus}
+                                            onBlur={handleBlur}
+                                            style={{
+                                                flex: 1, border: 'none',
+                                                background: 'transparent',
+                                                fontSize: 12, fontWeight: 700,
+                                                fontFamily: 'Nunito, sans-serif',
+                                                color: '#000', outline: 'none', padding: 0,
+                                                width: 0, minWidth: 0,
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <span style={{
+                                        fontSize: 10, fontWeight: 600, color: '#9f9c9c',
+                                        fontFamily: 'Nunito, sans-serif',
+                                        marginBottom: 3, display: 'block',
+                                    }}>Date</span>
+                                    <div style={{
+                                        display: 'flex', alignItems: 'center',
+                                        background: '#f5f5f5', borderRadius: 5,
+                                        height: 32, overflow: 'hidden',
+                                    }}>
+                                        <input
+                                            type="date"
+                                            value={item.date}
+                                            onChange={(e) => updateItem(i, 'date', e.target.value)}
+                                            onFocus={handleFocus}
+                                            onBlur={handleBlur}
+                                            style={{
+                                                border: 'none', background: 'transparent',
+                                                fontSize: 11, fontWeight: 600,
+                                                fontFamily: 'Nunito, sans-serif',
+                                                color: item.date ? '#000' : '#aaa',
+                                                outline: 'none', padding: '0 8px',
+                                                height: '100%', width: '100%',
+                                            }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
