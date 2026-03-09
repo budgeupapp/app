@@ -230,41 +230,9 @@ export default function RentStep({
                             onClick={() => {
                                 updateRentEntryMode(id)
                                 if (id === 'yearly') {
-                                    if (rawYearly) {
-                                        updateRentAmount(rawYearly)
-                                    } else if (rawPerPayment) {
-                                        // Convert per-payment to yearly
-                                        const pp = parseFloat(rawPerPayment)
-                                        if (pp > 0) {
-                                            const freq = rentFrequency
-                                            const count = freq === 'weekly' ? 52 : freq === 'monthly' ? 12 : freq === 'quarterly' ? 4 : freq === 'termly' ? (terms?.length || 3) : 12
-                                            const yearly = String(Math.round(pp * count))
-                                            setRawYearly(yearly)
-                                            updateRentAmount(yearly)
-                                        } else {
-                                            updateRentAmount('')
-                                        }
-                                    } else {
-                                        updateRentAmount('')
-                                    }
+                                    updateRentAmount(rawYearly || '')
                                 } else {
-                                    if (rawPerPayment) {
-                                        updateRentAmount(rawPerPayment)
-                                    } else if (rawYearly) {
-                                        // Convert yearly to per-payment
-                                        const yr = parseFloat(rawYearly)
-                                        if (yr > 0) {
-                                            const freq = rentFrequency
-                                            const count = freq === 'weekly' ? 52 : freq === 'monthly' ? 12 : freq === 'quarterly' ? 4 : freq === 'termly' ? (terms?.length || 3) : 12
-                                            const pp = String(Math.round((yr / count) * 100) / 100)
-                                            setRawPerPayment(pp)
-                                            updateRentAmount(pp)
-                                        } else {
-                                            updateRentAmount('')
-                                        }
-                                    } else {
-                                        updateRentAmount('')
-                                    }
+                                    updateRentAmount(rawPerPayment || '')
                                 }
                             }}
                             style={{

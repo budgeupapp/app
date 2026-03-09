@@ -229,39 +229,9 @@ export default function SavingsInvestmentsStep({
                             onClick={() => {
                                 updateSavingsInvEntryMode(id)
                                 if (id === 'yearly') {
-                                    if (rawYearly) {
-                                        updateSavingsInvAmount(rawYearly)
-                                    } else if (rawPerPayment) {
-                                        const pp = parseFloat(rawPerPayment)
-                                        if (pp > 0) {
-                                            const freq = savingsInvFrequency
-                                            const count = freq === 'weekly' ? 52 : freq === 'monthly' ? 12 : freq === 'quarterly' ? 4 : freq === 'termly' ? (terms?.length || 3) : 12
-                                            const yearly = String(Math.round(pp * count))
-                                            setRawYearly(yearly)
-                                            updateSavingsInvAmount(yearly)
-                                        } else {
-                                            updateSavingsInvAmount('')
-                                        }
-                                    } else {
-                                        updateSavingsInvAmount('')
-                                    }
+                                    updateSavingsInvAmount(rawYearly || '')
                                 } else {
-                                    if (rawPerPayment) {
-                                        updateSavingsInvAmount(rawPerPayment)
-                                    } else if (rawYearly) {
-                                        const yr = parseFloat(rawYearly)
-                                        if (yr > 0) {
-                                            const freq = savingsInvFrequency
-                                            const count = freq === 'weekly' ? 52 : freq === 'monthly' ? 12 : freq === 'quarterly' ? 4 : freq === 'termly' ? (terms?.length || 3) : 12
-                                            const pp = String(Math.round((yr / count) * 100) / 100)
-                                            setRawPerPayment(pp)
-                                            updateSavingsInvAmount(pp)
-                                        } else {
-                                            updateSavingsInvAmount('')
-                                        }
-                                    } else {
-                                        updateSavingsInvAmount('')
-                                    }
+                                    updateSavingsInvAmount(rawPerPayment || '')
                                 }
                             }}
                             style={{
