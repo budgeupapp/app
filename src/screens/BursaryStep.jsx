@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { DEFAULT_LOAN_MONTHS, ALL_MONTH_KEYS, MONTH_LABELS } from '../config/onboardingConfig'
+import { ALL_MONTH_KEYS, MONTH_LABELS } from '../config/onboardingConfig'
 import { fmt } from '../components/TermGraph'
 
 /* ---------- HELPERS ---------- */
@@ -19,14 +19,19 @@ function cleanNum(val) {
     return v
 }
 
-/* Short month label for instalment rows */
 const SHORT_MONTH = {
     september: 'Sept', october: 'Oct', november: 'Nov', december: 'Dec',
     january: 'Jan', february: 'Feb', march: 'Mar', april: 'Apr',
     may: 'May', june: 'Jun', july: 'Jul', august: 'Aug',
 }
 
-/* Month key → { min, max } date range for date picker */
+const DEFAULT_BURSARY_MONTHS = ['october', 'february', 'march']
+const DEFAULT_BURSARY_DATES = {
+    october: '2025-10-27',
+    february: '2026-02-09',
+    march: '2026-03-30',
+}
+
 function getMonthRange(monthKey) {
     const MONTH_NUM = {
         september: 8, october: 9, november: 10, december: 11,
@@ -34,13 +39,12 @@ function getMonthRange(monthKey) {
         may: 4, june: 5, july: 6, august: 7,
     }
     const m = MONTH_NUM[monthKey]
-    const year = m >= 8 ? 2025 : 2026 // Sept-Dec = 2025, Jan-Aug = 2026
-    const first = new Date(year, m, 1)
-    const last = new Date(year, m + 1, 0) // last day of month
+    const year = m >= 8 ? 2025 : 2026
+    const last = new Date(year, m + 1, 0)
     const pad = (n) => String(n).padStart(2, '0')
     return {
-        min: `${first.getFullYear()}-${pad(first.getMonth() + 1)}-01`,
-        max: `${last.getFullYear()}-${pad(last.getMonth() + 1)}-${pad(last.getDate())}`,
+        min: `${year}-${pad(m + 1)}-01`,
+        max: `${year}-${pad(m + 1)}-${pad(last.getDate())}`,
     }
 }
 
@@ -61,85 +65,60 @@ function Chevron({ open }) {
 
 /* ---------- MAIN ---------- */
 
-export default function MaintenanceLoanStep({
-    loanAmount,
-    updateLoanAmount,
-    loanMonths,
-    updateLoanMonths,
-    loanKnowDates,
-    updateLoanKnowDates,
-    loanDates,
-    updateLoanDates,
-    instalmentAmounts,
-    updateInstalmentAmounts,
+export default function BursaryStep({
+    bursaryAmount,
+    updateBursaryAmount,
+    bursaryMonths,
+    updateBursaryMonths,
+    bursaryDates,
+    updateBursaryDates,
+    bursaryInstalmentAmounts,
+    updateBursaryInstalmentAmounts,
     compact = false,
 }) {
-    const [tab, setTab] = useState('yearly') // 'yearly' | 'instalment'
+    const [tab, setTab] = useState('yearly')
     const [rawAmount, setRawAmount] = useState(() => {
-        const n = parseFloat(String(loanAmount || '').replace(/,/g, ''))
+        const n = parseFloat(String(bursaryAmount || '').replace(/,/g, ''))
         return n ? String(n) : ''
     })
     const [rawInstalments, setRawInstalments] = useState(() => {
         const obj = {}
-        for (const m of (loanMonths || DEFAULT_LOAN_MONTHS)) {
-            const existing = instalmentAmounts?.[m]
+        for (const m of (bursaryMonths || DEFAULT_BURSARY_MONTHS)) {
+            const existing = bursaryInstalmentAmounts?.[m]
             const n = parseFloat(String(existing || '').replace(/,/g, ''))
             obj[m] = n ? String(n) : ''
         }
         return obj
     })
     useEffect(() => {
-        const n = parseFloat(String(loanAmount || '').replace(/,/g, ''))
+        const n = parseFloat(String(bursaryAmount || '').replace(/,/g, ''))
         setRawAmount(n ? String(n) : '')
-    }, [loanAmount])
+    }, [bursaryAmount])
     useEffect(() => {
         const obj = {}
-        for (const m of (loanMonths || DEFAULT_LOAN_MONTHS)) {
-            const existing = instalmentAmounts?.[m]
+        for (const m of (bursaryMonths || DEFAULT_BURSARY_MONTHS)) {
+            const existing = bursaryInstalmentAmounts?.[m]
             const n = parseFloat(String(existing || '').replace(/,/g, ''))
             obj[m] = n ? String(n) : ''
         }
         setRawInstalments(obj)
-    }, [instalmentAmounts])
+    }, [bursaryInstalmentAmounts])
     const [datesExpanded, setDatesExpanded] = useState(false)
     const [inputFocused, setInputFocused] = useState(false)
     const scrollRef = useRef(null)
     const blurTimerRef = useRef(null)
     const datesBoxRef = useRef(null)
+    const dateActiveRef = useRef(false)
+
+    const months = (bursaryMonths || DEFAULT_BURSARY_MONTHS)
+        .slice()
+        .sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
 
     const scrollInputToTop = (e) => {
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
         const input = e.target
         setInputFocused(true)
-
-        // Capture outer scroll positions to prevent browser from scrolling parent containers
-        const scrollParents = []
-        let el = input.parentElement
-        while (el) {
-            if (el.scrollTop > 0 || el.scrollHeight > el.clientHeight) {
-                scrollParents.push({ el, top: el.scrollTop })
-            }
-            el = el.parentElement
-        }
-
-        // Continuously restore outer scroll positions during keyboard animation
-        const restoreOuter = () => {
-            scrollParents.forEach(({ el: scrollEl, top }) => {
-                if (scrollEl !== scrollRef.current) {
-                    scrollEl.scrollTop = top
-                }
-            })
-        }
-
-        // Restore repeatedly over the keyboard animation period
-        const intervals = [0, 50, 100, 150, 200, 250, 300, 350, 400]
-        const timers = intervals.map(ms => setTimeout(restoreOuter, ms))
-
         setTimeout(() => {
-            timers.forEach(clearTimeout)
-            restoreOuter()
-
-            // Scroll within our own container only
             const container = scrollRef.current
             if (!container) return
             const containerRect = container.getBoundingClientRect()
@@ -149,37 +128,26 @@ export default function MaintenanceLoanStep({
         }, 301)
     }
 
-    const dateActiveRef = useRef(false)
-
     const handleInputBlur = () => {
         blurTimerRef.current = setTimeout(() => {
-            if (dateActiveRef.current) {
-                setInputFocused(false)
-                return
-            }
+            if (dateActiveRef.current) { setInputFocused(false); return }
             setInputFocused(false)
             setTimeout(() => {
-                if (!dateActiveRef.current) {
-                    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-                }
+                if (!dateActiveRef.current) scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
             }, 100)
         }, 50)
     }
 
-    const months = (loanMonths || DEFAULT_LOAN_MONTHS)
-        .slice()
-        .sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
-
     const handleAmountChange = (e) => {
         const val = cleanNum(e.target.value)
         setRawAmount(val)
-        updateLoanAmount(val)
+        updateBursaryAmount(val)
     }
 
     const handleInstalmentChange = (month, e) => {
         const val = cleanNum(e.target.value)
         setRawInstalments(prev => ({ ...prev, [month]: val }))
-        updateInstalmentAmounts({ ...instalmentAmounts, [month]: val })
+        updateBursaryInstalmentAmounts({ ...bursaryInstalmentAmounts, [month]: val })
     }
 
     const toggleMonth = (month) => {
@@ -187,25 +155,23 @@ export default function MaintenanceLoanStep({
             ? months.filter(m => m !== month)
             : [...months, month]
         if (next.length === 0) return
-        updateLoanMonths(next)
-        // Clean up instalment amounts and stale dates for removed months
+        updateBursaryMonths(next)
         if (!next.includes(month)) {
             const { [month]: _, ...rest } = rawInstalments
             setRawInstalments(rest)
-            if (loanDates?.[month]) {
-                const { [month]: __, ...restDates } = loanDates
-                updateLoanDates(restDates)
+            if (bursaryDates?.[month]) {
+                const { [month]: __, ...restDates } = bursaryDates
+                updateBursaryDates(restDates)
             }
         }
     }
 
     const handleDateChange = (month, val) => {
-        updateLoanDates({ ...loanDates, [month]: val })
+        updateBursaryDates({ ...bursaryDates, [month]: val })
     }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            {/* Title */}
             {!compact && (
                 <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
                     <h2 style={{
@@ -213,26 +179,17 @@ export default function MaintenanceLoanStep({
                         fontFamily: 'Nunito, sans-serif',
                         color: '#000', margin: '0 0 8px', lineHeight: 1.3,
                     }}>
-                        Maintenance Loan
+                        Bursary
                     </h2>
                     <p style={{
                         fontSize: 15, fontFamily: 'Nunito, sans-serif',
                         color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5,
                     }}>
-                        A rough estimate is fine!{' '}
-                        <span
-                            onClick={() => window.open('https://www.gov.uk/student-finance/new-fulltime-students', '_blank')}
-                            style={{
-                                color: '#147b75', fontWeight: 500,
-                                textDecoration: 'underline',
-                                cursor: 'pointer',
-                            }}
-                        >Click here</span> for a guide.
+                        How much do you receive in bursary payments?
                     </p>
                 </div>
             )}
 
-            {/* Scrollable content */}
             <div style={{
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
@@ -267,7 +224,7 @@ export default function MaintenanceLoanStep({
                     ))}
                 </div>
 
-                {/* Year Total tab content */}
+                {/* Year Total */}
                 {tab === 'yearly' && (
                     <>
                         <p style={{
@@ -275,7 +232,7 @@ export default function MaintenanceLoanStep({
                             fontFamily: 'Nunito, sans-serif',
                             color: '#000', margin: '0 0 8px',
                         }}>
-                            What is your total yearly student loan?
+                            What is your total yearly bursary?
                         </p>
                         <div style={{
                             display: 'flex', alignItems: 'center',
@@ -301,7 +258,7 @@ export default function MaintenanceLoanStep({
                                     fontSize: 16, fontWeight: 500,
                                     fontFamily: 'Nunito, sans-serif',
                                     color: '#000', outline: 'none', padding: 0,
-                                    height: 50
+                                    height: 50,
                                 }}
                             />
                         </div>
@@ -322,7 +279,6 @@ export default function MaintenanceLoanStep({
                     overflow: 'hidden',
                     marginBottom: 16,
                 }}>
-                    {/* Month pills — all months shown, selected = green */}
                     <div style={{
                         display: 'flex', flexWrap: 'wrap', gap: 6,
                         padding: '10px 12px',
@@ -350,8 +306,7 @@ export default function MaintenanceLoanStep({
                         })}
                     </div>
 
-                    {/* Per-instalment amount inputs */}
-                    {tab === 'instalment' && months.map((m, i) => (
+                    {tab === 'instalment' && months.map(m => (
                         <div key={m} style={{
                             display: 'flex', alignItems: 'center',
                             borderTop: '1px solid #f3f3f3',
@@ -406,7 +361,6 @@ export default function MaintenanceLoanStep({
                             const next = !datesExpanded
                             setDatesExpanded(next)
                             if (next) {
-                                updateLoanKnowDates(true)
                                 setTimeout(() => {
                                     const container = scrollRef.current
                                     const box = datesBoxRef.current
@@ -482,11 +436,11 @@ export default function MaintenanceLoanStep({
                                                 fontFamily: 'Nunito, sans-serif',
                                                 pointerEvents: 'none',
                                             }}>
-                                                {loanDates?.[m] ? fmt(loanDates[m]) : 'Select date'}
+                                                {(bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m]) ? fmt(bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m]) : 'Select date'}
                                             </span>
                                             <input
                                                 type="date"
-                                                value={loanDates?.[m] || getMonthRange(m).min}
+                                                value={bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m] || getMonthRange(m).min}
                                                 min={getMonthRange(m).min}
                                                 max={getMonthRange(m).max}
                                                 onFocus={() => {
@@ -512,7 +466,6 @@ export default function MaintenanceLoanStep({
                         </div>
                     </div>
                 </div>
-                {/* Extra space so last input can scroll to top — only when focused */}
                 {inputFocused && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
         </div>

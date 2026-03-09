@@ -61,8 +61,8 @@ function DateRow({ label, value, onChange, onDateTap, scrollRef }) {
             <div style={{ position: 'relative' }}>
                 <span style={{
                     fontSize: 13, fontWeight: 600,
-                    color: '#e06470',
-                    borderBottom: '1px dotted rgba(224,100,112,0.45)',
+                    color: '#147b75',
+                    borderBottom: '1px dotted rgba(20,123,117,0.45)',
                     paddingBottom: 1,
                     fontFamily: 'Nunito, sans-serif',
                     pointerEvents: 'none',
@@ -74,7 +74,6 @@ function DateRow({ label, value, onChange, onDateTap, scrollRef }) {
                     value={value || ''}
                     onFocus={() => {
                         onDateTap?.(true)
-                        // Save scroll position and restore after browser auto-scrolls
                         const container = scrollRef?.current
                         if (container) {
                             const pos = container.scrollTop
@@ -98,46 +97,41 @@ function DateRow({ label, value, onChange, onDateTap, scrollRef }) {
 
 /* ---------- MAIN ---------- */
 
-export default function RentStep({
-    rentAmount,
-    updateRentAmount,
-    rentFrequency,
-    updateRentFrequency,
-    rentNextDate,
-    updateRentNextDate,
-    rentEntryMode,
-    updateRentEntryMode,
+export default function FamilyFriendsStep({
+    familyAmount,
+    updateFamilyAmount,
+    familyFrequency,
+    updateFamilyFrequency,
+    familyNextDate,
+    updateFamilyNextDate,
     terms,
-    rentTermDates,
-    updateRentTermDates,
-    rentQuarterlyDates,
-    updateRentQuarterlyDates,
+    familyTermDates,
+    updateFamilyTermDates,
+    familyQuarterlyDates,
+    updateFamilyQuarterlyDates,
+    familyVariesByTerm,
+    updateFamilyVariesByTerm,
+    familyNonTermAmount,
+    updateFamilyNonTermAmount,
     compact = false,
 }) {
-    const tab = rentEntryMode || 'per_payment'
-    const [rawYearly, setRawYearly] = useState(() => {
-        if (tab === 'yearly') {
-            const n = parseFloat(String(rentAmount || '').replace(/,/g, ''))
-            return n ? String(n) : ''
-        }
-        return ''
+    const [rawAmount, setRawAmount] = useState(() => {
+        const n = parseFloat(String(familyAmount || '').replace(/,/g, ''))
+        return n ? String(n) : ''
     })
-    const [rawPerPayment, setRawPerPayment] = useState(() => {
-        if (tab !== 'yearly') {
-            const n = parseFloat(String(rentAmount || '').replace(/,/g, ''))
-            return n ? String(n) : ''
-        }
-        return ''
+    const [rawNonTermAmount, setRawNonTermAmount] = useState(() => {
+        const n = parseFloat(String(familyNonTermAmount || '').replace(/,/g, ''))
+        return n ? String(n) : ''
     })
     useEffect(() => {
-        if (!rentAmount && rentAmount !== 0) {
-            setRawYearly('')
-            setRawPerPayment('')
-        }
-    }, [rentAmount])
-    const rawAmount = tab === 'yearly' ? rawYearly : rawPerPayment
-    const setRawAmount = tab === 'yearly' ? setRawYearly : setRawPerPayment
-    const [datesExpanded, setDatesExpanded] = useState(!!rentNextDate)
+        const n = parseFloat(String(familyAmount || '').replace(/,/g, ''))
+        setRawAmount(n ? String(n) : '')
+    }, [familyAmount])
+    useEffect(() => {
+        const n = parseFloat(String(familyNonTermAmount || '').replace(/,/g, ''))
+        setRawNonTermAmount(n ? String(n) : '')
+    }, [familyNonTermAmount])
+    const [datesExpanded, setDatesExpanded] = useState(!!familyNextDate)
     const [inputFocused, setInputFocused] = useState(false)
     const scrollRef = useRef(null)
     const blurTimerRef = useRef(null)
@@ -146,7 +140,10 @@ export default function RentStep({
     const freqContainerRef = useRef(null)
     const preMultiScrollRef = useRef(0)
 
-    const isMultiDate = rentFrequency === 'quarterly' || rentFrequency === 'termly'
+    const isMultiDate = familyFrequency === 'quarterly' || familyFrequency === 'termly'
+
+    const dateActiveRef = useRef(false)
+    const freqTapRef = useRef(false)
 
     const scrollInputToTop = (e) => {
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
@@ -161,9 +158,6 @@ export default function RentStep({
             container.scrollTo({ top: Math.max(0, scrollOffset - 20), behavior: 'smooth' })
         }, 301)
     }
-
-    const dateActiveRef = useRef(false)
-    const freqTapRef = useRef(false)
 
     const handleInputBlur = () => {
         blurTimerRef.current = setTimeout(() => {
@@ -184,117 +178,54 @@ export default function RentStep({
     const handleAmountChange = (e) => {
         const val = cleanNum(e.target.value)
         setRawAmount(val)
-        updateRentAmount(val)
+        updateFamilyAmount(val)
+    }
+
+    const handleNonTermAmountChange = (e) => {
+        const val = cleanNum(e.target.value)
+        setRawNonTermAmount(val)
+        updateFamilyNonTermAmount(val)
     }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            {/* Title */}
             {!compact && (
-            <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                <h2 style={{
-                    fontSize: 25, fontWeight: 700,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: '#000', margin: '0 0 8px', lineHeight: 1.3,
-                }}>
-                    Rent
-                </h2>
-                <p style={{
-                    fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                    color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5,
-                }}>
-                    How much do you pay in rent? A rough estimate is fine!
-                </p>
-            </div>
+                <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
+                    <h2 style={{
+                        fontSize: 25, fontWeight: 700,
+                        fontFamily: 'Nunito, sans-serif',
+                        color: '#000', margin: '0 0 8px', lineHeight: 1.3,
+                    }}>
+                        Family & Friends
+                    </h2>
+                    <p style={{
+                        fontSize: 15, fontFamily: 'Nunito, sans-serif',
+                        color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5,
+                    }}>
+                        How much do you regularly receive from family and friends?
+                    </p>
+                </div>
             )}
 
-            {/* Scrollable content */}
             <div style={{
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: '0 24px 16px',
                 display: 'flex', flexDirection: 'column',
             }} ref={scrollRef}>
-                {/* Tab switcher */}
-                <div style={{
-                    background: '#f3f3f3', borderRadius: 10,
-                    padding: 3, display: 'flex', gap: 0,
-                    marginBottom: 20, flexShrink: 0,
-                }}>
-                    {[
-                        { id: 'yearly', label: 'Year Total' },
-                        { id: 'per_payment', label: 'Per Payment' },
-                    ].map(({ id, label }) => (
-                        <button
-                            key={id}
-                            onClick={() => {
-                                updateRentEntryMode(id)
-                                if (id === 'yearly') {
-                                    if (rawYearly) {
-                                        updateRentAmount(rawYearly)
-                                    } else if (rawPerPayment) {
-                                        // Convert per-payment to yearly
-                                        const pp = parseFloat(rawPerPayment)
-                                        if (pp > 0) {
-                                            const freq = rentFrequency
-                                            const count = freq === 'weekly' ? 52 : freq === 'monthly' ? 12 : freq === 'quarterly' ? 4 : freq === 'termly' ? (terms?.length || 3) : 12
-                                            const yearly = String(Math.round(pp * count))
-                                            setRawYearly(yearly)
-                                            updateRentAmount(yearly)
-                                        } else {
-                                            updateRentAmount('')
-                                        }
-                                    } else {
-                                        updateRentAmount('')
-                                    }
-                                } else {
-                                    if (rawPerPayment) {
-                                        updateRentAmount(rawPerPayment)
-                                    } else if (rawYearly) {
-                                        // Convert yearly to per-payment
-                                        const yr = parseFloat(rawYearly)
-                                        if (yr > 0) {
-                                            const freq = rentFrequency
-                                            const count = freq === 'weekly' ? 52 : freq === 'monthly' ? 12 : freq === 'quarterly' ? 4 : freq === 'termly' ? (terms?.length || 3) : 12
-                                            const pp = String(Math.round((yr / count) * 100) / 100)
-                                            setRawPerPayment(pp)
-                                            updateRentAmount(pp)
-                                        } else {
-                                            updateRentAmount('')
-                                        }
-                                    } else {
-                                        updateRentAmount('')
-                                    }
-                                }
-                            }}
-                            style={{
-                                flex: 1, height: 36, border: 'none',
-                                borderRadius: 10, cursor: 'pointer',
-                                background: tab === id ? '#fff' : 'transparent',
-                                color: tab === id ? '#000' : '#838383',
-                                fontSize: 14, fontWeight: 700,
-                                fontFamily: 'Nunito, sans-serif',
-                                transition: 'background 0.2s ease, color 0.2s ease',
-                            }}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                </div>
-
                 {/* Amount input */}
                 <p style={{
                     fontSize: 14, fontWeight: 700,
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 8px',
                 }}>
-                    {tab === 'yearly' ? 'What is your total yearly rent?' : 'How much is each payment?'}
+                    {familyVariesByTerm ? 'During term time' : 'How much do you receive each time?'}
                 </p>
                 <div style={{
                     display: 'flex', alignItems: 'center',
                     border: '1px solid #e8e8e8', borderRadius: 10,
                     padding: '0 14px', height: 38, gap: 6,
-                    marginBottom: 20, maxWidth: 160,
+                    marginBottom: familyVariesByTerm ? 16 : 20, maxWidth: 160,
                 }}>
                     <span style={{
                         fontSize: 16, fontWeight: 600,
@@ -319,13 +250,86 @@ export default function RentStep({
                     />
                 </div>
 
+                {/* Non-term amount */}
+                {familyVariesByTerm && (
+                    <>
+                        <p style={{
+                            fontSize: 14, fontWeight: 700,
+                            fontFamily: 'Nunito, sans-serif',
+                            color: '#000', margin: '0 0 8px',
+                        }}>
+                            Outside term time
+                        </p>
+                        <div style={{
+                            display: 'flex', alignItems: 'center',
+                            border: '1px solid #e8e8e8', borderRadius: 10,
+                            padding: '0 14px', height: 38, gap: 6,
+                            marginBottom: 20, maxWidth: 160,
+                        }}>
+                            <span style={{
+                                fontSize: 16, fontWeight: 600,
+                                color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
+                            }}>£</span>
+                            <input
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="0.00"
+                                value={formatDisplay(rawNonTermAmount)}
+                                onChange={handleNonTermAmountChange}
+                                onFocus={scrollInputToTop}
+                                onBlur={handleInputBlur}
+                                style={{
+                                    flex: 1, border: 'none',
+                                    background: 'transparent',
+                                    fontSize: 16, fontWeight: 500,
+                                    fontFamily: 'Nunito, sans-serif',
+                                    color: '#000', outline: 'none', padding: 0,
+                                    height: 50,
+                                }}
+                            />
+                        </div>
+                    </>
+                )}
+
+                {/* Varies by term toggle */}
+                <button
+                    onClick={() => updateFamilyVariesByTerm(!familyVariesByTerm)}
+                    style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        padding: '0 0 20px', margin: 0,
+                    }}
+                >
+                    <div style={{
+                        width: 36, height: 20, borderRadius: 10,
+                        background: familyVariesByTerm ? '#147b75' : '#e0e0e0',
+                        transition: 'background 0.2s ease',
+                        position: 'relative', flexShrink: 0,
+                    }}>
+                        <div style={{
+                            width: 16, height: 16, borderRadius: 8,
+                            background: '#fff',
+                            position: 'absolute', top: 2,
+                            left: familyVariesByTerm ? 18 : 2,
+                            transition: 'left 0.2s ease',
+                        }} />
+                    </div>
+                    <span style={{
+                        fontSize: 13, fontWeight: 600,
+                        fontFamily: 'Nunito, sans-serif',
+                        color: '#5e5e5e',
+                    }}>
+                        Different amount outside term
+                    </span>
+                </button>
+
                 {/* Payment schedule */}
                 <p ref={freqBoxRef} style={{
                     fontSize: 14, fontWeight: 700,
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 10px',
                 }}>
-                    How often do you pay?
+                    How often do you receive it?
                 </p>
                 <div ref={freqContainerRef} style={{
                     border: '1px solid #e8e8e8', borderRadius: 10,
@@ -336,28 +340,25 @@ export default function RentStep({
                         padding: '10px 12px',
                     }}>
                         {FREQ_OPTIONS.map(({ id, label }) => {
-                            const selected = rentFrequency === id
+                            const selected = familyFrequency === id
                             return (
                                 <button
                                     key={id}
                                     onClick={() => {
                                         freqTapRef.current = true
-                                        const wasMultiDate = rentFrequency === 'quarterly' || rentFrequency === 'termly'
+                                        const wasMultiDate = familyFrequency === 'quarterly' || familyFrequency === 'termly'
                                         const goingMultiDate = id === 'quarterly' || id === 'termly'
                                         const container = scrollRef.current
-
-                                        // Save scroll position before state change
                                         const savedScroll = container ? container.scrollTop : 0
 
-                                        updateRentFrequency(id)
-                                        if (id === 'quarterly' && !rentQuarterlyDates?.[0]) {
+                                        updateFamilyFrequency(id)
+                                        if (id === 'quarterly' && !familyQuarterlyDates?.[0]) {
                                             const defaults = {}
                                             QUARTER_DEFAULTS.forEach((d, i) => { defaults[i] = d })
-                                            updateRentQuarterlyDates(defaults)
+                                            updateFamilyQuarterlyDates(defaults)
                                         }
 
                                         if (goingMultiDate && !wasMultiDate) {
-                                            // Entering multi-date: save position and scroll up
                                             preMultiScrollRef.current = savedScroll
                                             setTimeout(() => {
                                                 const el = freqBoxRef.current
@@ -368,7 +369,6 @@ export default function RentStep({
                                                 container.scrollTo({ top: Math.max(0, offset - 10), behavior: 'smooth' })
                                             }, 50)
                                         } else if (!goingMultiDate && wasMultiDate) {
-                                            // Leaving multi-date: scroll so entire box visible
                                             setTimeout(() => {
                                                 const box = freqContainerRef.current
                                                 if (!container || !box) return
@@ -380,7 +380,6 @@ export default function RentStep({
                                                 container.scrollTo({ top: targetScroll, behavior: 'smooth' })
                                             }, 50)
                                         } else if (!goingMultiDate && !wasMultiDate) {
-                                            // weekly/monthly: scroll so entire box visible
                                             setTimeout(() => {
                                                 const box = freqContainerRef.current
                                                 if (!container || !box) return
@@ -392,14 +391,13 @@ export default function RentStep({
                                                 container.scrollTo({ top: targetScroll, behavior: 'smooth' })
                                             }, 50)
                                         } else {
-                                            // Same group (multi-date): preserve scroll position
                                             requestAnimationFrame(() => {
                                                 if (container) container.scrollTop = savedScroll
                                             })
                                         }
                                     }}
                                     style={{
-                                        background: selected ? '#e06470' : '#f5f5f5',
+                                        background: selected ? '#147b75' : '#f5f5f5',
                                         color: selected ? '#fff' : '#aaa',
                                         border: 'none',
                                         borderRadius: 8,
@@ -416,11 +414,11 @@ export default function RentStep({
                         })}
                     </div>
 
-                    {/* Date section — varies by frequency */}
+                    {/* Date section */}
                     <div
                         ref={datesBoxRef}
                         onClick={() => {
-                            if (isMultiDate) return // always expanded for quarterly/termly
+                            if (isMultiDate) return
                             const next = !datesExpanded
                             setDatesExpanded(next)
                             if (next) {
@@ -436,7 +434,7 @@ export default function RentStep({
                             }
                         }}
                         style={{
-                            background: 'rgba(224,100,112,0.1)',
+                            background: 'rgba(20,123,117,0.1)',
                             borderRadius: '0 0 10px 10px',
                             padding: '10px 12px',
                             cursor: isMultiDate ? 'default' : 'pointer',
@@ -480,8 +478,8 @@ export default function RentStep({
                                     <div style={{ marginTop: 10 }}>
                                         <DateRow
                                             label="Next payment"
-                                            value={rentNextDate}
-                                            onChange={updateRentNextDate}
+                                            value={familyNextDate}
+                                            onChange={updateFamilyNextDate}
                                             onDateTap={(active) => { dateActiveRef.current = active }}
                                             scrollRef={scrollRef}
                                         />
@@ -491,7 +489,7 @@ export default function RentStep({
                         )}
 
                         {/* Termly: one row per term */}
-                        {rentFrequency === 'termly' && (
+                        {familyFrequency === 'termly' && (
                             <>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
                                     <p style={{
@@ -501,9 +499,9 @@ export default function RentStep({
                                     }}>
                                         Payment dates
                                     </p>
-                                    {rentTermDates && Object.keys(rentTermDates).length > 0 && (
+                                    {familyTermDates && Object.keys(familyTermDates).length > 0 && (
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); updateRentTermDates({}) }}
+                                            onClick={(e) => { e.stopPropagation(); updateFamilyTermDates({}) }}
                                             style={{
                                                 background: 'none', border: 'none', cursor: 'pointer',
                                                 padding: 4, display: 'flex', alignItems: 'center',
@@ -530,8 +528,8 @@ export default function RentStep({
                                         <DateRow
                                             key={term.id}
                                             label={term.name}
-                                            value={rentTermDates?.[term.id] || term.start}
-                                            onChange={(val) => updateRentTermDates({ ...rentTermDates, [term.id]: val })}
+                                            value={familyTermDates?.[term.id] || term.start}
+                                            onChange={(val) => updateFamilyTermDates({ ...familyTermDates, [term.id]: val })}
                                             onDateTap={(active) => { dateActiveRef.current = active }}
                                             scrollRef={scrollRef}
                                         />
@@ -541,7 +539,7 @@ export default function RentStep({
                         )}
 
                         {/* Quarterly: 4 date rows */}
-                        {rentFrequency === 'quarterly' && (
+                        {familyFrequency === 'quarterly' && (
                             <>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
                                     <p style={{
@@ -551,13 +549,13 @@ export default function RentStep({
                                     }}>
                                         Payment dates
                                     </p>
-                                    {rentQuarterlyDates && Object.values(rentQuarterlyDates).some((v, i) => v !== QUARTER_DEFAULTS[i]) && (
+                                    {familyQuarterlyDates && Object.values(familyQuarterlyDates).some((v, i) => v !== QUARTER_DEFAULTS[i]) && (
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation()
                                                 const defaults = {}
                                                 QUARTER_DEFAULTS.forEach((d, i) => { defaults[i] = d })
-                                                updateRentQuarterlyDates(defaults)
+                                                updateFamilyQuarterlyDates(defaults)
                                             }}
                                             style={{
                                                 background: 'none', border: 'none', cursor: 'pointer',
@@ -585,8 +583,8 @@ export default function RentStep({
                                         <DateRow
                                             key={i}
                                             label={label}
-                                            value={rentQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}
-                                            onChange={(val) => updateRentQuarterlyDates({ ...rentQuarterlyDates, [i]: val })}
+                                            value={familyQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}
+                                            onChange={(val) => updateFamilyQuarterlyDates({ ...familyQuarterlyDates, [i]: val })}
                                             onDateTap={(active) => { dateActiveRef.current = active }}
                                             scrollRef={scrollRef}
                                         />

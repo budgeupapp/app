@@ -24,7 +24,7 @@ export default function LoadingScreen({ onComplete }) {
                     style={{
                         fontSize: 20,
                         color: '#147B75',
-                        fontWeight: 500,
+                        fontWeight: 600,
                         marginTop: 24
                     }}
                 >

@@ -15,7 +15,7 @@ export function getUserProperties(profile) {
     currency: profile.currency || 'GBP',
     has_student_loan: !!profile.studentLoan,
     has_bursary: !!profile.bursary,
-    weekly_spend_band: profile.weeklySpend || 'unknown',
+    weekly_spend: profile.weeklySpend || 'unknown',
     balance_range: getBalanceRange(profile.balance),
     savings_range: getSavingsRange(profile.savings)
   }

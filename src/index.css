@@ -151,6 +151,17 @@ button:focus {
   }
 }
 
+/* Fade-in for x-axis labels */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes labelFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Pulse animation for loading placeholders */
 @keyframes pulse {
 

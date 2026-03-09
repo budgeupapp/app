@@ -1,5 +1,5 @@
 // DEV: set to 'onboarding' or 'dashboard' to bypass login and jump to that view. Set to null for normal behaviour.
-const DEV_VIEW = 'onboarding'
+const DEV_VIEW = null
 
 import { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
@@ -12,13 +12,11 @@ const authCallbackPending =
 import { Spin } from 'antd'
 import { analytics, AUTH_EVENTS, SESSION_EVENTS, getSessionProperties } from './lib/analytics/index.js'
 
-// DEV: commented out with login bypass
-// import LoginForm from './screens/LoginForm'
-// import SignupForm from './screens/SignupForm'
+import LoginForm from './screens/LoginForm'
+import SignupForm from './screens/SignupForm'
 import FinancialOnboardingForm from './screens/FinancialOnboardingForm'
 import LoadingScreen from './screens/LoadingScreen'
 import Dashboard from './screens/Dashboard'
-import FinancesScreen from './screens/FinancesScreen'
 import MoneyAdviceScreen from './screens/MoneyAdviceScreen'
 import SettingsScreen from './screens/SettingsScreen'
 import NotFound from './screens/NotFound'
@@ -172,18 +170,17 @@ export default function App() {
 
     /* ---------------- NOT AUTHENTICATED ---------------- */
 
-    // DEV: bypass login
-    // if (!session) {
-    //     return (
-    //         <BrowserRouter>
-    //             <Routes>
-    //                 <Route path="/login" element={<LoginForm />} />
-    //                 <Route path="/signup" element={<SignupForm />} />
-    //                 <Route path="*" element={<Navigate to="/signup" replace />} />
-    //             </Routes>
-    //         </BrowserRouter>
-    //     )
-    // }
+    if (!session) {
+        return (
+            <BrowserRouter>
+                <Routes>
+                    <Route path="/login" element={<LoginForm />} />
+                    <Route path="/signup" element={<SignupForm />} />
+                    <Route path="*" element={<Navigate to="/signup" replace />} />
+                </Routes>
+            </BrowserRouter>
+        )
+    }
 
     /* ---------------- ONBOARDING NOT COMPLETE ---------------- */
 
@@ -217,14 +214,6 @@ export default function App() {
                     <div className="app-container">
                         <div style={{ height: '100vh', position: 'relative' }}>
                             <Dashboard />
-                        </div>
-                        <BottomNav />
-                    </div>
-                } />
-                <Route path="/transactions" element={
-                    <div className="app-container">
-                        <div style={{ height: '100vh', position: 'relative' }}>
-                            <FinancesScreen />
                         </div>
                         <BottomNav />
                     </div>

@@ -74,7 +74,6 @@ function DateRow({ label, value, onChange, onDateTap, scrollRef }) {
                     value={value || ''}
                     onFocus={() => {
                         onDateTap?.(true)
-                        // Save scroll position and restore after browser auto-scrolls
                         const container = scrollRef?.current
                         if (container) {
                             const pos = container.scrollTop
@@ -98,46 +97,46 @@ function DateRow({ label, value, onChange, onDateTap, scrollRef }) {
 
 /* ---------- MAIN ---------- */
 
-export default function RentStep({
-    rentAmount,
-    updateRentAmount,
-    rentFrequency,
-    updateRentFrequency,
-    rentNextDate,
-    updateRentNextDate,
-    rentEntryMode,
-    updateRentEntryMode,
+export default function SavingsInvestmentsStep({
+    savingsInvAmount,
+    updateSavingsInvAmount,
+    savingsInvFrequency,
+    updateSavingsInvFrequency,
+    savingsInvNextDate,
+    updateSavingsInvNextDate,
+    savingsInvEntryMode,
+    updateSavingsInvEntryMode,
     terms,
-    rentTermDates,
-    updateRentTermDates,
-    rentQuarterlyDates,
-    updateRentQuarterlyDates,
+    savingsInvTermDates,
+    updateSavingsInvTermDates,
+    savingsInvQuarterlyDates,
+    updateSavingsInvQuarterlyDates,
     compact = false,
 }) {
-    const tab = rentEntryMode || 'per_payment'
+    const tab = savingsInvEntryMode || 'per_payment'
     const [rawYearly, setRawYearly] = useState(() => {
         if (tab === 'yearly') {
-            const n = parseFloat(String(rentAmount || '').replace(/,/g, ''))
+            const n = parseFloat(String(savingsInvAmount || '').replace(/,/g, ''))
             return n ? String(n) : ''
         }
         return ''
     })
     const [rawPerPayment, setRawPerPayment] = useState(() => {
         if (tab !== 'yearly') {
-            const n = parseFloat(String(rentAmount || '').replace(/,/g, ''))
+            const n = parseFloat(String(savingsInvAmount || '').replace(/,/g, ''))
             return n ? String(n) : ''
         }
         return ''
     })
     useEffect(() => {
-        if (!rentAmount && rentAmount !== 0) {
+        if (!savingsInvAmount && savingsInvAmount !== 0) {
             setRawYearly('')
             setRawPerPayment('')
         }
-    }, [rentAmount])
+    }, [savingsInvAmount])
     const rawAmount = tab === 'yearly' ? rawYearly : rawPerPayment
     const setRawAmount = tab === 'yearly' ? setRawYearly : setRawPerPayment
-    const [datesExpanded, setDatesExpanded] = useState(!!rentNextDate)
+    const [datesExpanded, setDatesExpanded] = useState(!!savingsInvNextDate)
     const [inputFocused, setInputFocused] = useState(false)
     const scrollRef = useRef(null)
     const blurTimerRef = useRef(null)
@@ -146,7 +145,7 @@ export default function RentStep({
     const freqContainerRef = useRef(null)
     const preMultiScrollRef = useRef(0)
 
-    const isMultiDate = rentFrequency === 'quarterly' || rentFrequency === 'termly'
+    const isMultiDate = savingsInvFrequency === 'quarterly' || savingsInvFrequency === 'termly'
 
     const scrollInputToTop = (e) => {
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
@@ -184,7 +183,7 @@ export default function RentStep({
     const handleAmountChange = (e) => {
         const val = cleanNum(e.target.value)
         setRawAmount(val)
-        updateRentAmount(val)
+        updateSavingsInvAmount(val)
     }
 
     return (
@@ -197,13 +196,13 @@ export default function RentStep({
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 8px', lineHeight: 1.3,
                 }}>
-                    Rent
+                    Savings & Investments
                 </h2>
                 <p style={{
                     fontSize: 15, fontFamily: 'Nunito, sans-serif',
                     color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5,
                 }}>
-                    How much do you pay in rent? A rough estimate is fine!
+                    How much do you regularly put into savings or investments?
                 </p>
             </div>
             )}
@@ -228,42 +227,40 @@ export default function RentStep({
                         <button
                             key={id}
                             onClick={() => {
-                                updateRentEntryMode(id)
+                                updateSavingsInvEntryMode(id)
                                 if (id === 'yearly') {
                                     if (rawYearly) {
-                                        updateRentAmount(rawYearly)
+                                        updateSavingsInvAmount(rawYearly)
                                     } else if (rawPerPayment) {
-                                        // Convert per-payment to yearly
                                         const pp = parseFloat(rawPerPayment)
                                         if (pp > 0) {
-                                            const freq = rentFrequency
+                                            const freq = savingsInvFrequency
                                             const count = freq === 'weekly' ? 52 : freq === 'monthly' ? 12 : freq === 'quarterly' ? 4 : freq === 'termly' ? (terms?.length || 3) : 12
                                             const yearly = String(Math.round(pp * count))
                                             setRawYearly(yearly)
-                                            updateRentAmount(yearly)
+                                            updateSavingsInvAmount(yearly)
                                         } else {
-                                            updateRentAmount('')
+                                            updateSavingsInvAmount('')
                                         }
                                     } else {
-                                        updateRentAmount('')
+                                        updateSavingsInvAmount('')
                                     }
                                 } else {
                                     if (rawPerPayment) {
-                                        updateRentAmount(rawPerPayment)
+                                        updateSavingsInvAmount(rawPerPayment)
                                     } else if (rawYearly) {
-                                        // Convert yearly to per-payment
                                         const yr = parseFloat(rawYearly)
                                         if (yr > 0) {
-                                            const freq = rentFrequency
+                                            const freq = savingsInvFrequency
                                             const count = freq === 'weekly' ? 52 : freq === 'monthly' ? 12 : freq === 'quarterly' ? 4 : freq === 'termly' ? (terms?.length || 3) : 12
                                             const pp = String(Math.round((yr / count) * 100) / 100)
                                             setRawPerPayment(pp)
-                                            updateRentAmount(pp)
+                                            updateSavingsInvAmount(pp)
                                         } else {
-                                            updateRentAmount('')
+                                            updateSavingsInvAmount('')
                                         }
                                     } else {
-                                        updateRentAmount('')
+                                        updateSavingsInvAmount('')
                                     }
                                 }
                             }}
@@ -288,7 +285,7 @@ export default function RentStep({
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 8px',
                 }}>
-                    {tab === 'yearly' ? 'What is your total yearly rent?' : 'How much is each payment?'}
+                    {tab === 'yearly' ? 'What is your total yearly savings?' : 'How much do you save each time?'}
                 </p>
                 <div style={{
                     display: 'flex', alignItems: 'center',
@@ -325,7 +322,7 @@ export default function RentStep({
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 10px',
                 }}>
-                    How often do you pay?
+                    How often do you save?
                 </p>
                 <div ref={freqContainerRef} style={{
                     border: '1px solid #e8e8e8', borderRadius: 10,
@@ -336,28 +333,26 @@ export default function RentStep({
                         padding: '10px 12px',
                     }}>
                         {FREQ_OPTIONS.map(({ id, label }) => {
-                            const selected = rentFrequency === id
+                            const selected = savingsInvFrequency === id
                             return (
                                 <button
                                     key={id}
                                     onClick={() => {
                                         freqTapRef.current = true
-                                        const wasMultiDate = rentFrequency === 'quarterly' || rentFrequency === 'termly'
+                                        const wasMultiDate = savingsInvFrequency === 'quarterly' || savingsInvFrequency === 'termly'
                                         const goingMultiDate = id === 'quarterly' || id === 'termly'
                                         const container = scrollRef.current
 
-                                        // Save scroll position before state change
                                         const savedScroll = container ? container.scrollTop : 0
 
-                                        updateRentFrequency(id)
-                                        if (id === 'quarterly' && !rentQuarterlyDates?.[0]) {
+                                        updateSavingsInvFrequency(id)
+                                        if (id === 'quarterly' && !savingsInvQuarterlyDates?.[0]) {
                                             const defaults = {}
                                             QUARTER_DEFAULTS.forEach((d, i) => { defaults[i] = d })
-                                            updateRentQuarterlyDates(defaults)
+                                            updateSavingsInvQuarterlyDates(defaults)
                                         }
 
                                         if (goingMultiDate && !wasMultiDate) {
-                                            // Entering multi-date: save position and scroll up
                                             preMultiScrollRef.current = savedScroll
                                             setTimeout(() => {
                                                 const el = freqBoxRef.current
@@ -368,7 +363,6 @@ export default function RentStep({
                                                 container.scrollTo({ top: Math.max(0, offset - 10), behavior: 'smooth' })
                                             }, 50)
                                         } else if (!goingMultiDate && wasMultiDate) {
-                                            // Leaving multi-date: scroll so entire box visible
                                             setTimeout(() => {
                                                 const box = freqContainerRef.current
                                                 if (!container || !box) return
@@ -380,7 +374,6 @@ export default function RentStep({
                                                 container.scrollTo({ top: targetScroll, behavior: 'smooth' })
                                             }, 50)
                                         } else if (!goingMultiDate && !wasMultiDate) {
-                                            // weekly/monthly: scroll so entire box visible
                                             setTimeout(() => {
                                                 const box = freqContainerRef.current
                                                 if (!container || !box) return
@@ -392,7 +385,6 @@ export default function RentStep({
                                                 container.scrollTo({ top: targetScroll, behavior: 'smooth' })
                                             }, 50)
                                         } else {
-                                            // Same group (multi-date): preserve scroll position
                                             requestAnimationFrame(() => {
                                                 if (container) container.scrollTop = savedScroll
                                             })
@@ -420,7 +412,7 @@ export default function RentStep({
                     <div
                         ref={datesBoxRef}
                         onClick={() => {
-                            if (isMultiDate) return // always expanded for quarterly/termly
+                            if (isMultiDate) return
                             const next = !datesExpanded
                             setDatesExpanded(next)
                             if (next) {
@@ -480,8 +472,8 @@ export default function RentStep({
                                     <div style={{ marginTop: 10 }}>
                                         <DateRow
                                             label="Next payment"
-                                            value={rentNextDate}
-                                            onChange={updateRentNextDate}
+                                            value={savingsInvNextDate}
+                                            onChange={updateSavingsInvNextDate}
                                             onDateTap={(active) => { dateActiveRef.current = active }}
                                             scrollRef={scrollRef}
                                         />
@@ -491,7 +483,7 @@ export default function RentStep({
                         )}
 
                         {/* Termly: one row per term */}
-                        {rentFrequency === 'termly' && (
+                        {savingsInvFrequency === 'termly' && (
                             <>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
                                     <p style={{
@@ -501,9 +493,9 @@ export default function RentStep({
                                     }}>
                                         Payment dates
                                     </p>
-                                    {rentTermDates && Object.keys(rentTermDates).length > 0 && (
+                                    {savingsInvTermDates && Object.keys(savingsInvTermDates).length > 0 && (
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); updateRentTermDates({}) }}
+                                            onClick={(e) => { e.stopPropagation(); updateSavingsInvTermDates({}) }}
                                             style={{
                                                 background: 'none', border: 'none', cursor: 'pointer',
                                                 padding: 4, display: 'flex', alignItems: 'center',
@@ -530,8 +522,8 @@ export default function RentStep({
                                         <DateRow
                                             key={term.id}
                                             label={term.name}
-                                            value={rentTermDates?.[term.id] || term.start}
-                                            onChange={(val) => updateRentTermDates({ ...rentTermDates, [term.id]: val })}
+                                            value={savingsInvTermDates?.[term.id] || term.start}
+                                            onChange={(val) => updateSavingsInvTermDates({ ...savingsInvTermDates, [term.id]: val })}
                                             onDateTap={(active) => { dateActiveRef.current = active }}
                                             scrollRef={scrollRef}
                                         />
@@ -541,7 +533,7 @@ export default function RentStep({
                         )}
 
                         {/* Quarterly: 4 date rows */}
-                        {rentFrequency === 'quarterly' && (
+                        {savingsInvFrequency === 'quarterly' && (
                             <>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
                                     <p style={{
@@ -551,13 +543,13 @@ export default function RentStep({
                                     }}>
                                         Payment dates
                                     </p>
-                                    {rentQuarterlyDates && Object.values(rentQuarterlyDates).some((v, i) => v !== QUARTER_DEFAULTS[i]) && (
+                                    {savingsInvQuarterlyDates && Object.values(savingsInvQuarterlyDates).some((v, i) => v !== QUARTER_DEFAULTS[i]) && (
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation()
                                                 const defaults = {}
                                                 QUARTER_DEFAULTS.forEach((d, i) => { defaults[i] = d })
-                                                updateRentQuarterlyDates(defaults)
+                                                updateSavingsInvQuarterlyDates(defaults)
                                             }}
                                             style={{
                                                 background: 'none', border: 'none', cursor: 'pointer',
@@ -585,8 +577,8 @@ export default function RentStep({
                                         <DateRow
                                             key={i}
                                             label={label}
-                                            value={rentQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}
-                                            onChange={(val) => updateRentQuarterlyDates({ ...rentQuarterlyDates, [i]: val })}
+                                            value={savingsInvQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}
+                                            onChange={(val) => updateSavingsInvQuarterlyDates({ ...savingsInvQuarterlyDates, [i]: val })}
                                             onDateTap={(active) => { dateActiveRef.current = active }}
                                             scrollRef={scrollRef}
                                         />

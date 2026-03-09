@@ -1,15 +1,8 @@
-import incomeLoan from '../assets/income-loan.svg'
-import incomeFamily from '../assets/income-family.svg'
-import incomeFriends from '../assets/income-friends.svg'
-import incomeWork from '../assets/income-work.svg'
-import iconOtherIncome from '../assets/icon-other-income.svg'
-const INCOME_SOURCES = [
-    { id: 'maintenance_loan', label: 'Maintenance Loan', color: '#147b75', icon: incomeLoan, panelId: 'maintenanceLoan' },
-    { id: 'bursary', label: 'Bursary', color: '#EC8C17', icon: incomeFamily, panelId: 'bursary' },
-    { id: 'family_friends', label: 'Family & Friends', color: '#5b8def', icon: incomeFriends, panelId: 'familyFriends' },
-    { id: 'work', label: 'Work', color: '#e06470', icon: incomeWork, panelId: 'work' },
-    { id: 'other_income', label: 'Other', color: '#9b8ec4', icon: iconOtherIncome, panelId: 'otherIncome' },
-]
+import expenseBills from '../assets/expense-bills.svg'
+import expenseUnifees from '../assets/expense-unifees.svg'
+import expenseSavings from '../assets/expense-savings.svg'
+import expenseRent from '../assets/expense-rent.svg'
+import iconOtherExpense from '../assets/icon-other-expense.svg'
 
 function CheckIcon() {
     return (
@@ -19,12 +12,21 @@ function CheckIcon() {
     )
 }
 
-export default function RegularIncomeStep({ incomeSources = [], updateIncomeSources }) {
+
+const EXPENSE_SOURCES = [
+    { id: 'rent', label: 'Rent', color: '#e06470', icon: expenseRent, panelId: 'rent' },
+    { id: 'bills', label: 'Bills & Utilities', color: '#e06470', icon: expenseBills, panelId: 'bills' },
+    { id: 'uni_fees', label: 'University Fees', color: '#EC8C17', icon: expenseUnifees, panelId: 'uniFees' },
+    { id: 'savings_investments', label: 'Savings & Investments', color: '#147b75', icon: expenseSavings, panelId: 'savingsInvestments' },
+    { id: 'other_expense', label: 'Other', color: '#9b8ec4', icon: iconOtherExpense, panelId: null },
+]
+
+export default function RegularExpensesStep({ expenseSources = [], updateExpenseSources }) {
     const toggle = (id) => {
-        const next = incomeSources.includes(id)
-            ? incomeSources.filter(s => s !== id)
-            : [...incomeSources, id]
-        updateIncomeSources(next)
+        const next = expenseSources.includes(id)
+            ? expenseSources.filter(s => s !== id)
+            : [...expenseSources, id]
+        updateExpenseSources(next)
     }
 
     return (
@@ -35,13 +37,13 @@ export default function RegularIncomeStep({ incomeSources = [], updateIncomeSour
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 8px', lineHeight: 1.3,
                 }}>
-                    Regular Income
+                    Regular Expenses
                 </h2>
                 <p style={{
                     fontSize: 15, fontFamily: 'Nunito, sans-serif',
                     color: '#5e5e5e', margin: 0, lineHeight: 1.5,
                 }}>
-                    Select any income you receive regularly, even if only during term time or holidays.
+                    Select any expenses you pay regularly.
                 </p>
             </div>
 
@@ -50,8 +52,8 @@ export default function RegularIncomeStep({ incomeSources = [], updateIncomeSour
                 padding: '12px 19px 16px',
                 display: 'flex', flexDirection: 'column', gap: 10,
             }}>
-                {INCOME_SOURCES.map(({ id, label, color, icon, letter, panelId }) => {
-                    const selected = incomeSources.includes(id)
+                {EXPENSE_SOURCES.map(({ id, label, color, icon, letter, panelId }) => {
+                    const selected = expenseSources.includes(id)
                     return (
                         <div
                             key={id}
@@ -59,11 +61,11 @@ export default function RegularIncomeStep({ incomeSources = [], updateIncomeSour
                             style={{
                                 display: 'flex', alignItems: 'center',
                                 padding: '12px 14px',
-                                border: selected ? '1.5px solid #147b75' : '1.5px solid #f3f3f3',
+                                border: selected ? '1.5px solid #e06470' : '1.5px solid #f3f3f3',
                                 borderRadius: 10,
                                 cursor: 'pointer',
                                 gap: 14,
-                                background: selected ? 'rgba(227,242,241,0.15)' : '#fff',
+                                background: selected ? 'rgba(224,100,112,0.05)' : '#fff',
                                 transition: 'border-color 0.15s ease, background 0.15s ease',
                             }}
                         >
@@ -92,8 +94,8 @@ export default function RegularIncomeStep({ incomeSources = [], updateIncomeSour
                             {/* Checkbox */}
                             <div style={{
                                 width: 25, height: 25, borderRadius: 5,
-                                border: selected ? '1.5px solid #147b75' : '1.5px solid #f3f3f3',
-                                background: selected ? '#147b75' : '#fff',
+                                border: selected ? '1.5px solid #e06470' : '1.5px solid #f3f3f3',
+                                background: selected ? '#e06470' : '#fff',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0,
                                 transition: 'background 0.15s ease',

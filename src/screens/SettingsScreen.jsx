@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Button, Typography, Modal, message } from 'antd'
+import { Button, Typography, message } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { POLICY_URLS } from '../lib/policyVersions'
@@ -7,11 +7,102 @@ import { analytics, AUTH_EVENTS, SETTINGS_EVENTS, getErrorProperties } from '../
 
 const { Title, Text } = Typography
 
+/* ── Custom confirmation modal ── */
+function ConfirmModal({ open, title, description, confirmText, cancelText = 'Cancel', danger, loading, onConfirm, onCancel }) {
+  const [visible, setVisible] = useState(false)   // controls mount
+  const [animating, setAnimating] = useState(false) // controls CSS class
+
+  useEffect(() => {
+    if (open) {
+      setVisible(true)
+      // trigger enter animation on next frame
+      requestAnimationFrame(() => requestAnimationFrame(() => setAnimating(true)))
+    } else if (visible) {
+      // trigger exit animation, then unmount
+      setAnimating(false)
+      const timer = setTimeout(() => setVisible(false), 250)
+      return () => clearTimeout(timer)
+    }
+  }, [open])
+
+  if (!visible) return null
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={loading ? undefined : onCancel}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          background: 'rgba(0,0,0,0.35)',
+          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+          opacity: animating ? 1 : 0,
+          transition: 'opacity 0.25s ease',
+        }}
+      />
+
+      {/* Dialog */}
+      <div style={{
+        position: 'fixed', left: '50%', top: '50%', zIndex: 1001,
+        transform: animating
+          ? 'translate(-50%, -50%) scale(1)'
+          : 'translate(-50%, -44%) scale(0.92)',
+        opacity: animating ? 1 : 0,
+        transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease',
+        width: 'calc(100% - 48px)', maxWidth: 340,
+        background: '#fff', borderRadius: 20,
+        padding: '28px 24px 20px',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
+      }}>
+        <h3 style={{
+          margin: '0 0 8px', fontSize: 19, fontWeight: 700,
+          fontFamily: 'Nunito, sans-serif', textAlign: 'center', color: '#1a1a1a',
+        }}>{title}</h3>
+
+        <p style={{
+          margin: '0 0 24px', fontSize: 15, lineHeight: 1.5,
+          fontFamily: 'Nunito, sans-serif', textAlign: 'center', color: '#666',
+        }}>{description}</p>
+
+        <button
+          disabled={loading}
+          onClick={onConfirm}
+          style={{
+            width: '100%', height: 48, borderRadius: 99, border: 'none',
+            fontSize: 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+            cursor: loading ? 'default' : 'pointer',
+            opacity: loading ? 0.6 : 1,
+            transition: 'opacity 0.15s ease',
+            background: danger ? '#E5484D' : '#147B75',
+            color: '#fff', marginBottom: 10,
+          }}
+        >
+          {loading ? 'Please wait…' : confirmText}
+        </button>
+
+        <button
+          disabled={loading}
+          onClick={onCancel}
+          style={{
+            width: '100%', height: 48, borderRadius: 99, border: 'none',
+            fontSize: 16, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+            cursor: 'pointer', background: '#F3F3F3', color: '#1a1a1a',
+          }}
+        >
+          {cancelText}
+        </button>
+      </div>
+    </>
+  )
+}
+
 export default function SettingsScreen() {
   const navigate = useNavigate()
   const trackedRef = useRef(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [deletingAccount, setDeletingAccount] = useState(false)
+  const [showLogoutModal, setShowLogoutModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [messageApi, contextHolder] = message.useMessage({ maxCount: 1 })
 
@@ -32,110 +123,60 @@ export default function SettingsScreen() {
     loadUserEmail()
   }, [])
 
-  const handleLogout = async () => {
-    // Track logout button click (intent)
+  const handleLogout = () => {
     analytics.track(AUTH_EVENTS.LOGOUT_CLICKED)
-
-    Modal.confirm({
-      title: 'Log out?',
-      content: 'Are you sure you want to log out?',
-      okText: 'Log out',
-      cancelText: 'Cancel',
-      okButtonProps: {
-        style: {
-          backgroundColor: '#147B75',
-          borderColor: '#147B75'
-        }
-      },
-      onOk: async () => {
-        setLoggingOut(true)
-
-        const { error } = await supabase.auth.signOut()
-
-        setLoggingOut(false)
-
-        if (error) {
-          messageApi.error({
-            content: 'Failed to log out. Please try again.',
-            duration: 5
-          })
-        } else {
-          // Track actual logout success
-          analytics.track(AUTH_EVENTS.LOGOUT)
-
-          localStorage.clear()
-        }
-      }
-    })
+    setShowLogoutModal(true)
   }
 
-  const handleDeleteAccount = async () => {
-    // Track delete account intent
+  const confirmLogout = async () => {
+    setLoggingOut(true)
+    const { error } = await supabase.auth.signOut()
+    setLoggingOut(false)
+
+    if (error) {
+      setShowLogoutModal(false)
+      messageApi.error({ content: 'Failed to log out. Please try again.', duration: 5 })
+    } else {
+      analytics.track(AUTH_EVENTS.LOGOUT)
+      localStorage.clear()
+    }
+  }
+
+  const handleDeleteAccount = () => {
     analytics.track(SETTINGS_EVENTS.DELETE_ACCOUNT_CLICKED)
+    setShowDeleteModal(true)
+  }
 
-    Modal.confirm({
-      title: 'Delete account permanently?',
-      content: (
-        <div>
-          <Text>This action cannot be undone. All your data will be permanently deleted.</Text>
-          <br />
-          <br />
-          <Text strong>Are you absolutely sure?</Text>
-        </div>
-      ),
-      okText: 'Delete my account',
-      cancelText: 'Cancel',
-      okButtonProps: { danger: true },
-      onOk: async () => {
-        setDeletingAccount(true)
+  const confirmDeleteAccount = async () => {
+    setDeletingAccount(true)
 
-        try {
-          const { data: { user } } = await supabase.auth.getUser()
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('No user found')
 
-          if (!user) {
-            throw new Error('No user found')
-          }
+      const { error: dataError } = await supabase
+        .from('user_profiles')
+        .delete()
+        .eq('user_id', user.id)
 
-          // Delete user data from tables (cascade should handle most)
-          const { error: dataError } = await supabase
-            .from('user_profiles')
-            .delete()
-            .eq('user_id', user.id)
+      if (dataError) console.error('Error deleting user data:', dataError)
 
-          if (dataError) {
-            console.error('Error deleting user data:', dataError)
-          }
+      const { error: authError } = await supabase.rpc('delete_own_account')
+      if (authError) throw authError
 
-          // Delete the auth user account via database RPC
-          const { error: authError } = await supabase.rpc('delete_own_account')
+      analytics.track(SETTINGS_EVENTS.ACCOUNT_DELETED)
+      messageApi.success({ content: 'Account deleted successfully', duration: 3 })
 
-          if (authError) {
-            throw authError
-          }
-
-          // Track successful account deletion before sign out
-          analytics.track(SETTINGS_EVENTS.ACCOUNT_DELETED)
-
-          messageApi.success({
-            content: 'Account deleted successfully',
-            duration: 3
-          })
-
-          // Clear local storage and sign out (which will also reset analytics in App.jsx)
-          localStorage.clear()
-          await supabase.auth.signOut()
-        } catch (error) {
-          console.error('Error deleting account:', error)
-          analytics.error(error, getErrorProperties(error, { context: 'account_deletion' }))
-          messageApi.error({
-            content: 'Failed to delete account. Please contact support.',
-            duration: 10
-          })
-        } finally {
-          setDeletingAccount(false)
-        }
-      }
-    })
+      localStorage.clear()
+      await supabase.auth.signOut()
+    } catch (error) {
+      console.error('Error deleting account:', error)
+      analytics.error(error, getErrorProperties(error, { context: 'account_deletion' }))
+      messageApi.error({ content: 'Failed to delete account. Please contact support.', duration: 10 })
+    } finally {
+      setDeletingAccount(false)
+      setShowDeleteModal(false)
+    }
   }
 
   const handleCookiePreferences = () => {
@@ -163,13 +204,25 @@ export default function SettingsScreen() {
         url: inviteUrl
       }
 
-      // Try native share API first
-      if (navigator.share && navigator.canShare(shareData)) {
+      // Try native share API first (canShare may not exist on all iOS versions)
+      if (navigator.share) {
         await navigator.share(shareData)
         analytics.track(SETTINGS_EVENTS.INVITE_SHARED, { method: 'native_share' })
       } else {
         // Fallback: copy to clipboard
-        await navigator.clipboard.writeText(inviteUrl)
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(inviteUrl)
+        } else {
+          // Fallback for non-secure contexts / older browsers
+          const textarea = document.createElement('textarea')
+          textarea.value = inviteUrl
+          textarea.style.position = 'fixed'
+          textarea.style.opacity = '0'
+          document.body.appendChild(textarea)
+          textarea.select()
+          document.execCommand('copy')
+          document.body.removeChild(textarea)
+        }
         messageApi.success({
           content: 'Invite link copied to clipboard!',
           duration: 3
@@ -203,19 +256,26 @@ export default function SettingsScreen() {
     }}>
       {contextHolder}
 
-      {/* STICKY HEADER */}
-      <div style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 10,
-        background: '#fff',
-      }}>
-        <div style={{ padding: '16px 20px' }}>
-          <Title level={2} style={{ margin: 0, fontSize: 20 }}>
-            Settings
-          </Title>
-        </div>
-      </div>
+      <ConfirmModal
+        open={showLogoutModal}
+        title="Log out?"
+        description="Are you sure you want to log out of your account?"
+        confirmText="Log out"
+        loading={loggingOut}
+        onConfirm={confirmLogout}
+        onCancel={() => setShowLogoutModal(false)}
+      />
+
+      <ConfirmModal
+        open={showDeleteModal}
+        title="Delete account?"
+        description="This will permanently delete all your data. This action cannot be undone."
+        confirmText="Delete my account"
+        danger
+        loading={deletingAccount}
+        onConfirm={confirmDeleteAccount}
+        onCancel={() => setShowDeleteModal(false)}
+      />
 
       {/* CONTENT WRAPPER */}
       <div style={{
@@ -223,7 +283,7 @@ export default function SettingsScreen() {
         overflowY: 'auto',
         overflowX: 'hidden',
         WebkitOverflowScrolling: 'touch',
-        padding: '0px 20px',
+        padding: '40px 20px 0',
         paddingBottom: 'calc(250px + env(safe-area-inset-bottom))'
       }}>
 
@@ -343,7 +403,7 @@ export default function SettingsScreen() {
         {/* APP INFO */}
         <div style={{ textAlign: 'center', marginTop: 40 }}>
           <Text type="secondary" style={{ fontSize: 13 }}>
-            Budge Up v1.0.0
+            Budge Up v0.2.0
           </Text>
         </div>
 

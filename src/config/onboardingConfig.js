@@ -17,6 +17,11 @@ export const STEPS = [
         subtitle: 'Your best estimate is fine.'
     },
     {
+        id: 'overdraft',
+        heading: "What's your overdraft limit?",
+        subtitle: 'This helps us show when you might dip into it.'
+    },
+    {
         id: 'regularIncome',
         heading: 'Where do you regularly receive money from?',
         subtitle: 'Select any income you receive regularly, even if only during term time or holidays.'
@@ -27,48 +32,49 @@ export const STEPS = [
         subtitle: "If you're not 100% sure, your best estimate will do!"
     },
     {
+        id: 'familyFriends',
+        heading: 'How much do you receive from family and friends?',
+        subtitle: 'Include any regular financial support from family or friends.'
+    },
+    {
+        id: 'work',
+        heading: 'How much do you earn from work?',
+        subtitle: 'Include part-time jobs, freelancing, or any paid work.'
+    },
+    {
+        id: 'otherIncome',
+        heading: 'What other income do you receive?',
+        subtitle: 'Include any other regular income not listed above.'
+    },
+    {
         id: 'rent',
         heading: 'How much is your accommodation rent?',
         subtitle: 'Include your total rent amount — we\'ll work out the rest.'
     },
     {
-        id: 'savings',
-        heading: 'How much money do you have in savings?',
-        subtitle:
-            'This helps us understand your financial cushion and recommend appropriate budgeting strategies.'
+        id: 'regularExpenses',
+        heading: 'What regular expenses do you have?',
+        subtitle: 'Select any expenses you pay regularly.'
     },
     {
-        id: 'studentLoan',
-        heading: 'Do you receive student loans?',
-        subtitle: 'This helps us understand your main income source.'
+        id: 'bills',
+        heading: 'How much do you spend on bills?',
+        subtitle: 'Include phone, internet, energy, water, and any other regular bills.'
     },
     {
-        id: 'bursary',
-        heading: 'Do you receive any bursaries?',
-        subtitle: 'Include university bursaries or grants.'
+        id: 'uniFees',
+        heading: 'How much are your university fees?',
+        subtitle: 'Most UK students pay £9,250 per year.'
     },
     {
-        id: 'otherIncome',
-        heading: 'Do you receive any other regular income?',
-        subtitle: 'For example, from part-time job, family, or other sources.'
+        id: 'savingsInvestments',
+        heading: 'How much do you save or invest?',
+        subtitle: 'Include any regular contributions to savings or investments.'
     },
     {
-        id: 'regularExpense',
-        heading: 'Do you have any regular expenses?',
-        subtitle:
-            'Include rent, bills, subscriptions, or anything you pay for regularly. Enter the date of the next one — a rough estimate is fine.'
-    },
-    {
-        id: 'oneOffIncome',
-        heading: 'Do you have any one-off income coming up?',
-        subtitle:
-            'For example, birthday money, refunds, or any expected lump-sum income.'
-    },
-    {
-        id: 'oneOffExpenses',
-        heading: 'Do you have any one-off expenses coming up?',
-        subtitle:
-            'For example, trips, events, or larger purchases.'
+        id: 'oneOffItems',
+        heading: 'One-off Items',
+        subtitle: 'Add any one-off income or expenses you\'re expecting.'
     },
     {
         id: 'weeklySpend',
@@ -78,13 +84,6 @@ export const STEPS = [
 ]
 
 /* ---------- OPTIONS ---------- */
-
-export const WEEKLY_SPEND_OPTIONS = [
-    { value: 1, label: '£50–£80 (very frugal)' },
-    { value: 2, label: '£80–£120 (typical student)' },
-    { value: 3, label: '£120–£180 (social & eating out)' },
-    { value: 4, label: '£180+ (very social / lifestyle-heavy)' }
-]
 
 export const UK_UNIVERSITIES = [
     'University of Bristol',
@@ -228,7 +227,7 @@ export const MONTH_LABELS = {
 }
 
 export const ALL_MONTH_KEYS = Object.keys(MONTH_LABELS)
-export const DEFAULT_LOAN_MONTHS = ['september', 'january', 'april']
+export const DEFAULT_LOAN_MONTHS = ['october', 'january', 'april']
 
 export const OTHER_INCOME_TYPE_OPTIONS = [
     { value: 'part_time_job', label: 'Part-time job' },
@@ -241,7 +240,7 @@ export const OTHER_INCOME_TYPE_OPTIONS = [
 export const OTHER_INCOME_FREQ_OPTIONS = [
     { value: 'weekly', label: 'Weekly' },
     { value: 'monthly', label: 'Monthly' },
-    { value: 'termly', label: 'Termly' },
+    { value: 'termly', label: 'Per Term' },
     { value: 'yearly', label: 'Yearly' },
     { value: 'other', label: 'Other' }
 ]
@@ -286,7 +285,9 @@ export const INITIAL_FORM_DATA = {
     university: 'University of Bristol',
     termDates: { ...INITIAL_TERM_DATES },
     balance: '',
+    overdraft: '',
     incomeSources: [],
+    expenseSources: [],
     savings: '',
 
     studentLoan: null,
@@ -301,23 +302,37 @@ export const INITIAL_FORM_DATA = {
     rentFrequency: 'monthly',
     rentNextDate: '',
 
+    billsAmount: '',
+    billsFrequency: 'monthly',
+
+    uniFeesAmount: '9250',
+    uniFeesFrequency: 'yearly',
+    uniFeesEntryMode: 'yearly',
+    uniFeesNextDate: '2025-10-27',
+    uniFeesTermDates: {},
+
+    familyNextDate: '',
+    familyTermDates: {},
+    familyQuarterlyDates: {},
+
+    otherIncomeNextDate: '',
+    otherIncomeTermDates: {},
+    otherIncomeQuarterlyDates: {},
+
+    savingsInvAmount: '',
+    savingsInvFrequency: 'monthly',
+    savingsInvEntryMode: 'per_payment',
+    savingsInvNextDate: '',
+    savingsInvTermDates: {},
+    savingsInvQuarterlyDates: {},
+
     bursary: null,
     bursaryAmount: '',
     bursaryDates: [...DEFAULT_BURSARY_DATES],
 
-    otherIncome: null,
-    otherIncomeItems: [{ type: 'part_time_job', amount: '', date: '', frequency: 'monthly', endDate: '' }],
+    oneOffItems: [{ name: '', amount: '', date: '', direction: 'out' }],
 
-    regularExpense: null,
-    regularExpenseItems: [
-        { amount: '', date: '', frequency: 'monthly', type: 'rent', endDate: '' }
-    ],
-
-    oneOffIncome: null,
-    oneOffIn: [{ name: '', amount: '', date: '' }],
-
-    oneOffExpenses: null,
-    oneOffOut: [{ name: '', amount: '', date: '' }],
-
-    weeklySpend: ''
+    weeklySpend: '',
+    weeklySpendNonTerm: '',
+    weeklySpendVariesByTerm: false,
 }

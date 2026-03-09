@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 /* ---------- HELPERS ---------- */
 
@@ -19,6 +19,10 @@ export default function BankBalanceStep({ balance, updateBalance }) {
         const n = parseFloat(String(balance || '').replace(/,/g, ''))
         return n ? String(n) : ''
     })
+    useEffect(() => {
+        const n = parseFloat(String(balance || '').replace(/,/g, ''))
+        setRawAmount(n ? String(n) : '')
+    }, [balance])
 
     const negative = rawAmount.startsWith('-')
 
@@ -36,6 +40,8 @@ export default function BankBalanceStep({ balance, updateBalance }) {
         if (val.startsWith('-')) val = '-' + val.slice(1).replace(/-/g, '')
         const parts = val.replace(/^-/, '').split('.')
         if (parts.length > 2) val = (val.startsWith('-') ? '-' : '') + parts[0] + '.' + parts.slice(1).join('')
+        const absVal = Math.abs(parseFloat(val) || 0)
+        if (absVal > 500000) val = (val.startsWith('-') ? '-' : '') + '500000'
         setRawAmount(val)
         const num = parseFloat(val || '0') || 0
         updateBalance(String(num || ''))
@@ -48,29 +54,28 @@ export default function BankBalanceStep({ balance, updateBalance }) {
                 fontFamily: 'Nunito, sans-serif',
                 color: '#000', margin: '0 0 8px', lineHeight: 1.3,
             }}>
-                Bank balance
+                Bank Balance
             </h2>
             <p style={{
                 fontSize: 15, fontFamily: 'Nunito, sans-serif',
                 color: '#5e5e5e', margin: '0 0 24px', lineHeight: 1.5,
             }}>
-                Add up all your accounts and enter the total — your best estimate is fine.
+                What's your current bank balance? Add up all your accounts — a rough estimate is fine.
             </p>
 
             {/* Amount input */}
             <div style={{
-                display: 'flex', alignItems: 'center',
-                borderRadius: 10, border: '1px solid #e8e8e8',
-                padding: '0 14px', height: 50, gap: 8,
+                display: 'flex', alignItems: 'center', gap: 10,
+                maxWidth: 200,
             }}>
                 <button
                     onClick={toggleSign}
                     style={{
-                        background: negative ? '#EC8C17' : '#e8f4f3',
-                        color: negative ? '#fff' : '#147b75',
-                        border: 'none', borderRadius: 6,
-                        width: 28, height: 28,
-                        fontSize: 16, fontWeight: 700,
+                        background: negative ? '#e06470' : '#147b75',
+                        color: '#fff',
+                        border: 'none', borderRadius: 10,
+                        width: 36, height: 50,
+                        fontSize: 20, fontWeight: 700,
                         cursor: 'pointer', flexShrink: 0,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontFamily: 'Nunito, sans-serif',
@@ -79,30 +84,37 @@ export default function BankBalanceStep({ balance, updateBalance }) {
                     {negative ? '−' : '+'}
                 </button>
 
-                <span style={{
-                    fontSize: 20, fontWeight: 600,
-                    color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
-                }}>£</span>
+                <div style={{
+                    display: 'flex', alignItems: 'center',
+                    borderRadius: 10, border: '1px solid #e8e8e8',
+                    padding: '0 14px', height: 50, gap: 6,
+                    flex: 1,
+                }}>
+                    <span style={{
+                        fontSize: 20, fontWeight: 600,
+                        color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
+                    }}>£</span>
 
-                <input
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    value={formatDisplay(rawAmount)}
-                    onChange={handleChange}
-                    onFocus={(e) => {
-                        const input = e.target
-                        setTimeout(() => input.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400)
-                    }}
-                    style={{
-                        flex: 1, border: 'none',
-                        background: 'transparent',
-                        fontSize: 20, fontWeight: 500,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#000',
-                        outline: 'none', padding: 0,
-                    }}
-                />
+                    <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        value={formatDisplay(rawAmount)}
+                        onChange={handleChange}
+                        onFocus={(e) => {
+                            const input = e.target
+                            setTimeout(() => input.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400)
+                        }}
+                        style={{
+                            flex: 1, border: 'none',
+                            background: 'transparent',
+                            fontSize: 20, fontWeight: 500,
+                            fontFamily: 'Nunito, sans-serif',
+                            color: '#000',
+                            outline: 'none', padding: 0,
+                        }}
+                    />
+                </div>
             </div>
 
             <p style={{

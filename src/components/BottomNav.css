@@ -34,7 +34,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    height: calc(180px + env(safe-area-inset-bottom));
+    height: calc(160px + env(safe-area-inset-bottom));
     pointer-events: none;
     z-index: 1;
 
@@ -71,8 +71,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    padding: 8px 12px;
-    transition: all 0.3s ease;
+    padding: 5px 12px;
     border-radius: 20px;
 }
 
@@ -81,9 +80,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
     color: #8b8b8b;
-    transition: all 0.3s ease;
 }
 
 .nav-tab.active .nav-icon {
@@ -101,7 +99,6 @@
     font-weight: 500;
     font-family: 'Nunito', sans-serif;
     color: #8b8b8b;
-    transition: all 0.3s ease;
     white-space: nowrap;
 }
 
@@ -118,7 +115,7 @@
     }
 
     .nav-tab {
-        padding: 6px 8px;
+        padding: 4px 8px;
     }
 
     .nav-logo {

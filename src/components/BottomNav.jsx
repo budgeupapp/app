@@ -1,9 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import {
-    CoinsHand,
-    MessageQuestionCircle,
-    Settings01
-} from "@untitledui/icons";
+import { Settings01 } from "@untitledui/icons";
 import { analytics, MONEY_ADVICE_EVENTS } from '../lib/analytics/index.js'
 import './BottomNav.css'
 
@@ -19,16 +15,10 @@ export default function BottomNav() {
             icon: 'logo' // Use logo image
         },
         {
-            key: 'transactions',
-            path: '/transactions',
-            label: 'Finances',
-            icon: <CoinsHand className="size-5" />
-        },
-        {
             key: '/support',
             path: '/support',
-            label: 'Support',
-            icon: <MessageQuestionCircle className="size-5" />
+            label: 'Money Advice',
+            icon: 'helpCircle'
         },
         {
             key: 'settings',
@@ -64,6 +54,12 @@ export default function BottomNav() {
                                     alt="Home"
                                     className="nav-logo"
                                 />
+                            ) : tab.icon === 'helpCircle' ? (
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                                </svg>
                             ) : (
                                 tab.icon
                             )}

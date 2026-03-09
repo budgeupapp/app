@@ -147,6 +147,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                     {/* ── Term start / end ── */}
                     <DateRow label="Start" value={term.start} onChange={v => updateDate('start', v)} />
                     <DateRow label="End" value={term.end} onChange={v => updateDate('end', v)} last />
+                    <div style={{ height: 6 }} />
 
                     {/* ── Breaks ── */}
                     {term.breaks.map((brk, i) => {
@@ -155,7 +156,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                             <div key={brk.id || i}>
                                 <div style={{
                                     background: 'rgba(243,243,243,0.8)',
-                                    margin: '5px 10px',
+                                    margin: '10px 10px',
                                     borderRadius: 10,
                                     overflow: 'hidden',
                                 }}>
@@ -184,6 +185,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                     </div>
                                     <DateRow label="Start" value={brk.start} onChange={v => updateBreak(i, 'start', v)} />
                                     <DateRow label="End" value={brk.end} onChange={v => updateBreak(i, 'end', v)} last />
+                                    <div style={{ height: 6 }} />
                                 </div>
                             </div>
                         )
@@ -277,7 +279,7 @@ export default function TermDatesStep({
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 8px', lineHeight: 1.3,
                 }}>
-                    University term dates
+                    University Term Dates
                 </h2>
                 <p style={{
                     fontSize: 15, fontFamily: 'Nunito, sans-serif',

@@ -5,22 +5,85 @@ import { analytics, MONEY_ADVICE_EVENTS } from '../lib/analytics/index.js'
 
 const { Title, Paragraph } = Typography
 
+const STORAGE_KEY = 'budgeup_onboarding_state'
+
+function getUniversity() {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY)
+        if (saved) {
+            const parsed = JSON.parse(saved)
+            return parsed.formData?.university || ''
+        }
+    } catch { /* ignore */ }
+    return ''
+}
+
 export default function MoneyAdviceScreen() {
-    const [loaded, setLoaded] = useState(false);
+    const [loaded, setLoaded] = useState(false)
+    const university = getUniversity()
+    const isBristol = university === 'University of Bristol'
+
+    if (!isBristol) {
+        return (
+            <div style={{
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+            }}>
+                <div style={{
+                    padding: '0px 20px',
+                    textAlign: 'center',
+                    paddingBottom: 200,
+                }}>
+                    <img
+                        src={MoneyAdviceSvg}
+                        alt="Money Advice"
+                        onLoad={() => setLoaded(true)}
+                        style={{
+                            width: '100%',
+                            maxWidth: 250,
+                            height: 180,
+                            marginBottom: 32,
+                            opacity: loaded ? 1 : 0,
+                            transition: 'opacity 0.2s ease-in-out',
+                            objectFit: 'contain'
+                        }}
+                    />
+                    <Title level={3} style={{
+                        fontSize: 24,
+                        fontWeight: 700,
+                        color: '#1a1a2e',
+                        marginBottom: 10,
+                        marginTop: 0
+                    }}>
+                        Coming Soon
+                    </Title>
+                    <Paragraph style={{
+                        fontSize: 14,
+                        color: '#666',
+                        lineHeight: 1.6,
+                        marginBottom: 0
+                    }}>
+                        We're working on bringing tailored financial support resources for {university || 'your university'}. Stay tuned!
+                    </Paragraph>
+                </div>
+            </div>
+        )
+    }
 
     return (
-        <div>
-            <div style={{ padding: '16px 20px' }}>
-                <Title level={2} style={{ margin: 0, fontSize: 20 }}>
-                    Financial Support
-                </Title>
-            </div>
-
-
+        <div style={{
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+        }}>
             {/* CONTENT */}
             <div style={{
                 padding: '0px 20px',
-                textAlign: 'center'
+                textAlign: 'center',
+                paddingBottom: 200,
             }}>
                 {/* SVG Illustration */}
                 <img
@@ -30,7 +93,7 @@ export default function MoneyAdviceScreen() {
                     style={{
                         width: '100%',
                         maxWidth: 250,
-                        height: 180, // reserve space to prevent layout shift
+                        height: 180,
                         marginBottom: 32,
                         opacity: loaded ? 1 : 0,
                         transition: 'opacity 0.2s ease-in-out',
@@ -94,6 +157,5 @@ export default function MoneyAdviceScreen() {
                 </Paragraph>
             </div>
         </div>
-
     )
 }
