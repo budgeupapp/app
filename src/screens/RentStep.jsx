@@ -129,12 +129,6 @@ export default function RentStep({
         }
         return ''
     })
-    useEffect(() => {
-        if (!rentAmount && rentAmount !== 0) {
-            setRawYearly('')
-            setRawPerPayment('')
-        }
-    }, [rentAmount])
     const rawAmount = tab === 'yearly' ? rawYearly : rawPerPayment
     const setRawAmount = tab === 'yearly' ? setRawYearly : setRawPerPayment
     const [datesExpanded, setDatesExpanded] = useState(!!rentNextDate)

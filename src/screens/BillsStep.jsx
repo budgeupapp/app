@@ -110,14 +110,22 @@ export default function BillsStep({
 }) {
     const tab = billsEntryMode || 'yearly'
 
-    const [rawAmount, setRawAmount] = useState(() => {
-        const n = parseFloat(String(billsAmount || '').replace(/,/g, ''))
-        return n ? String(n) : ''
+    const [rawYearly, setRawYearly] = useState(() => {
+        if (tab === 'yearly') {
+            const n = parseFloat(String(billsAmount || '').replace(/,/g, ''))
+            return n ? String(n) : ''
+        }
+        return ''
     })
-    useEffect(() => {
-        const n = parseFloat(String(billsAmount || '').replace(/,/g, ''))
-        setRawAmount(n ? String(n) : '')
-    }, [billsAmount])
+    const [rawPerPayment, setRawPerPayment] = useState(() => {
+        if (tab !== 'yearly') {
+            const n = parseFloat(String(billsAmount || '').replace(/,/g, ''))
+            return n ? String(n) : ''
+        }
+        return ''
+    })
+    const rawAmount = tab === 'yearly' ? rawYearly : rawPerPayment
+    const setRawAmount = tab === 'yearly' ? setRawYearly : setRawPerPayment
     const [datesExpanded, setDatesExpanded] = useState(!!billsNextDate)
     const [inputFocused, setInputFocused] = useState(false)
     const scrollRef = useRef(null)
@@ -206,7 +214,14 @@ export default function BillsStep({
                     ].map(({ id, label }) => (
                         <button
                             key={id}
-                            onClick={() => updateBillsEntryMode(id)}
+                            onClick={() => {
+                                updateBillsEntryMode(id)
+                                if (id === 'yearly') {
+                                    updateBillsAmount(rawYearly || '')
+                                } else {
+                                    updateBillsAmount(rawPerPayment || '')
+                                }
+                            }}
                             style={{
                                 flex: 1, height: 36, border: 'none',
                                 borderRadius: 10, cursor: 'pointer',

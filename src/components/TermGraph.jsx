@@ -137,8 +137,8 @@ export default function TermGraph({ terms, expandedTerm, balance, overdraft, eve
         ? (typeof balance === 'number' ? balance : (parseFloat(String(balance || '0').replace(/,/g, '')) || 0))
         : 0
 
-    // Split events into past and future (exclude removed and hidden from balance line)
-    const activeEvents = events.filter(e => !e.removed && !hiddenEventTypes.includes(e.editType))
+    // Split events into past and future (exclude removed from balance line)
+    const activeEvents = events.filter(e => !e.removed)
     const pastEvents = hasBalance ? activeEvents
         .filter(e => datePct(e.date) <= todayPct && e.amount > 0)
         .sort((a, b) => datePct(a.date) - datePct(b.date))
@@ -149,11 +149,11 @@ export default function TermGraph({ terms, expandedTerm, balance, overdraft, eve
         : []
     // Removed events (for showing as deleted dots on current card)
     const removedFutureEvents = hasBalance ? events
-        .filter(e => e.removed && !hiddenEventTypes.includes(e.editType) && datePct(e.date) > todayPct && e.amount > 0)
+        .filter(e => e.removed && datePct(e.date) > todayPct && e.amount > 0)
         .sort((a, b) => datePct(a.date) - datePct(b.date))
         : []
     const removedPastEvents = hasBalance ? events
-        .filter(e => e.removed && !hiddenEventTypes.includes(e.editType) && datePct(e.date) <= todayPct && e.amount > 0)
+        .filter(e => e.removed && datePct(e.date) <= todayPct && e.amount > 0)
         .sort((a, b) => datePct(a.date) - datePct(b.date))
         : []
 

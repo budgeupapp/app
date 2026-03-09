@@ -116,18 +116,26 @@ export default function OtherIncomeStep({
 }) {
     const tab = otherIncomeEntryMode || 'yearly'
 
-    const [rawAmount, setRawAmount] = useState(() => {
-        const n = parseFloat(String(otherIncomeAmount || '').replace(/,/g, ''))
-        return n ? String(n) : ''
+    const [rawYearly, setRawYearly] = useState(() => {
+        if (tab === 'yearly') {
+            const n = parseFloat(String(otherIncomeAmount || '').replace(/,/g, ''))
+            return n ? String(n) : ''
+        }
+        return ''
     })
+    const [rawPerPayment, setRawPerPayment] = useState(() => {
+        if (tab !== 'yearly') {
+            const n = parseFloat(String(otherIncomeAmount || '').replace(/,/g, ''))
+            return n ? String(n) : ''
+        }
+        return ''
+    })
+    const rawAmount = tab === 'yearly' ? rawYearly : rawPerPayment
+    const setRawAmount = tab === 'yearly' ? setRawYearly : setRawPerPayment
     const [rawNonTermAmount, setRawNonTermAmount] = useState(() => {
         const n = parseFloat(String(otherIncomeNonTermAmount || '').replace(/,/g, ''))
         return n ? String(n) : ''
     })
-    useEffect(() => {
-        const n = parseFloat(String(otherIncomeAmount || '').replace(/,/g, ''))
-        setRawAmount(n ? String(n) : '')
-    }, [otherIncomeAmount])
     useEffect(() => {
         const n = parseFloat(String(otherIncomeNonTermAmount || '').replace(/,/g, ''))
         setRawNonTermAmount(n ? String(n) : '')
@@ -252,7 +260,14 @@ export default function OtherIncomeStep({
                     ].map(({ id, label }) => (
                         <button
                             key={id}
-                            onClick={() => updateOtherIncomeEntryMode(id)}
+                            onClick={() => {
+                                updateOtherIncomeEntryMode(id)
+                                if (id === 'yearly') {
+                                    updateOtherIncomeAmount(rawYearly || '')
+                                } else {
+                                    updateOtherIncomeAmount(rawPerPayment || '')
+                                }
+                            }}
                             style={{
                                 flex: 1, height: 36, border: 'none',
                                 borderRadius: 10, cursor: 'pointer',

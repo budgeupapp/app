@@ -128,12 +128,6 @@ export default function SavingsInvestmentsStep({
         }
         return ''
     })
-    useEffect(() => {
-        if (!savingsInvAmount && savingsInvAmount !== 0) {
-            setRawYearly('')
-            setRawPerPayment('')
-        }
-    }, [savingsInvAmount])
     const rawAmount = tab === 'yearly' ? rawYearly : rawPerPayment
     const setRawAmount = tab === 'yearly' ? setRawYearly : setRawPerPayment
     const [datesExpanded, setDatesExpanded] = useState(!!savingsInvNextDate)

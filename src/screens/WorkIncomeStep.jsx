@@ -117,18 +117,26 @@ export default function WorkIncomeStep({
 }) {
     const tab = workEntryMode || 'yearly'
 
-    const [rawAmount, setRawAmount] = useState(() => {
-        const n = parseFloat(String(workAmount || '').replace(/,/g, ''))
-        return n ? String(n) : ''
+    const [rawYearly, setRawYearly] = useState(() => {
+        if (tab === 'yearly') {
+            const n = parseFloat(String(workAmount || '').replace(/,/g, ''))
+            return n ? String(n) : ''
+        }
+        return ''
     })
+    const [rawPerPayment, setRawPerPayment] = useState(() => {
+        if (tab !== 'yearly') {
+            const n = parseFloat(String(workAmount || '').replace(/,/g, ''))
+            return n ? String(n) : ''
+        }
+        return ''
+    })
+    const rawAmount = tab === 'yearly' ? rawYearly : rawPerPayment
+    const setRawAmount = tab === 'yearly' ? setRawYearly : setRawPerPayment
     const [rawNonTermAmount, setRawNonTermAmount] = useState(() => {
         const n = parseFloat(String(workNonTermAmount || '').replace(/,/g, ''))
         return n ? String(n) : ''
     })
-    useEffect(() => {
-        const n = parseFloat(String(workAmount || '').replace(/,/g, ''))
-        setRawAmount(n ? String(n) : '')
-    }, [workAmount])
     useEffect(() => {
         const n = parseFloat(String(workNonTermAmount || '').replace(/,/g, ''))
         setRawNonTermAmount(n ? String(n) : '')
@@ -227,7 +235,14 @@ export default function WorkIncomeStep({
                     ].map(({ id, label }) => (
                         <button
                             key={id}
-                            onClick={() => updateWorkEntryMode(id)}
+                            onClick={() => {
+                                updateWorkEntryMode(id)
+                                if (id === 'yearly') {
+                                    updateWorkAmount(rawYearly || '')
+                                } else {
+                                    updateWorkAmount(rawPerPayment || '')
+                                }
+                            }}
                             style={{
                                 flex: 1, height: 36, border: 'none',
                                 borderRadius: 10, cursor: 'pointer',

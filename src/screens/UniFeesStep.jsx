@@ -110,14 +110,22 @@ export default function UniFeesStep({
     const tab = uniFeesEntryMode || 'yearly'
     const freq = uniFeesFrequency || 'yearly'
 
-    const [rawAmount, setRawAmount] = useState(() => {
-        const n = parseFloat(String(uniFeesAmount || '').replace(/,/g, ''))
-        return n ? String(n) : '9250'
+    const [rawYearly, setRawYearly] = useState(() => {
+        if (tab === 'yearly') {
+            const n = parseFloat(String(uniFeesAmount || '').replace(/,/g, ''))
+            return n ? String(n) : '9250'
+        }
+        return ''
     })
-    useEffect(() => {
-        const n = parseFloat(String(uniFeesAmount || '').replace(/,/g, ''))
-        setRawAmount(n ? String(n) : '')
-    }, [uniFeesAmount])
+    const [rawPerPayment, setRawPerPayment] = useState(() => {
+        if (tab !== 'yearly') {
+            const n = parseFloat(String(uniFeesAmount || '').replace(/,/g, ''))
+            return n ? String(n) : ''
+        }
+        return ''
+    })
+    const rawAmount = tab === 'yearly' ? rawYearly : rawPerPayment
+    const setRawAmount = tab === 'yearly' ? setRawYearly : setRawPerPayment
     const [datesExpanded, setDatesExpanded] = useState(!!uniFeesNextDate)
     const [inputFocused, setInputFocused] = useState(false)
     const scrollRef = useRef(null)
@@ -204,7 +212,14 @@ export default function UniFeesStep({
                     ].map(({ id, label }) => (
                         <button
                             key={id}
-                            onClick={() => updateUniFeesEntryMode(id)}
+                            onClick={() => {
+                                updateUniFeesEntryMode(id)
+                                if (id === 'yearly') {
+                                    updateUniFeesAmount(rawYearly || '')
+                                } else {
+                                    updateUniFeesAmount(rawPerPayment || '')
+                                }
+                            }}
                             style={{
                                 flex: 1, height: 36, border: 'none',
                                 borderRadius: 10, cursor: 'pointer',
