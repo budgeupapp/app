@@ -66,7 +66,6 @@ export default function BankBalanceStep({ balance, updateBalance }) {
             {/* Amount input */}
             <div style={{
                 display: 'flex', alignItems: 'center', gap: 10,
-                maxWidth: 200,
             }}>
                 <button
                     onClick={toggleSign}
@@ -88,7 +87,7 @@ export default function BankBalanceStep({ balance, updateBalance }) {
                     display: 'flex', alignItems: 'center',
                     borderRadius: 10, border: '1px solid #e8e8e8',
                     padding: '0 14px', height: 50, gap: 6,
-                    flex: 1,
+                    width: 160,
                 }}>
                     <span style={{
                         fontSize: 20, fontWeight: 600,
@@ -101,10 +100,7 @@ export default function BankBalanceStep({ balance, updateBalance }) {
                         placeholder="0.00"
                         value={formatDisplay(rawAmount)}
                         onChange={handleChange}
-                        onFocus={(e) => {
-                            const input = e.target
-                            setTimeout(() => input.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400)
-                        }}
+                        onFocus={() => {}}
                         style={{
                             flex: 1, border: 'none',
                             background: 'transparent',

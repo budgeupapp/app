@@ -425,7 +425,7 @@ function buildGraphEvents(formData) {
     if (formData.expenseSources?.includes('savings_investments')) {
         const savAmt = parseFloat(String(formData.savingsInvAmount || '0').replace(/,/g, ''))
         if (savAmt > 0 && formData.savingsInvFrequency) {
-            const savMode = formData.savingsInvEntryMode || 'per_payment'
+            const savMode = formData.savingsInvEntryMode || 'yearly'
             const freq = formData.savingsInvFrequency
             const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
             if (savMode === 'yearly') {
@@ -474,6 +474,61 @@ function buildGraphEvents(formData) {
                     const qDates = formData.savingsInvQuarterlyDates || {}
                     const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
                     for (let i = 0; i < 4; i++) { events.push({ date: qDates[i] || QD[i], amount: savAmt, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' }) }
+                }
+            }
+        }
+    }
+
+    // Other expense
+    if (formData.expenseSources?.includes('other_expense')) {
+        const otherExpAmt = parseFloat(String(formData.otherExpenseAmount || '0').replace(/,/g, ''))
+        const freq = formData.otherExpenseFrequency
+        const lbl = formData.otherExpenseLabel || 'Other Expense'
+        const otherExpMode = formData.otherExpenseEntryMode || 'yearly'
+        if (otherExpAmt > 0 && freq) {
+            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+            if (otherExpMode === 'yearly') {
+                if (freq === 'weekly') {
+                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    let count = 0; let tmp = new Date(d)
+                    while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 86400000) }
+                    const amounts = distributeEvenly(otherExpAmt, count); let idx = 0
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: lbl, sublabel: 'Weekly', editType: 'otherExpense' }); d = new Date(d.getTime() + 7 * 86400000) }
+                } else if (freq === 'monthly') {
+                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    const dom = d.getDate()
+                    let mCount = 0; let mt = new Date(d)
+                    while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dom) }
+                    const amounts = distributeEvenly(otherExpAmt, mCount); let idx = 0
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: 'otherExpense' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                } else if (freq === 'termly') {
+                    const overrides = formData.otherExpenseTermDates || {}
+                    const amounts = distributeEvenly(otherExpAmt, terms.length)
+                    for (let ti = 0; ti < terms.length; ti++) { const term = terms[ti]; const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: amounts[ti], type: 'expense', label: lbl, sublabel: term.name, editType: 'otherExpense' }) }
+                } else if (freq === 'yearly') {
+                    events.push({ date: formData.otherExpenseNextDate || '2025-09-01', amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: 'otherExpense' })
+                }
+            } else {
+                if (freq === 'weekly') {
+                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Weekly', editType: 'otherExpense' }); d = new Date(d.getTime() + 7 * 86400000) }
+                } else if (freq === 'monthly') {
+                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    const dom = d.getDate()
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: 'otherExpense' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                } else if (freq === 'termly') {
+                    const overrides = formData.otherExpenseTermDates || {}
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherExpAmt, type: 'expense', label: lbl, sublabel: term.name, editType: 'otherExpense' }) }
+                } else if (freq === 'yearly') {
+                    events.push({ date: formData.otherExpenseNextDate || '2025-09-01', amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: 'otherExpense' })
                 }
             }
         }
@@ -1186,11 +1241,11 @@ export default function Dashboard() {
                         flex: 1, borderRadius: 10,
                         cursor: 'pointer',
                         background: activeTab === 'variable' ? '#fff' : '#f3f3f3',
-                        borderTop: activeTab === 'variable' ? '2px solid #7eb6b3' : '0.25px solid #c6c6c6',
-                        borderLeft: activeTab === 'variable' ? '0.25px solid #7eb6b3' : '0.25px solid #c6c6c6',
-                        borderRight: activeTab === 'variable' ? '0.25px solid #7eb6b3' : '0.25px solid #c6c6c6',
-                        borderBottom: activeTab === 'variable' ? '0.25px solid #7eb6b3' : '0.25px solid #c6c6c6',
-                        boxShadow: activeTab === 'variable' ? '0 4px 10px rgba(20,123,117,0.1)' : 'none',
+                        borderTop: activeTab === 'variable' ? '2px solid #EC8C17' : '0.25px solid #c6c6c6',
+                        borderLeft: activeTab === 'variable' ? '0.25px solid #EC8C17' : '0.25px solid #c6c6c6',
+                        borderRight: activeTab === 'variable' ? '0.25px solid #EC8C17' : '0.25px solid #c6c6c6',
+                        borderBottom: activeTab === 'variable' ? '0.25px solid #EC8C17' : '0.25px solid #c6c6c6',
+                        boxShadow: activeTab === 'variable' ? '0 4px 10px rgba(236,140,23,0.1)' : 'none',
                         padding: '10px 12px',
                         overflow: 'hidden',
                     }}>

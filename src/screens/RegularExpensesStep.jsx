@@ -18,7 +18,7 @@ const EXPENSE_SOURCES = [
     { id: 'bills', label: 'Bills & Utilities', color: '#e06470', icon: expenseBills, panelId: 'bills' },
     { id: 'uni_fees', label: 'University Fees', color: '#EC8C17', icon: expenseUnifees, panelId: 'uniFees' },
     { id: 'savings_investments', label: 'Savings & Investments', color: '#147b75', icon: expenseSavings, panelId: 'savingsInvestments' },
-    { id: 'other_expense', label: 'Other', color: '#9b8ec4', icon: iconOtherExpense, panelId: null },
+    { id: 'other_expense', label: 'Other', color: '#9b8ec4', icon: iconOtherExpense, panelId: 'otherExpense' },
 ]
 
 export default function RegularExpensesStep({ expenseSources = [], updateExpenseSources }) {

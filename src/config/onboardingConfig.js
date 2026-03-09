@@ -77,6 +77,11 @@ export const STEPS = [
         subtitle: 'Include any regular contributions to savings or investments.'
     },
     {
+        id: 'otherExpense',
+        heading: 'What other expenses do you have?',
+        subtitle: 'Include any other regular expenses not listed above.'
+    },
+    {
         id: 'oneOffItems',
         heading: 'One-off Items',
         subtitle: 'Add any one-off income or expenses you\'re expecting.'
@@ -326,10 +331,17 @@ export const INITIAL_FORM_DATA = {
 
     savingsInvAmount: '',
     savingsInvFrequency: 'monthly',
-    savingsInvEntryMode: 'per_payment',
+    savingsInvEntryMode: 'yearly',
     savingsInvNextDate: '',
     savingsInvTermDates: {},
     savingsInvQuarterlyDates: {},
+
+    otherExpenseAmount: '',
+    otherExpenseFrequency: 'monthly',
+    otherExpenseEntryMode: 'yearly',
+    otherExpenseLabel: '',
+    otherExpenseNextDate: '',
+    otherExpenseTermDates: {},
 
     bursary: null,
     bursaryAmount: '',

@@ -39,7 +39,7 @@ export default function OverdraftStep({ overdraft, updateOverdraft }) {
                 fontSize: 15, fontFamily: 'Nunito, sans-serif',
                 color: '#5e5e5e', margin: '0 0 24px', lineHeight: 1.5,
             }}>
-                What's your overdraft limit? This helps us show when you might dip into it. Leave blank if you don't have one.
+                What’s your overdraft limit? Leave blank if you don’t have one.
             </p>
 
             <div style={{
@@ -59,10 +59,7 @@ export default function OverdraftStep({ overdraft, updateOverdraft }) {
                     placeholder="0"
                     value={formatDisplay(rawAmount)}
                     onChange={handleChange}
-                    onFocus={(e) => {
-                        const input = e.target
-                        setTimeout(() => input.scrollIntoView({ behavior: 'smooth', block: 'start' }), 400)
-                    }}
+                    onFocus={() => { }}
                     style={{
                         flex: 1, border: 'none',
                         background: 'transparent',

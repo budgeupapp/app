@@ -17,6 +17,7 @@ import RegularExpensesStep from './RegularExpensesStep'
 import BillsStep from './BillsStep'
 import UniFeesStep from './UniFeesStep'
 import SavingsInvestmentsStep from './SavingsInvestmentsStep'
+import OtherExpenseStep from './OtherExpenseStep'
 import OverdraftStep from './OverdraftStep'
 import OneOffItemsStep from './OneOffItemsStep'
 import WeeklySpendStep from './WeeklySpendStep'
@@ -741,7 +742,7 @@ function buildGraphEvents(formData) {
     if (formData.expenseSources?.includes('savings_investments')) {
         const savAmt = parseFloat(String(formData.savingsInvAmount || '0').replace(/,/g, ''))
         if (savAmt > 0 && formData.savingsInvFrequency) {
-            const savMode = formData.savingsInvEntryMode || 'per_payment'
+            const savMode = formData.savingsInvEntryMode || 'yearly'
             const freq = formData.savingsInvFrequency
             const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
             if (savMode === 'yearly') {
@@ -819,6 +820,86 @@ function buildGraphEvents(formData) {
                         const date = qDates[i] || QUARTER_DEFAULTS[i]
                         events.push({ date, amount: savAmt, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' })
                     }
+                }
+            }
+        }
+    }
+
+    // Other expense events
+    if (formData.expenseSources?.includes('other_expense')) {
+        const otherExpAmt = parseFloat(String(formData.otherExpenseAmount || '0').replace(/,/g, ''))
+        const freq = formData.otherExpenseFrequency
+        const lbl = formData.otherExpenseLabel || 'Other Expense'
+        const otherExpMode = formData.otherExpenseEntryMode || 'yearly'
+
+        if (otherExpAmt > 0 && freq) {
+            const ayStart = new Date(2025, 8, 1)
+            const ayEnd = new Date(2026, 7, 31)
+
+            if (otherExpMode === 'yearly') {
+                if (freq === 'weekly') {
+                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    let count = 0; let tmp = new Date(d)
+                    while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 86400000) }
+                    const amounts = distributeEvenly(otherExpAmt, count); let idx = 0
+                    while (d <= ayEnd) {
+                        events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: lbl, sublabel: 'Weekly', editType: 'otherExpense' })
+                        d = new Date(d.getTime() + 7 * 86400000)
+                    }
+                } else if (freq === 'monthly') {
+                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    const dayOfMonth = d.getDate()
+                    let mCount = 0; let mt = new Date(d)
+                    while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dayOfMonth) }
+                    const amounts = distributeEvenly(otherExpAmt, mCount); let idx = 0
+                    while (d <= ayEnd) {
+                        events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: 'otherExpense' })
+                        d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
+                    }
+                } else if (freq === 'termly') {
+                    const overrides = formData.otherExpenseTermDates || {}
+                    const amounts = distributeEvenly(otherExpAmt, terms.length)
+                    for (let ti = 0; ti < terms.length; ti++) {
+                        const term = terms[ti]
+                        const date = overrides[term.id] || term.start
+                        if (!date) continue
+                        events.push({ date, amount: amounts[ti], type: 'expense', label: lbl, sublabel: term.name, editType: 'otherExpense' })
+                    }
+                } else if (freq === 'yearly') {
+                    events.push({ date: formData.otherExpenseNextDate || '2025-09-01', amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: 'otherExpense' })
+                }
+            } else {
+                // Per payment mode
+                if (freq === 'weekly') {
+                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) {
+                        events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Weekly', editType: 'otherExpense' })
+                        d = new Date(d.getTime() + 7 * 86400000)
+                    }
+                } else if (freq === 'monthly') {
+                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    const dayOfMonth = d.getDate()
+                    while (d <= ayEnd) {
+                        events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: 'otherExpense' })
+                        d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
+                    }
+                } else if (freq === 'termly') {
+                    const overrides = formData.otherExpenseTermDates || {}
+                    for (const term of terms) {
+                        const date = overrides[term.id] || term.start
+                        if (!date) continue
+                        events.push({ date, amount: otherExpAmt, type: 'expense', label: lbl, sublabel: term.name, editType: 'otherExpense' })
+                    }
+                } else if (freq === 'yearly') {
+                    events.push({ date: formData.otherExpenseNextDate || '2025-09-01', amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: 'otherExpense' })
                 }
             }
         }
@@ -1378,7 +1459,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const [graphAnimated, setGraphAnimated] = useState(() => {
         try {
             const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
-            return ['termDates', 'balance', 'overdraft', 'regularIncome', 'maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome', 'rent', 'regularExpenses', 'bills', 'uniFees', 'savingsInvestments', 'oneOffItems', 'weeklySpend'].includes(saved.currentStepId)
+            return ['termDates', 'balance', 'overdraft', 'regularIncome', 'maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome', 'rent', 'regularExpenses', 'bills', 'uniFees', 'savingsInvestments', 'otherExpense', 'oneOffItems', 'weeklySpend'].includes(saved.currentStepId)
         } catch { return false }
     })
     const buildPanelSteps = (sources, expSources) => {
@@ -1395,6 +1476,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         if (e.includes('bills')) panels.push('bills')
         if (e.includes('uni_fees')) panels.push('uniFees')
         if (e.includes('savings_investments')) panels.push('savingsInvestments')
+        if (e.includes('other_expense')) panels.push('otherExpense')
         panels.push('oneOffItems')
         panels.push('weeklySpend')
         return panels
@@ -1585,6 +1667,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         bills: { billsAmount: '', billsFrequency: 'monthly', billsEntryMode: 'yearly', billsNextDate: '', billsTermDates: {} },
         uniFees: { uniFeesAmount: '9250', uniFeesFrequency: 'yearly', uniFeesEntryMode: 'yearly', uniFeesNextDate: '2025-10-27', uniFeesTermDates: {} },
         savingsInvestments: { savingsInvAmount: '', savingsInvFrequency: 'monthly', savingsInvEntryMode: 'per_payment', savingsInvNextDate: '', savingsInvTermDates: {}, savingsInvQuarterlyDates: {} },
+        otherExpense: { otherExpenseAmount: '', otherExpenseFrequency: 'monthly', otherExpenseEntryMode: 'yearly', otherExpenseLabel: '', otherExpenseNextDate: '', otherExpenseTermDates: {} },
     }
 
     const resetPanel = (panelId) => {
@@ -1675,6 +1758,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 return !formData.uniFeesAmount
             case 'savingsInvestments':
                 return !formData.savingsInvAmount
+            case 'otherExpense':
+                return !formData.otherExpenseAmount
             case 'weeklySpend':
                 return !formData.weeklySpend
             default:
@@ -1811,6 +1896,15 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 }
                 break
 
+            case 'otherExpense':
+                if (!formData.otherExpenseAmount) {
+                    return 'Please enter an amount'
+                }
+                if (!formData.otherExpenseFrequency) {
+                    return 'Please select a frequency'
+                }
+                break
+
         }
 
         return null
@@ -1907,6 +2001,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         bills: { key: 'expenseSources', value: 'bills' },
         uniFees: { key: 'expenseSources', value: 'uni_fees' },
         savingsInvestments: { key: 'expenseSources', value: 'savings_investments' },
+        otherExpense: { key: 'expenseSources', value: 'other_expense' },
     }
 
     const handlePanelSkip = () => {
@@ -2124,6 +2219,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         bills: 'Confirm Bills',
         uniFees: 'Confirm University Fees',
         savingsInvestments: 'Confirm Savings & Investments',
+        otherExpense: 'Confirm Other Expense',
         oneOffItems: 'Confirm One-off Items',
         weeklySpend: 'Confirm Weekly Spend',
     }
@@ -2182,7 +2278,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         hiddenEventTypes={(() => {
                             const panelId = PANEL_STEPS[activePanel]
                             const incomeEditTypes = ['loan', 'bursary', 'family', 'work', 'otherIncome']
-                            const expenseEditTypes = ['rent', 'bills', 'uniFees', 'savingsInv', 'weeklySpend']
+                            const expenseEditTypes = ['rent', 'bills', 'uniFees', 'savingsInv', 'otherExpense', 'weeklySpend']
                             const allTypes = [...incomeEditTypes, ...expenseEditTypes, 'oneOff']
                             // On regularIncome: hide all expense types
                             if (panelId === 'regularIncome') return expenseEditTypes
@@ -2195,6 +2291,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     otherIncome: 'otherIncome',
                                     rent: 'rent', bills: 'bills', uniFees: 'uniFees',
                                     savingsInvestments: 'savingsInv',
+                                    otherExpense: 'otherExpense',
                                     oneOffItems: 'oneOff',
                                     weeklySpend: 'weeklySpend',
                                 }
@@ -2247,11 +2344,13 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     {/* Income/expense indicator strip */}
                     {(() => {
                         const panelId = PANEL_STEPS[activePanel]
-                        const incomeTypes = ['maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
-                        const expenseTypes = ['rent', 'regularExpenses', 'bills', 'uniFees', 'savingsInvestments']
+                        const incomeTypes = ['regularIncome', 'maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
+                        const expenseTypes = ['rent', 'regularExpenses', 'bills', 'uniFees', 'savingsInvestments', 'otherExpense']
+                        const otherTypes = ['oneOffItems', 'weeklySpend']
                         const stripColor = incomeTypes.includes(panelId) ? '#147b75'
                             : expenseTypes.includes(panelId) ? '#e06470'
-                                : null
+                                : otherTypes.includes(panelId) ? '#EC8C17'
+                                    : null
                         return stripColor ? (
                             <div style={{
                                 height: 4,
@@ -2269,6 +2368,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             <div key={panelId} style={{
                                 position: 'absolute', inset: 0,
                                 display: 'flex', flexDirection: 'column',
+                                overflow: 'hidden',
                                 transform: i < activePanel ? 'translateY(-100%)'
                                     : i > activePanel ? 'translateY(100%)'
                                         : 'translateY(0)',
@@ -2302,12 +2402,20 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateIncomeSources={(val) => updateField('incomeSources', val)}
                                     />
                                 )}
-                                {!['termDates', 'balance', 'overdraft', 'regularIncome', 'regularExpenses', 'bills', 'savingsInvestments'].includes(panelId) && new Set(buildGraphEvents(formData).filter(e => !e.removed).map(e => e.editType)).size >= 2 && (
+                                {!['termDates', 'balance', 'overdraft', 'regularIncome', 'regularExpenses', 'savingsInvestments', 'otherExpense'].includes(panelId) && new Set(buildGraphEvents(formData).filter(e => !e.removed).map(e => e.editType)).size >= 2 && (() => {
+                                    const incPanels = ['maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
+                                    const expPanels = ['rent', 'bills', 'uniFees']
+                                    const otherPanels = ['oneOffItems', 'weeklySpend']
+                                    const btnColor = incPanels.includes(panelId) ? '#147b75'
+                                        : expPanels.includes(panelId) ? '#e06470'
+                                            : otherPanels.includes(panelId) ? '#EC8C17'
+                                                : '#147b75'
+                                    return (
                                     <button
                                         onClick={() => setShowAllEvents(s => !s)}
                                         style={{
                                             position: 'absolute', top: 22, right: 24, zIndex: 10,
-                                            background: showAllEvents ? '#147b75' : '#f3f3f3',
+                                            background: showAllEvents ? btnColor : '#f3f3f3',
                                             border: 'none', borderRadius: 20, cursor: 'pointer',
                                             padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 5,
                                             transition: 'background 0.2s ease',
@@ -2335,7 +2443,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             Show all
                                         </span>
                                     </button>
-                                )}
+                                    )
+                                })()}
                                 {panelId === 'maintenanceLoan' && (
                                     <MaintenanceLoanStep
                                         loanAmount={formData.loanAmount}
@@ -2432,7 +2541,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateRentFrequency={(val) => updateField('rentFrequency', val)}
                                         rentNextDate={formData.rentNextDate}
                                         updateRentNextDate={(val) => updateField('rentNextDate', val)}
-                                        rentEntryMode={formData.rentEntryMode || 'per_payment'}
+                                        rentEntryMode={formData.rentEntryMode || 'yearly'}
                                         updateRentEntryMode={(val) => updateField('rentEntryMode', val)}
                                         terms={formData.termDates?.terms || []}
                                         rentTermDates={formData.rentTermDates || {}}
@@ -2493,6 +2602,23 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateSavingsInvTermDates={(val) => updateField('savingsInvTermDates', val)}
                                         savingsInvQuarterlyDates={formData.savingsInvQuarterlyDates || {}}
                                         updateSavingsInvQuarterlyDates={(val) => updateField('savingsInvQuarterlyDates', val)}
+                                    />
+                                )}
+                                {panelId === 'otherExpense' && (
+                                    <OtherExpenseStep
+                                        otherExpenseAmount={formData.otherExpenseAmount}
+                                        updateOtherExpenseAmount={(val) => updateField('otherExpenseAmount', val)}
+                                        otherExpenseFrequency={formData.otherExpenseFrequency}
+                                        updateOtherExpenseFrequency={(val) => updateField('otherExpenseFrequency', val)}
+                                        otherExpenseLabel={formData.otherExpenseLabel}
+                                        updateOtherExpenseLabel={(val) => updateField('otherExpenseLabel', val)}
+                                        otherExpenseNextDate={formData.otherExpenseNextDate}
+                                        updateOtherExpenseNextDate={(val) => updateField('otherExpenseNextDate', val)}
+                                        otherExpenseEntryMode={formData.otherExpenseEntryMode}
+                                        updateOtherExpenseEntryMode={(val) => updateField('otherExpenseEntryMode', val)}
+                                        terms={formData.termDates?.terms || []}
+                                        otherExpenseTermDates={formData.otherExpenseTermDates || {}}
+                                        updateOtherExpenseTermDates={(val) => updateField('otherExpenseTermDates', val)}
                                     />
                                 )}
                                 {panelId === 'oneOffItems' && (
