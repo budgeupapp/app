@@ -32,6 +32,11 @@ export const STEPS = [
         subtitle: "If you're not 100% sure, your best estimate will do!"
     },
     {
+        id: 'bursary',
+        heading: 'Do you receive any bursaries?',
+        subtitle: 'Include university bursaries or grants.'
+    },
+    {
         id: 'familyFriends',
         heading: 'How much do you receive from family and friends?',
         subtitle: 'Include any regular financial support from family or friends.'
@@ -269,14 +274,14 @@ export const INITIAL_TERM_DATES = {
             name: 'Term 1',
             start: '2025-09-22',
             end: '2025-12-12',
-            breaks: [{ id: 'b1', start: '2025-10-27', end: '2025-11-01' }]
+            breaks: [{ id: 'b1', start: '2025-10-27', end: '2025-10-31' }]
         },
         {
             id: 'term2',
             name: 'Term 2',
             start: '2026-01-19',
             end: '2026-05-01',
-            breaks: []
+            breaks: [{ id: 'b2', start: '2026-02-23', end: '2026-02-27' }]
         }
     ]
 }
