@@ -221,70 +221,66 @@ function buildGraphEvents(formData) {
 
     // Family/friends income events
     if (formData.incomeSources?.includes('family_friends')) {
-        const famAmt = parseFloat(String(formData.familyAmount || '0').replace(/,/g, ''))
-        const famNonTermAmt = formData.familyVariesByTerm ? parseFloat(String(formData.familyNonTermAmount || '0').replace(/,/g, '')) : famAmt
+        const famAmtRaw = parseFloat(String(formData.familyAmount || '0').replace(/,/g, ''))
         const freq = formData.familyFrequency
-        if ((famAmt > 0 || famNonTermAmt > 0) && freq) {
-            const ayStart = new Date(2025, 8, 1)
-            const ayEnd = new Date(2026, 7, 31)
-            const getFamAmt = (dateStr) => formData.familyVariesByTerm ? (isInTerm(dateStr, terms) ? famAmt : famNonTermAmt) : famAmt
-            if (freq === 'weekly') {
-                let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
-                while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                while (d <= ayEnd) {
-                    const dateStr = d.toISOString().split('T')[0]
-                    const amt = getFamAmt(dateStr)
-                    if (amt > 0) {
-                        events.push({
-                            date: dateStr, amount: amt, type: 'income',
-                            label: 'Family/Friends', sublabel: 'Weekly support',
-                            editType: 'family',
-                        })
-                    }
-                    d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
+        const famAmtPeriod = formData.familyAmountPeriod || freq || 'monthly'
+        const isYearlyInput = famAmtPeriod === 'yearly'
+        const onlyTermTime = isYearlyInput && formData.familyVariesByTerm
+        if (famAmtRaw > 0 && freq) {
+            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
+            const yearlyTotal = famAmtRaw * (YM[famAmtPeriod] || 1)
+            if (isYearlyInput) {
+                const allDates = []
+                if (freq === 'weekly') {
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly support' }); d = new Date(d.getTime() + 7 * 86400000) }
+                } else if (freq === 'monthly') {
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    const dom = d.getDate()
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                } else if (freq === 'termly') {
+                    const overrides = formData.familyTermDates || {}
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} support` }) }
+                } else if (freq === 'quarterly') {
+                    const qDates = formData.familyQuarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} support` })
+                } else if (freq === 'yearly') {
+                    allDates.push({ date: formData.familyNextDate || '2025-09-01', sublabel: 'Yearly support' })
                 }
-            } else if (freq === 'monthly') {
-                let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                const dayOfMonth = d.getDate()
-                while (d <= ayEnd) {
-                    const dateStr = d.toISOString().split('T')[0]
-                    const amt = getFamAmt(dateStr)
-                    if (amt > 0) {
-                        events.push({
-                            date: dateStr, amount: amt, type: 'income',
-                            label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`,
-                            editType: 'family',
-                        })
+                const dates = onlyTermTime ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
+                if (dates.length > 0) {
+                    const amounts = distributeEvenly(yearlyTotal, dates.length)
+                    for (let i = 0; i < dates.length; i++) {
+                        events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: 'Family/Friends', sublabel: dates[i].sublabel, editType: 'family' })
                     }
-                    d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
                 }
-            } else if (freq === 'termly') {
-                const overrides = formData.familyTermDates || {}
-                for (const term of terms) {
-                    const date = overrides[term.id] || term.start
-                    if (!date) continue
-                    events.push({
-                        date, amount: famAmt, type: 'income',
-                        label: 'Family/Friends', sublabel: `${term.name} support`,
-                        editType: 'family',
-                    })
-                }
-            } else if (freq === 'quarterly') {
-                const qDates = formData.familyQuarterlyDates || {}
-                const QUARTER_DEFAULTS = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
-                for (let i = 0; i < 4; i++) {
-                    const date = qDates[i] || QUARTER_DEFAULTS[i]
-                    const amt = getFamAmt(date)
-                    if (amt > 0) {
-                        events.push({
-                            date, amount: amt, type: 'income',
-                            label: 'Family/Friends', sublabel: `Q${i + 1} support`,
-                            editType: 'family',
-                        })
-                    }
+            } else {
+                const famNonTermAmt = formData.familyVariesByTerm ? parseFloat(String(formData.familyNonTermAmount || '0').replace(/,/g, '')) : famAmtRaw
+                const getFamAmt = (ds) => formData.familyVariesByTerm ? (isInTerm(ds, terms) ? famAmtRaw : famNonTermAmt) : famAmtRaw
+                if (freq === 'weekly') {
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
+                } else if (freq === 'monthly') {
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    const dom = d.getDate()
+                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                } else if (freq === 'termly') {
+                    const overrides = formData.familyTermDates || {}
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: famAmtRaw, type: 'income', label: 'Family/Friends', sublabel: `${term.name} support`, editType: 'family' }) }
+                } else if (freq === 'quarterly') {
+                    const qDates = formData.familyQuarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getFamAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: 'Family/Friends', sublabel: `Q${i + 1} support`, editType: 'family' }) }
                 }
             }
         }
@@ -293,129 +289,70 @@ function buildGraphEvents(formData) {
     // Work events
     if (formData.incomeSources?.includes('work')) {
         const workAmt = parseFloat(String(formData.workAmount || '0').replace(/,/g, ''))
-        const workNonTermAmt = formData.workVariesByTerm ? parseFloat(String(formData.workNonTermAmount || '0').replace(/,/g, '')) : workAmt
-        const workMode = formData.workEntryMode || 'yearly'
+        const freq = formData.workFrequency || 'monthly'
+        const workAmtPeriod = formData.workAmountPeriod || (formData.workEntryMode === 'yearly' ? 'yearly' : freq)
+        const isYearlyWork = workAmtPeriod === 'yearly'
+        const onlyTermTimeWork = isYearlyWork && formData.workVariesByTerm
 
-        if (workAmt > 0) {
+        if (workAmt > 0 && freq) {
             const ayStart = new Date(2025, 8, 1)
             const ayEnd = new Date(2026, 7, 31)
+            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
+            const yearlyWork = workAmt * (YM[workAmtPeriod] || 1)
 
-            if (workMode === 'yearly') {
-                // Year total: distribute based on chosen frequency
-                const freq = formData.workFrequency || 'monthly'
+            if (isYearlyWork) {
+                const allDates = []
                 if (freq === 'weekly') {
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    let count = 0
-                    let tmp = new Date(d)
-                    while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 24 * 60 * 60 * 1000) }
-                    const amounts = distributeEvenly(workAmt, count)
-                    let idx = 0
-                    while (d <= ayEnd) {
-                        const dateStr = d.toISOString().split('T')[0]
-                        events.push({
-                            date: dateStr, amount: amounts[idx++], type: 'income',
-                            label: 'Work', sublabel: 'Weekly income',
-                            editType: 'work',
-                        })
-                        d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    }
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly income' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                    const dayOfMonth = d.getDate()
-                    let mCount = 0; let mt = new Date(d)
-                    while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dayOfMonth) }
-                    const amounts = distributeEvenly(workAmt, mCount)
-                    let idx = 0
-                    while (d <= ayEnd) {
-                        events.push({
-                            date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'income',
-                            label: 'Work', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income`,
-                            editType: 'work',
-                        })
-                        d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
-                    }
+                    const dom = d.getDate()
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.workTermDates || {}
-                    const amounts = distributeEvenly(workAmt, terms.length)
-                    for (let ti = 0; ti < terms.length; ti++) {
-                        const term = terms[ti]
-                        const date = overrides[term.id] || term.start
-                        if (!date) continue
-                        events.push({
-                            date, amount: amounts[ti], type: 'income',
-                            label: 'Work', sublabel: `${term.name} income`,
-                            editType: 'work',
-                        })
-                    }
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} income` }) }
+                } else if (freq === 'quarterly') {
+                    const qDates = formData.workQuarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} income` })
                 } else if (freq === 'yearly') {
-                    events.push({
-                        date: formData.workNextDate || '2025-09-01', amount: workAmt, type: 'income',
-                        label: 'Work', sublabel: 'Yearly income',
-                        editType: 'work',
-                    })
+                    allDates.push({ date: formData.workNextDate || '2025-09-01', sublabel: 'Yearly income' })
+                }
+                const dates = onlyTermTimeWork ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
+                if (dates.length > 0) {
+                    const amounts = distributeEvenly(yearlyWork, dates.length)
+                    for (let i = 0; i < dates.length; i++) {
+                        events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: 'Work', sublabel: dates[i].sublabel, editType: 'work' })
+                    }
                 }
             } else {
-                // Per instalment: frequency-based with optional term/non-term amounts
-                const freq = formData.workFrequency
-                const getWorkAmt = (dateStr) => formData.workVariesByTerm ? (isInTerm(dateStr, terms) ? workAmt : workNonTermAmt) : workAmt
-                if (freq) {
-                    if (freq === 'weekly') {
-                        let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                        while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
-                        while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                        while (d <= ayEnd) {
-                            const dateStr = d.toISOString().split('T')[0]
-                            const amt = getWorkAmt(dateStr)
-                            if (amt > 0) {
-                                events.push({
-                                    date: dateStr, amount: amt, type: 'income',
-                                    label: 'Work', sublabel: 'Weekly income',
-                                    editType: 'work',
-                                })
-                            }
-                            d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                        }
-                    } else if (freq === 'monthly') {
-                        let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                        while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                        while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                        const dayOfMonth = d.getDate()
-                        while (d <= ayEnd) {
-                            const dateStr = d.toISOString().split('T')[0]
-                            const amt = getWorkAmt(dateStr)
-                            if (amt > 0) {
-                                events.push({
-                                    date: dateStr, amount: amt, type: 'income',
-                                    label: 'Work', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income`,
-                                    editType: 'work',
-                                })
-                            }
-                            d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
-                        }
-                    } else if (freq === 'termly') {
-                        const overrides = formData.workTermDates || {}
-                        for (const term of terms) {
-                            const date = overrides[term.id] || term.start
-                            if (!date) continue
-                            events.push({
-                                date, amount: workAmt, type: 'income',
-                                label: 'Work', sublabel: `${term.name} income`,
-                                editType: 'work',
-                            })
-                        }
-                    } else if (freq === 'yearly') {
-                        if (workAmt > 0) {
-                            events.push({
-                                date: formData.workNextDate || '2025-09-01', amount: workAmt, type: 'income',
-                                label: 'Work', sublabel: 'Yearly income',
-                                editType: 'work',
-                            })
-                        }
-                    }
+                const workNonTermAmt = formData.workVariesByTerm ? parseFloat(String(formData.workNonTermAmount || '0').replace(/,/g, '')) : workAmt
+                const getWorkAmt = (ds) => formData.workVariesByTerm ? (isInTerm(ds, terms) ? workAmt : workNonTermAmt) : workAmt
+                if (freq === 'weekly') {
+                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + 7 * 86400000) }
+                } else if (freq === 'monthly') {
+                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    const dom = d.getDate()
+                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income`, editType: 'work' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                } else if (freq === 'termly') {
+                    const overrides = formData.workTermDates || {}
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: workAmt, type: 'income', label: 'Work', sublabel: `${term.name} income`, editType: 'work' }) }
+                } else if (freq === 'quarterly') {
+                    const qDates = formData.workQuarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getWorkAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: 'Work', sublabel: `Q${i + 1} income`, editType: 'work' }) }
+                } else if (freq === 'yearly') {
+                    if (workAmt > 0) events.push({ date: formData.workNextDate || '2025-09-01', amount: workAmt, type: 'income', label: 'Work', sublabel: 'Yearly income', editType: 'work' })
                 }
             }
         }
@@ -426,127 +363,71 @@ function buildGraphEvents(formData) {
     // Other income events
     if (formData.incomeSources?.includes('other_income')) {
         const otherAmt = parseFloat(String(formData.otherIncomeAmount || '0').replace(/,/g, ''))
-        const otherNonTermAmt = formData.otherIncomeVariesByTerm ? parseFloat(String(formData.otherIncomeNonTermAmount || '0').replace(/,/g, '')) : otherAmt
         const freq = formData.otherIncomeFrequency
         const lbl = formData.otherIncomeLabel || 'Other Income'
-        const otherMode = formData.otherIncomeEntryMode || 'yearly'
-        const getOtherAmt = (dateStr) => formData.otherIncomeVariesByTerm ? (isInTerm(dateStr, terms) ? otherAmt : otherNonTermAmt) : otherAmt
+        const otherAmtPeriod = formData.otherIncomeAmountPeriod || freq || 'monthly'
+        const isYearlyOther = otherAmtPeriod === 'yearly'
+        const onlyTermTimeOther = isYearlyOther && formData.otherIncomeVariesByTerm
 
         if (otherAmt > 0 && freq) {
             const ayStart = new Date(2025, 8, 1)
             const ayEnd = new Date(2026, 7, 31)
+            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
+            const yearlyOther = otherAmt * (YM[otherAmtPeriod] || 1)
 
-            if (otherMode === 'yearly') {
-                // Year total: distribute based on chosen frequency
+            if (isYearlyOther) {
+                const allDates = []
                 if (freq === 'weekly') {
                     let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    let count = 0
-                    let tmp = new Date(d)
-                    while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 24 * 60 * 60 * 1000) }
-                    const amounts = distributeEvenly(otherAmt, count)
-                    let idx = 0
-                    while (d <= ayEnd) {
-                        const dateStr = d.toISOString().split('T')[0]
-                        events.push({
-                            date: dateStr, amount: amounts[idx++], type: 'income',
-                            label: lbl, sublabel: 'Weekly',
-                            editType: 'otherIncome',
-                        })
-                        d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    }
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                    const dayOfMonth = d.getDate()
-                    let mCount = 0; let mt = new Date(d)
-                    while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dayOfMonth) }
-                    const amounts = distributeEvenly(otherAmt, mCount)
-                    let idx = 0
-                    while (d <= ayEnd) {
-                        events.push({
-                            date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'income',
-                            label: lbl, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}`,
-                            editType: 'otherIncome',
-                        })
-                        d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
-                    }
+                    const dom = d.getDate()
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.otherIncomeTermDates || {}
-                    const amounts = distributeEvenly(otherAmt, terms.length)
-                    for (let ti = 0; ti < terms.length; ti++) {
-                        const term = terms[ti]
-                        const date = overrides[term.id] || term.start
-                        if (!date) continue
-                        events.push({
-                            date, amount: amounts[ti], type: 'income',
-                            label: lbl, sublabel: `${term.name}`,
-                            editType: 'otherIncome',
-                        })
-                    }
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name}` }) }
+                } else if (freq === 'quarterly') {
+                    const qDates = formData.otherIncomeQuarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1}` })
                 } else if (freq === 'yearly') {
-                    events.push({
-                        date: formData.otherIncomeNextDate || '2025-09-01', amount: otherAmt, type: 'income',
-                        label: lbl, sublabel: 'Yearly income',
-                        editType: 'otherIncome',
-                    })
+                    allDates.push({ date: formData.otherIncomeNextDate || '2025-09-01', sublabel: 'Yearly income' })
+                }
+                const dates = onlyTermTimeOther ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
+                if (dates.length > 0) {
+                    const amounts = distributeEvenly(yearlyOther, dates.length)
+                    for (let i = 0; i < dates.length; i++) {
+                        events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: lbl, sublabel: dates[i].sublabel, editType: 'otherIncome' })
+                    }
                 }
             } else {
-                // Per instalment: frequency-based with optional term/non-term amounts
+                const otherNonTermAmt = formData.otherIncomeVariesByTerm ? parseFloat(String(formData.otherIncomeNonTermAmount || '0').replace(/,/g, '')) : otherAmt
+                const getOtherAmt = (ds) => formData.otherIncomeVariesByTerm ? (isInTerm(ds, terms) ? otherAmt : otherNonTermAmt) : otherAmt
                 if (freq === 'weekly') {
                     let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    while (d <= ayEnd) {
-                        const dateStr = d.toISOString().split('T')[0]
-                        const amt = getOtherAmt(dateStr)
-                        if (amt > 0) {
-                            events.push({
-                                date: dateStr, amount: amt, type: 'income',
-                                label: lbl, sublabel: 'Weekly',
-                                editType: 'otherIncome',
-                            })
-                        }
-                        d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    }
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: 'Weekly', editType: 'otherIncome' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                    const dayOfMonth = d.getDate()
-                    while (d <= ayEnd) {
-                        const dateStr = d.toISOString().split('T')[0]
-                        const amt = getOtherAmt(dateStr)
-                        if (amt > 0) {
-                            events.push({
-                                date: dateStr, amount: amt, type: 'income',
-                                label: lbl, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}`,
-                                editType: 'otherIncome',
-                            })
-                        }
-                        d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
-                    }
+                    const dom = d.getDate()
+                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}`, editType: 'otherIncome' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.otherIncomeTermDates || {}
-                    for (const term of terms) {
-                        const date = overrides[term.id] || term.start
-                        if (!date) continue
-                        events.push({
-                            date, amount: otherAmt, type: 'income',
-                            label: lbl, sublabel: `${term.name}`,
-                            editType: 'otherIncome',
-                        })
-                    }
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherAmt, type: 'income', label: lbl, sublabel: `${term.name}`, editType: 'otherIncome' }) }
+                } else if (freq === 'quarterly') {
+                    const qDates = formData.otherIncomeQuarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getOtherAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: lbl, sublabel: `Q${i + 1}`, editType: 'otherIncome' }) }
                 } else if (freq === 'yearly') {
-                    if (otherAmt > 0) {
-                        events.push({
-                            date: formData.otherIncomeNextDate || '2025-09-01', amount: otherAmt, type: 'income',
-                            label: lbl, sublabel: 'Yearly income',
-                            editType: 'otherIncome',
-                        })
-                    }
+                    if (otherAmt > 0) events.push({ date: formData.otherIncomeNextDate || '2025-09-01', amount: otherAmt, type: 'income', label: lbl, sublabel: 'Yearly income', editType: 'otherIncome' })
                 }
             }
         }
@@ -556,8 +437,11 @@ function buildGraphEvents(formData) {
     const rentAmt = parseFloat(String(formData.rentAmount || '0').replace(/,/g, ''))
     if (rentAmt > 0 && formData.rentFrequency) {
         const rentDates = generateRentDates(formData.rentFrequency, formData.rentNextDate, formData)
-        const isYearly = formData.rentEntryMode === 'yearly'
-        const rentAmounts = isYearly ? distributeEvenly(rentAmt, rentDates.length) : rentDates.map(() => rentAmt)
+        const rentAmtPeriod = formData.rentAmountPeriod || (formData.rentEntryMode === 'yearly' ? 'yearly' : (formData.rentFrequency || 'monthly'))
+        const isYearlyRent = rentAmtPeriod === 'yearly'
+        const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
+        const yearlyRent = rentAmt * (YM[rentAmtPeriod] || 1)
+        const rentAmounts = isYearlyRent ? distributeEvenly(yearlyRent, rentDates.length) : rentDates.map(() => rentAmt)
 
         for (let ri = 0; ri < rentDates.length; ri++) {
             const date = rentDates[ri]
@@ -577,111 +461,56 @@ function buildGraphEvents(formData) {
     // Bills expense events
     const billsAmt = parseFloat(String(formData.billsAmount || '0').replace(/,/g, ''))
     if (billsAmt > 0 && formData.billsFrequency) {
-        const billsMode = formData.billsEntryMode || 'yearly'
         const freq = formData.billsFrequency
+        const billsAmtPeriod = formData.billsAmountPeriod || (formData.billsEntryMode === 'yearly' ? 'yearly' : freq)
+        const isYearlyBills = billsAmtPeriod === 'yearly'
         const ayStart = new Date(2025, 8, 1)
         const ayEnd = new Date(2026, 7, 31)
+        const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
+        const yearlyBills = billsAmt * (YM[billsAmtPeriod] || 1)
 
-        if (billsMode === 'yearly') {
-            // Year total: distribute based on chosen frequency
+        if (isYearlyBills) {
+            const allDates = []
             if (freq === 'weekly') {
                 let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
-                while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                let count = 0
-                let tmp = new Date(d)
-                while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 24 * 60 * 60 * 1000) }
-                const amounts = distributeEvenly(billsAmt, count)
-                let idx = 0
-                while (d <= ayEnd) {
-                    events.push({
-                        date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense',
-                        label: 'Bills', sublabel: 'Weekly bills',
-                        editType: 'bills',
-                    })
-                    d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                }
+                while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly bills' }); d = new Date(d.getTime() + 7 * 86400000) }
             } else if (freq === 'monthly') {
                 let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                 while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                 while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                const dayOfMonth = d.getDate()
-                let mCount = 0; let mt = new Date(d)
-                while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dayOfMonth) }
-                const amounts = distributeEvenly(billsAmt, mCount)
-                let idx = 0
-                while (d <= ayEnd) {
-                    events.push({
-                        date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense',
-                        label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`,
-                        editType: 'bills',
-                    })
-                    d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
-                }
+                const dom = d.getDate()
+                while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
             } else if (freq === 'termly') {
                 const overrides = formData.billsTermDates || {}
-                const amounts = distributeEvenly(billsAmt, terms.length)
-                for (let ti = 0; ti < terms.length; ti++) {
-                    const term = terms[ti]
-                    const date = overrides[term.id] || term.start
-                    if (!date) continue
-                    events.push({
-                        date, amount: amounts[ti], type: 'expense',
-                        label: 'Bills', sublabel: `${term.name} bills`,
-                        editType: 'bills',
-                    })
-                }
+                for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} bills` }) }
             } else if (freq === 'yearly') {
-                events.push({
-                    date: formData.billsNextDate || '2025-09-01', amount: billsAmt, type: 'expense',
-                    label: 'Bills', sublabel: 'Yearly bills',
-                    editType: 'bills',
-                })
+                allDates.push({ date: formData.billsNextDate || '2025-09-01', sublabel: 'Yearly bills' })
+            }
+            if (allDates.length > 0) {
+                const amounts = distributeEvenly(yearlyBills, allDates.length)
+                for (let i = 0; i < allDates.length; i++) {
+                    events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: 'Bills', sublabel: allDates[i].sublabel, editType: 'bills' })
+                }
             }
         } else {
-            // Per instalment
             if (freq === 'weekly') {
                 let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
-                while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                while (d <= ayEnd) {
-                    events.push({
-                        date: d.toISOString().split('T')[0], amount: billsAmt, type: 'expense',
-                        label: 'Bills', sublabel: 'Weekly bills',
-                        editType: 'bills',
-                    })
-                    d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                }
+                while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: billsAmt, type: 'expense', label: 'Bills', sublabel: 'Weekly bills', editType: 'bills' }); d = new Date(d.getTime() + 7 * 86400000) }
             } else if (freq === 'monthly') {
                 let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                 while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                 while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                const dayOfMonth = d.getDate()
-                while (d <= ayEnd) {
-                    events.push({
-                        date: d.toISOString().split('T')[0], amount: billsAmt, type: 'expense',
-                        label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`,
-                        editType: 'bills',
-                    })
-                    d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
-                }
+                const dom = d.getDate()
+                while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: billsAmt, type: 'expense', label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`, editType: 'bills' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
             } else if (freq === 'termly') {
                 const overrides = formData.billsTermDates || {}
-                for (const term of terms) {
-                    const date = overrides[term.id] || term.start
-                    if (!date) continue
-                    events.push({
-                        date, amount: billsAmt, type: 'expense',
-                        label: 'Bills', sublabel: `${term.name} bills`,
-                        editType: 'bills',
-                    })
-                }
+                for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: billsAmt, type: 'expense', label: 'Bills', sublabel: `${term.name} bills`, editType: 'bills' }) }
             } else if (freq === 'yearly') {
-                events.push({
-                    date: formData.billsNextDate || '2025-09-01', amount: billsAmt, type: 'expense',
-                    label: 'Bills', sublabel: 'Yearly bills',
-                    editType: 'bills',
-                })
+                events.push({ date: formData.billsNextDate || '2025-09-01', amount: billsAmt, type: 'expense', label: 'Bills', sublabel: 'Yearly bills', editType: 'bills' })
             }
         }
     }
@@ -691,25 +520,35 @@ function buildGraphEvents(formData) {
         const uniAmt = parseFloat(String(formData.uniFeesAmount || '0').replace(/,/g, ''))
         if (uniAmt > 0) {
             const uniFreq = formData.uniFeesFrequency || 'yearly'
-            const uniMode = formData.uniFeesEntryMode || 'yearly'
+            const uniAmtPeriod = formData.uniFeesAmountPeriod || 'yearly'
+            const isYearlyUni = uniAmtPeriod === 'yearly'
             const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
-            if (uniFreq === 'yearly') {
-                events.push({ date: formData.uniFeesNextDate || '2025-10-27', amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
-            } else if (uniFreq === 'monthly') {
-                if (uniMode === 'yearly') {
+            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
+            const yearlyUni = uniAmt * (YM[uniAmtPeriod] || 1)
+            if (isYearlyUni) {
+                const allDates = []
+                if (uniFreq === 'yearly') {
+                    allDates.push({ date: formData.uniFeesNextDate || '2025-10-27', sublabel: 'Yearly tuition' })
+                } else if (uniFreq === 'monthly') {
                     let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date('2025-10-27T00:00:00')
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    let mCount = 0; let mt = new Date(d)
-                    while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dom) }
-                    const amounts = distributeEvenly(uniAmt, mCount)
-                    let idx = 0
-                    while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' })
-                        d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                } else if (uniFreq === 'termly') {
+                    const overrides = formData.uniFeesTermDates || {}
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} fees` }) }
+                }
+                if (allDates.length > 0) {
+                    const amounts = distributeEvenly(yearlyUni, allDates.length)
+                    for (let i = 0; i < allDates.length; i++) {
+                        events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: 'University Fees', sublabel: allDates[i].sublabel, editType: 'uniFees' })
                     }
-                } else {
+                }
+            } else {
+                if (uniFreq === 'yearly') {
+                    events.push({ date: formData.uniFeesNextDate || '2025-10-27', amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
+                } else if (uniFreq === 'monthly') {
                     let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date('2025-10-27T00:00:00')
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
@@ -718,21 +557,9 @@ function buildGraphEvents(formData) {
                         events.push({ date: d.toISOString().split('T')[0], amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' })
                         d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
                     }
-                }
-            } else if (uniFreq === 'termly') {
-                const overrides = formData.uniFeesTermDates || {}
-                if (uniMode === 'yearly') {
-                    const amounts = distributeEvenly(uniAmt, terms.length)
-                    for (let ti = 0; ti < terms.length; ti++) {
-                        const term = terms[ti]
-                        const date = overrides[term.id] || term.start
-                        if (date) events.push({ date, amount: amounts[ti], type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' })
-                    }
-                } else {
-                    for (const term of terms) {
-                        const date = overrides[term.id] || term.start
-                        if (date) events.push({ date, amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' })
-                    }
+                } else if (uniFreq === 'termly') {
+                    const overrides = formData.uniFeesTermDates || {}
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' }) }
                 }
             }
         }
@@ -742,84 +569,62 @@ function buildGraphEvents(formData) {
     if (formData.expenseSources?.includes('savings_investments')) {
         const savAmt = parseFloat(String(formData.savingsInvAmount || '0').replace(/,/g, ''))
         if (savAmt > 0 && formData.savingsInvFrequency) {
-            const savMode = formData.savingsInvEntryMode || 'yearly'
             const freq = formData.savingsInvFrequency
+            const savAmtPeriod = formData.savingsInvAmountPeriod || (formData.savingsInvEntryMode === 'yearly' ? 'yearly' : freq)
+            const isYearlySav = savAmtPeriod === 'yearly'
             const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
-            if (savMode === 'yearly') {
+            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
+            const yearlySav = savAmt * (YM[savAmtPeriod] || 1)
+            if (isYearlySav) {
+                const allDates = []
                 if (freq === 'weekly') {
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    let count = 0; let tmp = new Date(d)
-                    while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 24 * 60 * 60 * 1000) }
-                    const amounts = distributeEvenly(savAmt, count)
-                    let idx = 0
-                    while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' })
-                        d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    }
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly savings' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    let mCount = 0; let mt = new Date(d)
-                    while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dom) }
-                    const amounts = distributeEvenly(savAmt, mCount)
-                    let idx = 0
-                    while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: 'Savings', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} savings`, editType: 'savingsInv' })
-                        d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
-                    }
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} savings` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.savingsInvTermDates || {}
-                    const amounts = distributeEvenly(savAmt, terms.length)
-                    for (let ti = 0; ti < terms.length; ti++) {
-                        const term = terms[ti]
-                        const date = overrides[term.id] || term.start
-                        if (date) events.push({ date, amount: amounts[ti], type: 'expense', label: 'Savings', sublabel: `${term.name} savings`, editType: 'savingsInv' })
-                    }
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} savings` }) }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.savingsInvQuarterlyDates || {}
-                    const QUARTER_DEFAULTS = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
-                    const amounts = distributeEvenly(savAmt, 4)
-                    for (let i = 0; i < 4; i++) {
-                        const date = qDates[i] || QUARTER_DEFAULTS[i]
-                        events.push({ date, amount: amounts[i], type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' })
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} savings` })
+                } else if (freq === 'yearly') {
+                    allDates.push({ date: formData.savingsInvNextDate || '2025-09-01', sublabel: 'Yearly savings' })
+                }
+                if (allDates.length > 0) {
+                    const amounts = distributeEvenly(yearlySav, allDates.length)
+                    for (let i = 0; i < allDates.length; i++) {
+                        events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: 'Savings', sublabel: allDates[i].sublabel, editType: 'savingsInv' })
                     }
                 }
             } else {
-                // Per payment mode
                 if (freq === 'weekly') {
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' })
-                        d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-                    }
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: savAmt, type: 'expense', label: 'Savings', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} savings`, editType: 'savingsInv' })
-                        d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
-                    }
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: savAmt, type: 'expense', label: 'Savings', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} savings`, editType: 'savingsInv' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.savingsInvTermDates || {}
-                    for (const term of terms) {
-                        const date = overrides[term.id] || term.start
-                        if (date) events.push({ date, amount: savAmt, type: 'expense', label: 'Savings', sublabel: `${term.name} savings`, editType: 'savingsInv' })
-                    }
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: savAmt, type: 'expense', label: 'Savings', sublabel: `${term.name} savings`, editType: 'savingsInv' }) }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.savingsInvQuarterlyDates || {}
-                    const QUARTER_DEFAULTS = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
-                    for (let i = 0; i < 4; i++) {
-                        const date = qDates[i] || QUARTER_DEFAULTS[i]
-                        events.push({ date, amount: savAmt, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' })
-                    }
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) { events.push({ date: qDates[i] || QD[i], amount: savAmt, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' }) }
+                } else if (freq === 'yearly') {
+                    events.push({ date: formData.savingsInvNextDate || '2025-09-01', amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Yearly savings', editType: 'savingsInv' })
                 }
             }
         }
@@ -830,74 +635,55 @@ function buildGraphEvents(formData) {
         const otherExpAmt = parseFloat(String(formData.otherExpenseAmount || '0').replace(/,/g, ''))
         const freq = formData.otherExpenseFrequency
         const lbl = formData.otherExpenseLabel || 'Other Expense'
-        const otherExpMode = formData.otherExpenseEntryMode || 'yearly'
+        const otherExpAmtPeriod = formData.otherExpenseAmountPeriod || (formData.otherExpenseEntryMode === 'yearly' ? 'yearly' : (freq || 'monthly'))
+        const isYearlyOtherExp = otherExpAmtPeriod === 'yearly'
 
         if (otherExpAmt > 0 && freq) {
             const ayStart = new Date(2025, 8, 1)
             const ayEnd = new Date(2026, 7, 31)
+            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
+            const yearlyOtherExp = otherExpAmt * (YM[otherExpAmtPeriod] || 1)
 
-            if (otherExpMode === 'yearly') {
+            if (isYearlyOtherExp) {
+                const allDates = []
                 if (freq === 'weekly') {
                     let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    let count = 0; let tmp = new Date(d)
-                    while (tmp <= ayEnd) { count++; tmp = new Date(tmp.getTime() + 7 * 86400000) }
-                    const amounts = distributeEvenly(otherExpAmt, count); let idx = 0
-                    while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: lbl, sublabel: 'Weekly', editType: 'otherExpense' })
-                        d = new Date(d.getTime() + 7 * 86400000)
-                    }
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                    const dayOfMonth = d.getDate()
-                    let mCount = 0; let mt = new Date(d)
-                    while (mt <= ayEnd) { mCount++; mt = new Date(mt.getFullYear(), mt.getMonth() + 1, dayOfMonth) }
-                    const amounts = distributeEvenly(otherExpAmt, mCount); let idx = 0
-                    while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: amounts[idx++], type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: 'otherExpense' })
-                        d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
-                    }
+                    const dom = d.getDate()
+                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: d.toLocaleDateString('en-GB', { month: 'long' }) }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.otherExpenseTermDates || {}
-                    const amounts = distributeEvenly(otherExpAmt, terms.length)
-                    for (let ti = 0; ti < terms.length; ti++) {
-                        const term = terms[ti]
-                        const date = overrides[term.id] || term.start
-                        if (!date) continue
-                        events.push({ date, amount: amounts[ti], type: 'expense', label: lbl, sublabel: term.name, editType: 'otherExpense' })
-                    }
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: term.name }) }
                 } else if (freq === 'yearly') {
-                    events.push({ date: formData.otherExpenseNextDate || '2025-09-01', amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: 'otherExpense' })
+                    allDates.push({ date: formData.otherExpenseNextDate || '2025-09-01', sublabel: 'Yearly expense' })
+                }
+                if (allDates.length > 0) {
+                    const amounts = distributeEvenly(yearlyOtherExp, allDates.length)
+                    for (let i = 0; i < allDates.length; i++) {
+                        events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: lbl, sublabel: allDates[i].sublabel, editType: 'otherExpense' })
+                    }
                 }
             } else {
-                // Per payment mode
                 if (freq === 'weekly') {
                     let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Weekly', editType: 'otherExpense' })
-                        d = new Date(d.getTime() + 7 * 86400000)
-                    }
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Weekly', editType: 'otherExpense' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
                     while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                    const dayOfMonth = d.getDate()
-                    while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: 'otherExpense' })
-                        d = new Date(d.getFullYear(), d.getMonth() + 1, dayOfMonth)
-                    }
+                    const dom = d.getDate()
+                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: 'otherExpense' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.otherExpenseTermDates || {}
-                    for (const term of terms) {
-                        const date = overrides[term.id] || term.start
-                        if (!date) continue
-                        events.push({ date, amount: otherExpAmt, type: 'expense', label: lbl, sublabel: term.name, editType: 'otherExpense' })
-                    }
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherExpAmt, type: 'expense', label: lbl, sublabel: term.name, editType: 'otherExpense' }) }
                 } else if (freq === 'yearly') {
                     events.push({ date: formData.otherExpenseNextDate || '2025-09-01', amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: 'otherExpense' })
                 }
@@ -1660,14 +1446,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
         balance: { balance: '' },
         maintenanceLoan: { loanAmount: '', loanMonths: [...DEFAULT_LOAN_MONTHS], loanKnowDates: false, loanDates: {}, instalmentAmounts: {} },
         bursary: { bursaryAmount: '', bursaryDates: [...INITIAL_FORM_DATA.bursaryDates], bursaryMonths: undefined, bursaryInstalmentAmounts: {} },
-        familyFriends: { familyAmount: '', familyFrequency: 'monthly', familyNextDate: '', familyTermDates: {}, familyQuarterlyDates: {}, familyVariesByTerm: false, familyNonTermAmount: '' },
-        work: { workAmount: '', workFrequency: 'weekly', workEntryMode: 'yearly', workVariesByTerm: false, workNonTermAmount: '', workNextDate: '', workTermDates: {}, workQuarterlyDates: {} },
-        otherIncome: { otherIncomeAmount: '', otherIncomeFrequency: 'monthly', otherIncomeEntryMode: 'yearly', otherIncomeLabel: '', otherIncomeNextDate: '', otherIncomeTermDates: {}, otherIncomeVariesByTerm: false, otherIncomeNonTermAmount: '' },
-        rent: { rentAmount: '', rentFrequency: 'monthly', rentNextDate: '', rentEntryMode: 'per_payment', rentTermDates: {}, rentQuarterlyDates: {} },
-        bills: { billsAmount: '', billsFrequency: 'monthly', billsEntryMode: 'yearly', billsNextDate: '', billsTermDates: {} },
-        uniFees: { uniFeesAmount: '9250', uniFeesFrequency: 'yearly', uniFeesEntryMode: 'yearly', uniFeesNextDate: '2025-10-27', uniFeesTermDates: {} },
-        savingsInvestments: { savingsInvAmount: '', savingsInvFrequency: 'monthly', savingsInvEntryMode: 'per_payment', savingsInvNextDate: '', savingsInvTermDates: {}, savingsInvQuarterlyDates: {} },
-        otherExpense: { otherExpenseAmount: '', otherExpenseFrequency: 'monthly', otherExpenseEntryMode: 'yearly', otherExpenseLabel: '', otherExpenseNextDate: '', otherExpenseTermDates: {} },
+        familyFriends: { familyAmount: '', familyFrequency: 'monthly', familyAmountPeriod: 'monthly', familyNextDate: '', familyTermDates: {}, familyQuarterlyDates: {}, familyVariesByTerm: false, familyNonTermAmount: '' },
+        work: { workAmount: '', workFrequency: 'monthly', workEntryMode: 'yearly', workAmountPeriod: 'monthly', workVariesByTerm: false, workNonTermAmount: '', workNextDate: '', workTermDates: {}, workQuarterlyDates: {} },
+        otherIncome: { otherIncomeAmount: '', otherIncomeFrequency: 'monthly', otherIncomeEntryMode: 'yearly', otherIncomeAmountPeriod: 'monthly', otherIncomeLabel: '', otherIncomeNextDate: '', otherIncomeTermDates: {}, otherIncomeVariesByTerm: false, otherIncomeNonTermAmount: '' },
+        rent: { rentAmount: '', rentFrequency: 'monthly', rentNextDate: '', rentEntryMode: 'per_payment', rentAmountPeriod: 'monthly', rentTermDates: {}, rentQuarterlyDates: {} },
+        bills: { billsAmount: '', billsFrequency: 'monthly', billsEntryMode: 'yearly', billsAmountPeriod: 'monthly', billsNextDate: '', billsTermDates: {}, billsQuarterlyDates: {} },
+        uniFees: { uniFeesAmount: '9250', uniFeesFrequency: 'yearly', uniFeesEntryMode: 'yearly', uniFeesAmountPeriod: 'yearly', uniFeesNextDate: '2025-10-27', uniFeesTermDates: {}, uniFeesQuarterlyDates: {} },
+        savingsInvestments: { savingsInvAmount: '', savingsInvFrequency: 'monthly', savingsInvEntryMode: 'per_payment', savingsInvAmountPeriod: 'monthly', savingsInvNextDate: '', savingsInvTermDates: {}, savingsInvQuarterlyDates: {} },
+        otherExpense: { otherExpenseAmount: '', otherExpenseFrequency: 'monthly', otherExpenseEntryMode: 'yearly', otherExpenseAmountPeriod: 'monthly', otherExpenseLabel: '', otherExpenseNextDate: '', otherExpenseTermDates: {}, otherExpenseQuarterlyDates: {} },
     }
 
     const resetPanel = (panelId) => {
@@ -2478,6 +2264,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateFamilyAmount={(val) => updateField('familyAmount', val)}
                                         familyFrequency={formData.familyFrequency}
                                         updateFamilyFrequency={(val) => updateField('familyFrequency', val)}
+                                        familyAmountPeriod={formData.familyAmountPeriod}
+                                        updateFamilyAmountPeriod={(val) => updateField('familyAmountPeriod', val)}
                                         familyNextDate={formData.familyNextDate}
                                         updateFamilyNextDate={(val) => updateField('familyNextDate', val)}
                                         terms={formData.termDates?.terms || []}
@@ -2497,6 +2285,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateWorkAmount={(val) => updateField('workAmount', val)}
                                         workFrequency={formData.workFrequency}
                                         updateWorkFrequency={(val) => updateField('workFrequency', val)}
+                                        workAmountPeriod={formData.workAmountPeriod}
+                                        updateWorkAmountPeriod={(val) => updateField('workAmountPeriod', val)}
                                         workVariesByTerm={formData.workVariesByTerm}
                                         updateWorkVariesByTerm={(val) => updateField('workVariesByTerm', val)}
                                         workNonTermAmount={formData.workNonTermAmount}
@@ -2518,6 +2308,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateOtherIncomeAmount={(val) => updateField('otherIncomeAmount', val)}
                                         otherIncomeFrequency={formData.otherIncomeFrequency}
                                         updateOtherIncomeFrequency={(val) => updateField('otherIncomeFrequency', val)}
+                                        otherIncomeAmountPeriod={formData.otherIncomeAmountPeriod}
+                                        updateOtherIncomeAmountPeriod={(val) => updateField('otherIncomeAmountPeriod', val)}
+                                        otherIncomeQuarterlyDates={formData.otherIncomeQuarterlyDates}
+                                        updateOtherIncomeQuarterlyDates={(val) => updateField('otherIncomeQuarterlyDates', val)}
                                         otherIncomeLabel={formData.otherIncomeLabel}
                                         updateOtherIncomeLabel={(val) => updateField('otherIncomeLabel', val)}
                                         otherIncomeNextDate={formData.otherIncomeNextDate}
@@ -2539,6 +2333,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateRentAmount={(val) => updateField('rentAmount', val)}
                                         rentFrequency={formData.rentFrequency}
                                         updateRentFrequency={(val) => updateField('rentFrequency', val)}
+                                        rentAmountPeriod={formData.rentAmountPeriod}
+                                        updateRentAmountPeriod={(val) => updateField('rentAmountPeriod', val)}
                                         rentNextDate={formData.rentNextDate}
                                         updateRentNextDate={(val) => updateField('rentNextDate', val)}
                                         rentEntryMode={formData.rentEntryMode || 'yearly'}
@@ -2548,7 +2344,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateRentTermDates={(val) => updateField('rentTermDates', val)}
                                         rentQuarterlyDates={formData.rentQuarterlyDates || {}}
                                         updateRentQuarterlyDates={(val) => updateField('rentQuarterlyDates', val)}
-
                                     />
                                 )}
                                 {panelId === 'regularExpenses' && (
@@ -2563,6 +2358,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateBillsAmount={(val) => updateField('billsAmount', val)}
                                         billsFrequency={formData.billsFrequency}
                                         updateBillsFrequency={(val) => updateField('billsFrequency', val)}
+                                        billsAmountPeriod={formData.billsAmountPeriod}
+                                        updateBillsAmountPeriod={(val) => updateField('billsAmountPeriod', val)}
+                                        billsQuarterlyDates={formData.billsQuarterlyDates}
+                                        updateBillsQuarterlyDates={(val) => updateField('billsQuarterlyDates', val)}
                                         billsEntryMode={formData.billsEntryMode}
                                         updateBillsEntryMode={(val) => updateField('billsEntryMode', val)}
                                         billsNextDate={formData.billsNextDate}
@@ -2578,6 +2377,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateUniFeesAmount={(val) => updateField('uniFeesAmount', val)}
                                         uniFeesFrequency={formData.uniFeesFrequency}
                                         updateUniFeesFrequency={(val) => updateField('uniFeesFrequency', val)}
+                                        uniFeesAmountPeriod={formData.uniFeesAmountPeriod}
+                                        updateUniFeesAmountPeriod={(val) => updateField('uniFeesAmountPeriod', val)}
+                                        uniFeesQuarterlyDates={formData.uniFeesQuarterlyDates}
+                                        updateUniFeesQuarterlyDates={(val) => updateField('uniFeesQuarterlyDates', val)}
                                         uniFeesEntryMode={formData.uniFeesEntryMode}
                                         updateUniFeesEntryMode={(val) => updateField('uniFeesEntryMode', val)}
                                         uniFeesNextDate={formData.uniFeesNextDate}
@@ -2593,6 +2396,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateSavingsInvAmount={(val) => updateField('savingsInvAmount', val)}
                                         savingsInvFrequency={formData.savingsInvFrequency}
                                         updateSavingsInvFrequency={(val) => updateField('savingsInvFrequency', val)}
+                                        savingsInvAmountPeriod={formData.savingsInvAmountPeriod}
+                                        updateSavingsInvAmountPeriod={(val) => updateField('savingsInvAmountPeriod', val)}
                                         savingsInvNextDate={formData.savingsInvNextDate}
                                         updateSavingsInvNextDate={(val) => updateField('savingsInvNextDate', val)}
                                         savingsInvEntryMode={formData.savingsInvEntryMode}
@@ -2610,6 +2415,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateOtherExpenseAmount={(val) => updateField('otherExpenseAmount', val)}
                                         otherExpenseFrequency={formData.otherExpenseFrequency}
                                         updateOtherExpenseFrequency={(val) => updateField('otherExpenseFrequency', val)}
+                                        otherExpenseAmountPeriod={formData.otherExpenseAmountPeriod}
+                                        updateOtherExpenseAmountPeriod={(val) => updateField('otherExpenseAmountPeriod', val)}
+                                        otherExpenseQuarterlyDates={formData.otherExpenseQuarterlyDates}
+                                        updateOtherExpenseQuarterlyDates={(val) => updateField('otherExpenseQuarterlyDates', val)}
                                         otherExpenseLabel={formData.otherExpenseLabel}
                                         updateOtherExpenseLabel={(val) => updateField('otherExpenseLabel', val)}
                                         otherExpenseNextDate={formData.otherExpenseNextDate}

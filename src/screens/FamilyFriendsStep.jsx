@@ -18,77 +18,68 @@ function cleanNum(val) {
     return v
 }
 
-const FREQ_OPTIONS = [
+const PERIOD_OPTIONS = [
     { id: 'weekly', label: 'Weekly' },
     { id: 'monthly', label: 'Monthly' },
     { id: 'quarterly', label: 'Quarterly' },
     { id: 'termly', label: 'Per Term' },
+    { id: 'yearly', label: 'Yearly' },
+]
+
+const FREQ_PILL_OPTIONS = [
+    { id: 'weekly', label: 'Weekly' },
+    { id: 'monthly', label: 'Monthly' },
+    { id: 'quarterly', label: 'Quarterly' },
+    { id: 'termly', label: 'Per Term' },
+    { id: 'yearly', label: 'Yearly' },
 ]
 
 const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4']
 const QUARTER_DEFAULTS = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
 
-/* ---------- CHEVRON ---------- */
+function DropdownArrow({ color = '#147b75' }) {
+    return (
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{
+            position: 'absolute', right: 8, top: '50%',
+            transform: 'translateY(-50%)', pointerEvents: 'none',
+        }}>
+            <path d="M1 1L5 5L9 1" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    )
+}
 
 function Chevron({ open }) {
     return (
         <svg width="18" height="15" viewBox="0 0 18 15" fill="none" style={{
             transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-            transition: 'transform 0.2s ease',
-            flexShrink: 0,
+            transition: 'transform 0.2s ease', flexShrink: 0,
         }}>
-            <path d="M4 5.5L9 10.5L14 5.5" stroke="#9f9c9c"
-                strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 5.5L9 10.5L14 5.5" stroke="#9f9c9c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     )
 }
 
-/* ---------- DATE ROW ---------- */
-
 function DateRow({ label, value, onChange, onDateTap, scrollRef }) {
     return (
-        <div style={{
-            display: 'flex', alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '5px 0',
-        }}>
-            <span style={{
-                fontSize: 12, color: '#9f9c9c',
-                fontFamily: 'Nunito, sans-serif',
-            }}>
-                {label}
-            </span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0' }}>
+            <span style={{ fontSize: 12, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif' }}>{label}</span>
             <div style={{ position: 'relative' }}>
                 <span style={{
-                    fontSize: 13, fontWeight: 600,
-                    color: '#147b75',
+                    fontSize: 13, fontWeight: 600, color: '#147b75',
                     borderBottom: '1px dotted rgba(20,123,117,0.45)',
-                    paddingBottom: 1,
-                    fontFamily: 'Nunito, sans-serif',
-                    pointerEvents: 'none',
+                    paddingBottom: 1, fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                 }}>
                     {value ? fmt(value) : 'Select date'}
                 </span>
-                <input
-                    type="date"
-                    value={value || ''}
+                <input type="date" value={value || ''}
                     onFocus={() => {
                         onDateTap?.(true)
                         const container = scrollRef?.current
-                        if (container) {
-                            const pos = container.scrollTop
-                            requestAnimationFrame(() => {
-                                container.scrollTop = pos
-                            })
-                        }
+                        if (container) { const pos = container.scrollTop; requestAnimationFrame(() => { container.scrollTop = pos }) }
                     }}
                     onBlur={() => onDateTap?.(false)}
                     onChange={(e) => e.target.value && onChange(e.target.value)}
-                    style={{
-                        position: 'absolute', inset: 0,
-                        opacity: 0, width: '100%', height: '100%',
-                        cursor: 'pointer', fontSize: 16,
-                    }}
+                    style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
                 />
             </div>
         </div>
@@ -98,23 +89,21 @@ function DateRow({ label, value, onChange, onDateTap, scrollRef }) {
 /* ---------- MAIN ---------- */
 
 export default function FamilyFriendsStep({
-    familyAmount,
-    updateFamilyAmount,
-    familyFrequency,
-    updateFamilyFrequency,
-    familyNextDate,
-    updateFamilyNextDate,
+    familyAmount, updateFamilyAmount,
+    familyAmountPeriod, updateFamilyAmountPeriod,
+    familyFrequency, updateFamilyFrequency,
+    familyNextDate, updateFamilyNextDate,
     terms,
-    familyTermDates,
-    updateFamilyTermDates,
-    familyQuarterlyDates,
-    updateFamilyQuarterlyDates,
-    familyVariesByTerm,
-    updateFamilyVariesByTerm,
-    familyNonTermAmount,
-    updateFamilyNonTermAmount,
+    familyTermDates, updateFamilyTermDates,
+    familyQuarterlyDates, updateFamilyQuarterlyDates,
+    familyVariesByTerm, updateFamilyVariesByTerm,
+    familyNonTermAmount, updateFamilyNonTermAmount,
     compact = false,
 }) {
+    const amountPeriod = familyAmountPeriod || familyFrequency || 'monthly'
+    // When amountPeriod is not yearly, frequency always matches amountPeriod
+    const freq = amountPeriod === 'yearly' ? (familyFrequency || 'monthly') : amountPeriod
+
     const [rawAmount, setRawAmount] = useState(() => {
         const n = parseFloat(String(familyAmount || '').replace(/,/g, ''))
         return n ? String(n) : ''
@@ -131,469 +120,315 @@ export default function FamilyFriendsStep({
         const n = parseFloat(String(familyNonTermAmount || '').replace(/,/g, ''))
         setRawNonTermAmount(n ? String(n) : '')
     }, [familyNonTermAmount])
+
     const [datesExpanded, setDatesExpanded] = useState(!!familyNextDate)
     const [inputFocused, setInputFocused] = useState(false)
     const scrollRef = useRef(null)
     const blurTimerRef = useRef(null)
     const datesBoxRef = useRef(null)
-    const freqBoxRef = useRef(null)
-    const freqContainerRef = useRef(null)
-    const preMultiScrollRef = useRef(0)
-
-    const isMultiDate = familyFrequency === 'quarterly' || familyFrequency === 'termly'
-
     const dateActiveRef = useRef(false)
     const freqTapRef = useRef(false)
 
     const scrollInputToTop = (e) => {
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
-        const input = e.target
         setInputFocused(true)
+        const input = e.target
+        const c = scrollRef.current
+        if (c) { const pos = c.scrollTop; requestAnimationFrame(() => { c.scrollTop = pos }) }
         setTimeout(() => {
-            const container = scrollRef.current
-            if (!container) return
-            const containerRect = container.getBoundingClientRect()
-            const inputRect = input.getBoundingClientRect()
-            const scrollOffset = inputRect.top - containerRect.top + container.scrollTop
-            container.scrollTo({ top: Math.max(0, scrollOffset - 20), behavior: 'smooth' })
+            if (!c) return
+            const cr = c.getBoundingClientRect()
+            const ir = input.getBoundingClientRect()
+            c.scrollTo({ top: Math.max(0, ir.top - cr.top + c.scrollTop - 20), behavior: 'smooth' })
         }, 301)
     }
 
     const handleInputBlur = () => {
         blurTimerRef.current = setTimeout(() => {
-            if (dateActiveRef.current || freqTapRef.current) {
-                setInputFocused(false)
-                freqTapRef.current = false
-                return
-            }
+            if (dateActiveRef.current || freqTapRef.current) { setInputFocused(false); freqTapRef.current = false; return }
             setInputFocused(false)
-            setTimeout(() => {
-                if (!dateActiveRef.current) {
-                    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-                }
-            }, 100)
+            setTimeout(() => { if (!dateActiveRef.current) scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }) }, 100)
         }, 50)
     }
 
-    const handleAmountChange = (e) => {
-        const val = cleanNum(e.target.value)
-        setRawAmount(val)
-        updateFamilyAmount(val)
+    const handleAmountChange = (e) => { const val = cleanNum(e.target.value); setRawAmount(val); updateFamilyAmount(val) }
+    const handleNonTermAmountChange = (e) => { const val = cleanNum(e.target.value); setRawNonTermAmount(val); updateFamilyNonTermAmount(val) }
+
+    const handleAmountPeriodChange = (newPeriod) => {
+        updateFamilyAmountPeriod(newPeriod)
+        // Non-yearly: frequency always matches amountPeriod
+        if (newPeriod !== 'yearly') {
+            updateFamilyFrequency(newPeriod)
+        } else {
+            // Switching to yearly: default frequency to monthly if it was in sync
+            if (!familyFrequency || familyFrequency === amountPeriod) updateFamilyFrequency('monthly')
+        }
     }
 
-    const handleNonTermAmountChange = (e) => {
-        const val = cleanNum(e.target.value)
-        setRawNonTermAmount(val)
-        updateFamilyNonTermAmount(val)
+    const handleFrequencyChange = (newFreq) => {
+        freqTapRef.current = true
+        updateFamilyFrequency(newFreq)
     }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             {!compact && (
                 <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                    <h2 style={{
-                        fontSize: 25, fontWeight: 700,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#000', margin: '0 0 8px', lineHeight: 1.3,
-                    }}>
+                    <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>
                         Family & Friends
                     </h2>
-                    <p style={{
-                        fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                        color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5,
-                    }}>
+                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>
                         How much do you regularly receive from family and friends?
                     </p>
                 </div>
             )}
 
-            <div style={{
-                flex: 1, overflowY: 'auto', overflowX: 'hidden',
-                WebkitOverflowScrolling: 'touch',
-                padding: '0 24px 16px',
-                display: 'flex', flexDirection: 'column',
-            }} ref={scrollRef}>
-                {/* Amount input */}
-                <p style={{
-                    fontSize: 14, fontWeight: 700,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: '#000', margin: '0 0 8px',
-                }}>
-                    {familyVariesByTerm ? 'During term time' : 'How much do you receive each time?'}
-                </p>
-                <div style={{
-                    display: 'flex', alignItems: 'center',
-                    border: '1px solid #e8e8e8', borderRadius: 10,
-                    padding: '0 14px', height: 38, gap: 6,
-                    marginBottom: familyVariesByTerm ? 16 : 20, maxWidth: 160,
-                }}>
-                    <span style={{
-                        fontSize: 16, fontWeight: 600,
-                        color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
-                    }}>£</span>
-                    <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={formatDisplay(rawAmount)}
-                        onChange={handleAmountChange}
-                        onFocus={scrollInputToTop}
-                        onBlur={handleInputBlur}
-                        style={{
-                            flex: 1, border: 'none',
-                            background: 'transparent',
-                            fontSize: 16, fontWeight: 500,
-                            fontFamily: 'Nunito, sans-serif',
-                            color: '#000', outline: 'none', padding: 0,
-                            height: 50,
-                        }}
-                    />
-                </div>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
-                {/* Non-term amount */}
-                {familyVariesByTerm && (
+                {amountPeriod !== 'yearly' && familyVariesByTerm ? (
                     <>
-                        <p style={{
-                            fontSize: 14, fontWeight: 700,
-                            fontFamily: 'Nunito, sans-serif',
-                            color: '#000', margin: '0 0 8px',
-                        }}>
-                            Outside term time
-                        </p>
-                        <div style={{
-                            display: 'flex', alignItems: 'center',
-                            border: '1px solid #e8e8e8', borderRadius: 10,
-                            padding: '0 14px', height: 38, gap: 6,
-                            marginBottom: 20, maxWidth: 160,
-                        }}>
-                            <span style={{
-                                fontSize: 16, fontWeight: 600,
-                                color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
-                            }}>£</span>
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                placeholder="0.00"
-                                value={formatDisplay(rawNonTermAmount)}
-                                onChange={handleNonTermAmountChange}
-                                onFocus={scrollInputToTop}
-                                onBlur={handleInputBlur}
-                                style={{
-                                    flex: 1, border: 'none',
-                                    background: 'transparent',
-                                    fontSize: 16, fontWeight: 500,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#000', outline: 'none', padding: 0,
-                                    height: 50,
-                                }}
-                            />
+                        <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much do you receive?</p>
+                        <div style={{ display: 'flex', marginBottom: 16 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none',
+                                    borderRadius: '10px 0 0 0', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
+                                    borderBottom: '1px dashed #e8e8e8',
+                                }}>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Term</span>
+                                    <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>£</span>
+                                    <input type="text" inputMode="decimal" placeholder="0.00"
+                                        value={formatDisplay(rawAmount)} onChange={handleAmountChange}
+                                        onFocus={scrollInputToTop} onBlur={handleInputBlur}
+                                        style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }}
+                                    />
+                                </div>
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderTop: 'none',
+                                    borderRadius: '0 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
+                                }}>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Non-term</span>
+                                    <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>£</span>
+                                    <input type="text" inputMode="decimal" placeholder="0.00"
+                                        value={formatDisplay(rawNonTermAmount)} onChange={handleNonTermAmountChange}
+                                        onFocus={scrollInputToTop} onBlur={handleInputBlur}
+                                        style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }}
+                                    />
+                                </div>
+                            </div>
+                            <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                                <select value={amountPeriod} onChange={(e) => handleAmountPeriodChange(e.target.value)}
+                                    style={{ height: 80, boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: '0 10px 10px 0', padding: '0 26px 0 10px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75', background: 'rgba(20,123,117,0.06)', WebkitAppearance: 'none', appearance: 'none', cursor: 'pointer', outline: 'none' }}>
+                                    {PERIOD_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                                </select>
+                                <DropdownArrow />
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much do you receive?</p>
+                        <div style={{ display: 'flex', marginBottom: 20 }}>
+                            <div style={{
+                                display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none',
+                                borderRadius: '10px 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6, flex: 1, minWidth: 0,
+                            }}>
+                                <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>£</span>
+                                <input type="text" inputMode="decimal" placeholder="0.00"
+                                    value={formatDisplay(rawAmount)} onChange={handleAmountChange}
+                                    onFocus={scrollInputToTop} onBlur={handleInputBlur}
+                                    style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }}
+                                />
+                            </div>
+                            <div style={{ position: 'relative', flexShrink: 0 }}>
+                                <select value={amountPeriod} onChange={(e) => handleAmountPeriodChange(e.target.value)}
+                                    style={{ height: 40, boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: '0 10px 10px 0', padding: '0 26px 0 10px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75', background: 'rgba(20,123,117,0.06)', WebkitAppearance: 'none', appearance: 'none', cursor: 'pointer', outline: 'none' }}>
+                                    {PERIOD_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                                </select>
+                                <DropdownArrow />
+                            </div>
                         </div>
                     </>
                 )}
 
-                {/* Varies by term toggle */}
-                <button
-                    onClick={() => updateFamilyVariesByTerm(!familyVariesByTerm)}
-                    style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        padding: '0 0 20px', margin: 0,
-                    }}
-                >
-                    <div style={{
-                        width: 36, height: 20, borderRadius: 10,
-                        background: familyVariesByTerm ? '#147b75' : '#e0e0e0',
-                        transition: 'background 0.2s ease',
-                        position: 'relative', flexShrink: 0,
-                    }}>
-                        <div style={{
-                            width: 16, height: 16, borderRadius: 8,
-                            background: '#fff',
-                            position: 'absolute', top: 2,
-                            left: familyVariesByTerm ? 18 : 2,
-                            transition: 'left 0.2s ease',
-                        }} />
-                    </div>
-                    <span style={{
-                        fontSize: 13, fontWeight: 600,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#5e5e5e',
-                    }}>
-                        Different amount outside term
-                    </span>
-                </button>
+                {amountPeriod !== 'yearly' && (freq === 'weekly' || freq === 'monthly') && (
+                    <button onClick={() => updateFamilyVariesByTerm(!familyVariesByTerm)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 20px', margin: 0 }}>
+                        <div style={{ width: 36, height: 20, borderRadius: 10, background: familyVariesByTerm ? '#147b75' : '#e0e0e0', transition: 'background 0.2s ease', position: 'relative', flexShrink: 0 }}>
+                            <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: familyVariesByTerm ? 18 : 2, transition: 'left 0.2s ease' }} />
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Different amount outside term</span>
+                    </button>
+                )}
 
-                {/* Payment schedule */}
-                <p ref={freqBoxRef} style={{
-                    fontSize: 14, fontWeight: 700,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: '#000', margin: '0 0 10px',
-                }}>
-                    How often do you receive it?
-                </p>
-                <div ref={freqContainerRef} style={{
-                    border: '1px solid #e8e8e8', borderRadius: 10,
-                }}>
-                    {/* Frequency pills */}
-                    <div style={{
-                        display: 'flex', flexWrap: 'wrap', gap: 8,
-                        padding: '10px 12px',
-                    }}>
-                        {FREQ_OPTIONS.map(({ id, label }) => {
-                            const selected = familyFrequency === id
-                            return (
-                                <button
-                                    key={id}
-                                    onClick={() => {
-                                        freqTapRef.current = true
-                                        const wasMultiDate = familyFrequency === 'quarterly' || familyFrequency === 'termly'
-                                        const goingMultiDate = id === 'quarterly' || id === 'termly'
-                                        const container = scrollRef.current
-                                        const savedScroll = container ? container.scrollTop : 0
-
-                                        updateFamilyFrequency(id)
-                                        if (id === 'quarterly' && !familyQuarterlyDates?.[0]) {
-                                            const defaults = {}
-                                            QUARTER_DEFAULTS.forEach((d, i) => { defaults[i] = d })
-                                            updateFamilyQuarterlyDates(defaults)
-                                        }
-
-                                        if (goingMultiDate && !wasMultiDate) {
-                                            preMultiScrollRef.current = savedScroll
-                                            setTimeout(() => {
-                                                const el = freqBoxRef.current
-                                                if (!container || !el) return
-                                                const containerRect = container.getBoundingClientRect()
-                                                const elRect = el.getBoundingClientRect()
-                                                const offset = elRect.top - containerRect.top + container.scrollTop
-                                                container.scrollTo({ top: Math.max(0, offset - 10), behavior: 'smooth' })
-                                            }, 50)
-                                        } else if (!goingMultiDate && wasMultiDate) {
-                                            setTimeout(() => {
-                                                const box = freqContainerRef.current
-                                                if (!container || !box) return
-                                                const containerRect = container.getBoundingClientRect()
-                                                const boxRect = box.getBoundingClientRect()
-                                                const boxBottom = boxRect.bottom - containerRect.top + container.scrollTop
-                                                const visibleHeight = containerRect.height
-                                                const targetScroll = Math.max(0, boxBottom - visibleHeight + 10)
-                                                container.scrollTo({ top: targetScroll, behavior: 'smooth' })
-                                            }, 50)
-                                        } else if (!goingMultiDate && !wasMultiDate) {
-                                            setTimeout(() => {
-                                                const box = freqContainerRef.current
-                                                if (!container || !box) return
-                                                const containerRect = container.getBoundingClientRect()
-                                                const boxRect = box.getBoundingClientRect()
-                                                const boxBottom = boxRect.bottom - containerRect.top + container.scrollTop
-                                                const visibleHeight = containerRect.height
-                                                const targetScroll = Math.max(0, boxBottom - visibleHeight + 10)
-                                                container.scrollTo({ top: targetScroll, behavior: 'smooth' })
-                                            }, 50)
-                                        } else {
-                                            requestAnimationFrame(() => {
-                                                if (container) container.scrollTop = savedScroll
-                                            })
-                                        }
-                                    }}
+                {amountPeriod === 'yearly' ? (
+                    <div ref={datesBoxRef} style={{ background: 'rgba(20,123,117,0.1)', borderRadius: 10, padding: '10px 12px' }}>
+                        <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How often do you receive it?</p>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                            {FREQ_PILL_OPTIONS.map(o => (
+                                <button key={o.id} onClick={() => handleFrequencyChange(o.id)}
                                     style={{
-                                        background: selected ? '#147b75' : '#f5f5f5',
-                                        color: selected ? '#fff' : '#aaa',
-                                        border: 'none',
-                                        borderRadius: 8,
-                                        padding: '6px 12px',
-                                        fontSize: 12, fontWeight: 700,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        cursor: 'pointer',
-                                        transition: 'background 0.15s ease, color 0.15s ease',
-                                    }}
-                                >
-                                    {label}
+                                        padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                                        fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                        background: freq === o.id ? '#147b75' : 'rgba(20,123,117,0.12)',
+                                        color: freq === o.id ? '#fff' : '#147b75',
+                                        transition: 'all 0.15s ease',
+                                    }}>
+                                    {o.label}
                                 </button>
-                            )
-                        })}
-                    </div>
+                            ))}
+                        </div>
 
-                    {/* Date section */}
-                    <div
-                        ref={datesBoxRef}
-                        onClick={() => {
-                            if (isMultiDate) return
-                            const next = !datesExpanded
-                            setDatesExpanded(next)
-                            if (next) {
-                                setTimeout(() => {
-                                    const container = scrollRef.current
-                                    const box = datesBoxRef.current
-                                    if (!container || !box) return
-                                    const containerRect = container.getBoundingClientRect()
-                                    const boxRect = box.getBoundingClientRect()
-                                    const scrollOffset = boxRect.top - containerRect.top + container.scrollTop
-                                    container.scrollTo({ top: Math.max(0, scrollOffset - 2), behavior: 'smooth' })
-                                }, 320)
-                            }
-                        }}
-                        style={{
-                            background: 'rgba(20,123,117,0.1)',
-                            borderRadius: '0 0 10px 10px',
-                            padding: '10px 12px',
-                            cursor: isMultiDate ? 'default' : 'pointer',
-                        }}
-                    >
-                        {/* Weekly / Monthly: single next-date accordion */}
-                        {!isMultiDate && (
+                        {(freq === 'weekly' || freq === 'monthly') && (
                             <>
-                                <div style={{
-                                    display: 'flex', alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                }}>
+                                <button onClick={() => updateFamilyVariesByTerm(!familyVariesByTerm)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 10px', margin: 0 }}>
+                                    <div style={{ width: 36, height: 20, borderRadius: 10, background: familyVariesByTerm ? '#147b75' : 'rgba(20,123,117,0.25)', transition: 'background 0.2s ease', position: 'relative', flexShrink: 0 }}>
+                                        <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: familyVariesByTerm ? 18 : 2, transition: 'left 0.2s ease' }} />
+                                    </div>
+                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Only during term time</span>
+                                </button>
+                                <div onClick={() => { const next = !datesExpanded; setDatesExpanded(next) }}
+                                    style={{ cursor: 'pointer', paddingTop: 4 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div>
+                                            <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
+                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
+                                        </div>
+                                        <Chevron open={datesExpanded} />
+                                    </div>
+                                    <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: datesExpanded ? 200 : 0, opacity: datesExpanded ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.2s ease' }}>
+                                        <div style={{ marginTop: 10 }}>
+                                            <DateRow label="Next payment" value={familyNextDate} onChange={updateFamilyNextDate} onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {freq === 'termly' && (
+                            <>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
+                                    <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Payment dates</p>
+                                    {familyTermDates && Object.keys(familyTermDates).length > 0 && (
+                                        <button onClick={() => updateFamilyTermDates({})} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9f9c9c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
+                                        </button>
+                                    )}
+                                </div>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {(terms || []).map(term => (
+                                        <DateRow key={term.id} label={term.name} value={familyTermDates?.[term.id] || term.start}
+                                            onChange={(val) => updateFamilyTermDates({ ...familyTermDates, [term.id]: val })}
+                                            onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
+                                    ))}
+                                </div>
+                            </>
+                        )}
+
+                        {freq === 'quarterly' && (
+                            <>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
+                                    <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Payment dates</p>
+                                    {familyQuarterlyDates && Object.values(familyQuarterlyDates).some((v, i) => v !== QUARTER_DEFAULTS[i]) && (
+                                        <button onClick={() => { const defaults = {}; QUARTER_DEFAULTS.forEach((d, i) => { defaults[i] = d }); updateFamilyQuarterlyDates(defaults) }}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9f9c9c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
+                                        </button>
+                                    )}
+                                </div>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {QUARTER_LABELS.map((label, i) => (
+                                        <DateRow key={i} label={label} value={familyQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}
+                                            onChange={(val) => updateFamilyQuarterlyDates({ ...familyQuarterlyDates, [i]: val })}
+                                            onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
+                                    ))}
+                                </div>
+                            </>
+                        )}
+
+                        {freq === 'yearly' && (
+                            <DateRow label="Payment date" value={familyNextDate || '2025-09-01'} onChange={updateFamilyNextDate}
+                                onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
+                        )}
+                    </div>
+                ) : (
+                    <div ref={datesBoxRef}
+                        onClick={() => {
+                            if (freq === 'termly' || freq === 'quarterly') return
+                            const next = !datesExpanded; setDatesExpanded(next)
+                            if (next) setTimeout(() => {
+                                const container = scrollRef.current; const box = datesBoxRef.current
+                                if (!container || !box) return
+                                container.scrollTo({ top: Math.max(0, box.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - 2), behavior: 'smooth' })
+                            }, 320)
+                        }}
+                        style={{ background: 'rgba(20,123,117,0.1)', borderRadius: 10, padding: '10px 12px', cursor: (freq === 'termly' || freq === 'quarterly') ? 'default' : 'pointer' }}>
+
+                        {(freq === 'weekly' || freq === 'monthly') && (
+                            <>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <div>
-                                        <p style={{
-                                            fontSize: 14, fontWeight: 600,
-                                            fontFamily: 'Nunito, sans-serif',
-                                            color: '#000', margin: 0,
-                                        }}>
-                                            I know my next payment date
-                                        </p>
-                                        <p style={{
-                                            fontSize: 10, fontWeight: 500,
-                                            fontFamily: 'Nunito, sans-serif',
-                                            color: '#5e5e5e', margin: '2px 0 0',
-                                        }}>
-                                            Optional – helps us forecast your budget more accurately
-                                        </p>
+                                        <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
+                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast your budget more accurately</p>
                                     </div>
                                     <Chevron open={datesExpanded} />
                                 </div>
-
-                                <div
-                                    onClick={(e) => e.stopPropagation()}
-                                    style={{
-                                        maxHeight: datesExpanded ? 200 : 0,
-                                        opacity: datesExpanded ? 1 : 0,
-                                        overflow: 'hidden',
-                                        transition: 'max-height 0.3s ease, opacity 0.2s ease',
-                                    }}
-                                >
+                                <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: datesExpanded ? 200 : 0, opacity: datesExpanded ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.2s ease' }}>
                                     <div style={{ marginTop: 10 }}>
-                                        <DateRow
-                                            label="Next payment"
-                                            value={familyNextDate}
-                                            onChange={updateFamilyNextDate}
-                                            onDateTap={(active) => { dateActiveRef.current = active }}
-                                            scrollRef={scrollRef}
-                                        />
+                                        <DateRow label="Next payment" value={familyNextDate} onChange={updateFamilyNextDate} onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
                                     </div>
                                 </div>
                             </>
                         )}
 
-                        {/* Termly: one row per term */}
-                        {familyFrequency === 'termly' && (
+                        {freq === 'termly' && (
                             <>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
-                                    <p style={{
-                                        fontSize: 14, fontWeight: 600,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#000', margin: 0,
-                                    }}>
-                                        Payment dates
-                                    </p>
+                                    <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Payment dates</p>
                                     {familyTermDates && Object.keys(familyTermDates).length > 0 && (
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); updateFamilyTermDates({}) }}
-                                            style={{
-                                                background: 'none', border: 'none', cursor: 'pointer',
-                                                padding: 4, display: 'flex', alignItems: 'center',
-                                            }}
-                                        >
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9f9c9c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                <polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" />
-                                                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
-                                            </svg>
+                                        <button onClick={(e) => { e.stopPropagation(); updateFamilyTermDates({}) }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9f9c9c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
                                         </button>
                                     )}
                                 </div>
-                                <p style={{
-                                    fontSize: 10, fontWeight: 500,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#5e5e5e', margin: '0 0 8px',
-                                }}>
-                                    Defaults to your term start dates — tap to change
-                                </p>
-                                <div style={{
-                                    display: 'flex', flexDirection: 'column', gap: 8,
-                                }}>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {(terms || []).map(term => (
-                                        <DateRow
-                                            key={term.id}
-                                            label={term.name}
-                                            value={familyTermDates?.[term.id] || term.start}
+                                        <DateRow key={term.id} label={term.name} value={familyTermDates?.[term.id] || term.start}
                                             onChange={(val) => updateFamilyTermDates({ ...familyTermDates, [term.id]: val })}
-                                            onDateTap={(active) => { dateActiveRef.current = active }}
-                                            scrollRef={scrollRef}
-                                        />
+                                            onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
                                     ))}
                                 </div>
                             </>
                         )}
 
-                        {/* Quarterly: 4 date rows */}
-                        {familyFrequency === 'quarterly' && (
+                        {freq === 'quarterly' && (
                             <>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
-                                    <p style={{
-                                        fontSize: 14, fontWeight: 600,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#000', margin: 0,
-                                    }}>
-                                        Payment dates
-                                    </p>
+                                    <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Payment dates</p>
                                     {familyQuarterlyDates && Object.values(familyQuarterlyDates).some((v, i) => v !== QUARTER_DEFAULTS[i]) && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                const defaults = {}
-                                                QUARTER_DEFAULTS.forEach((d, i) => { defaults[i] = d })
-                                                updateFamilyQuarterlyDates(defaults)
-                                            }}
-                                            style={{
-                                                background: 'none', border: 'none', cursor: 'pointer',
-                                                padding: 4, display: 'flex', alignItems: 'center',
-                                            }}
-                                        >
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9f9c9c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                <polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" />
-                                                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" />
-                                            </svg>
+                                        <button onClick={(e) => { e.stopPropagation(); const defaults = {}; QUARTER_DEFAULTS.forEach((d, i) => { defaults[i] = d }); updateFamilyQuarterlyDates(defaults) }}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9f9c9c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
                                         </button>
                                     )}
                                 </div>
-                                <p style={{
-                                    fontSize: 10, fontWeight: 500,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#5e5e5e', margin: '0 0 8px',
-                                }}>
-                                    When is each quarterly payment due?
-                                </p>
-                                <div style={{
-                                    display: 'flex', flexDirection: 'column', gap: 8,
-                                }}>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {QUARTER_LABELS.map((label, i) => (
-                                        <DateRow
-                                            key={i}
-                                            label={label}
-                                            value={familyQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}
+                                        <DateRow key={i} label={label} value={familyQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}
                                             onChange={(val) => updateFamilyQuarterlyDates({ ...familyQuarterlyDates, [i]: val })}
-                                            onDateTap={(active) => { dateActiveRef.current = active }}
-                                            scrollRef={scrollRef}
-                                        />
+                                            onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
                                     ))}
                                 </div>
                             </>
                         )}
                     </div>
-                </div>
+                )}
+
                 {inputFocused && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
         </div>
