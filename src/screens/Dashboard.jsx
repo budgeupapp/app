@@ -1004,7 +1004,7 @@ export default function Dashboard() {
             }
             // Hide balance footer early in scroll so it doesn't get clipped
             if (footerRef.current) {
-                const ft = Math.min(1, t / 0.15) // fully hidden by 15% of shrink
+                const ft = Math.min(1, t / 0.35) // fully hidden by 35% of shrink
                 footerRef.current.style.maxHeight = `${(1 - ft) * 60}px`
                 footerRef.current.style.opacity = `${1 - ft}`
                 footerRef.current.style.overflow = 'hidden'
