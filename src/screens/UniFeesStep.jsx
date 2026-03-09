@@ -189,7 +189,7 @@ export default function UniFeesStep({
             <div style={{
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
-                padding: compact ? '0 0 16px' : '0 24px 16px',
+                padding: compact ? '0 14px 16px' : '0 24px 16px',
                 display: 'flex', flexDirection: 'column',
             }} ref={scrollRef}>
                 {/* Tab switcher */}

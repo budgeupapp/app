@@ -137,8 +137,8 @@ export default function TermGraph({ terms, expandedTerm, balance, overdraft, eve
         ? (typeof balance === 'number' ? balance : (parseFloat(String(balance || '0').replace(/,/g, '')) || 0))
         : 0
 
-    // Split events into past and future (exclude removed from balance line)
-    const activeEvents = events.filter(e => !e.removed)
+    // Split events into past and future (exclude removed and hidden from balance line)
+    const activeEvents = events.filter(e => !e.removed && !hiddenEventTypes.includes(e.editType))
     const pastEvents = hasBalance ? activeEvents
         .filter(e => datePct(e.date) <= todayPct && e.amount > 0)
         .sort((a, b) => datePct(a.date) - datePct(b.date))
@@ -149,11 +149,11 @@ export default function TermGraph({ terms, expandedTerm, balance, overdraft, eve
         : []
     // Removed events (for showing as deleted dots on current card)
     const removedFutureEvents = hasBalance ? events
-        .filter(e => e.removed && datePct(e.date) > todayPct && e.amount > 0)
+        .filter(e => e.removed && !hiddenEventTypes.includes(e.editType) && datePct(e.date) > todayPct && e.amount > 0)
         .sort((a, b) => datePct(a.date) - datePct(b.date))
         : []
     const removedPastEvents = hasBalance ? events
-        .filter(e => e.removed && datePct(e.date) <= todayPct && e.amount > 0)
+        .filter(e => e.removed && !hiddenEventTypes.includes(e.editType) && datePct(e.date) <= todayPct && e.amount > 0)
         .sort((a, b) => datePct(a.date) - datePct(b.date))
         : []
 
@@ -244,23 +244,46 @@ export default function TermGraph({ terms, expandedTerm, balance, overdraft, eve
     const steppedPath = (() => {
         if (!hasEvents || !hasBalance) return null
 
+        // Separate discrete events from weekly spend (gradient)
+        const discreteEvents = futureEvents.filter(e => e.editType !== 'weeklySpend')
+        const weeklyEvents = futureEvents.filter(e => e.editType === 'weeklySpend')
+
         let bal = balNum
         const points = [{ x: todayPct, y: toTopPct(bal) }]
         const dots = []
 
-        for (const evt of futureEvents) {
+        // Helper: sum weekly spend between two x positions
+        const weeklySpendBetween = (x1, x2) => {
+            return weeklyEvents
+                .filter(e => { const ex = datePct(e.date); return ex > x1 && ex <= x2 })
+                .reduce((sum, e) => sum + e.amount, 0)
+        }
+
+        let prevX = todayPct
+
+        for (const evt of discreteEvents) {
             const x = datePct(evt.date)
+            // Apply weekly spend as gradient slope to this event's date
+            const spent = weeklySpendBetween(prevX, x)
+            if (spent > 0) {
+                const balAtEvent = bal - spent
+                points.push({ x, y: toTopPct(balAtEvent) })
+                bal = balAtEvent
+            } else {
+                points.push({ x, y: toTopPct(bal) })
+            }
+            // Step for the discrete event
             const yBefore = toTopPct(bal)
-            // Horizontal to event date
-            points.push({ x, y: yBefore })
-            // Step to new balance
             bal += evt.type === 'income' ? evt.amount : -evt.amount
             const yAfter = toTopPct(bal)
             points.push({ x, y: yAfter })
             dots.push({ x, yBefore, yAfter, event: evt, balanceAfter: bal })
+            prevX = x
         }
 
-        // Extend to end
+        // Apply remaining weekly spend as gradient to end
+        const remainingSpend = weeklySpendBetween(prevX, 100)
+        bal -= remainingSpend
         points.push({ x: 100, y: toTopPct(bal) })
 
         const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
@@ -272,6 +295,10 @@ export default function TermGraph({ terms, expandedTerm, balance, overdraft, eve
     // Build past events path (faded, leading up to today)
     const pastPath = (() => {
         if (!hasPastEvents || !hasBalance) return null
+
+        // Separate discrete events from weekly spend (gradient)
+        const discretePast = pastEvents.filter(e => e.editType !== 'weeklySpend')
+        const weeklyPast = pastEvents.filter(e => e.editType === 'weeklySpend')
 
         // Walk backwards from current balance to find starting balance before past events
         let startBal = balNum
@@ -285,19 +312,38 @@ export default function TermGraph({ terms, expandedTerm, balance, overdraft, eve
         const points = [{ x: 0, y: toTopPct(bal) }]
         const dots = []
 
-        for (const evt of pastEvents) {
+        // Helper: sum weekly spend between two x positions
+        const weeklySpendBetween = (x1, x2) => {
+            return weeklyPast
+                .filter(e => { const ex = Math.max(3, datePct(e.date)); return ex > x1 && ex <= x2 })
+                .reduce((sum, e) => sum + e.amount, 0)
+        }
+
+        let prevX = 0
+
+        for (const evt of discretePast) {
             const x = Math.max(3, datePct(evt.date))
-            const yBefore = toTopPct(bal)
-            // Flat line to event date
-            points.push({ x, y: yBefore })
+            // Apply weekly spend as gradient slope to this event's date
+            const spent = weeklySpendBetween(prevX, x)
+            if (spent > 0) {
+                const balAtEvent = bal - spent
+                points.push({ x, y: toTopPct(balAtEvent) })
+                bal = balAtEvent
+            } else {
+                points.push({ x, y: toTopPct(bal) })
+            }
             // Step at event
+            const yBefore = toTopPct(bal)
             bal += evt.type === 'income' ? evt.amount : -evt.amount
             const yAfter = toTopPct(bal)
             points.push({ x, y: yAfter })
             dots.push({ x, yBefore, yAfter, event: evt, balanceAfter: bal })
+            prevX = x
         }
 
-        // Flat line to today (bal should equal balNum here)
+        // Apply remaining weekly spend as gradient to today
+        const remainingSpend = weeklySpendBetween(prevX, todayPct)
+        bal -= remainingSpend
         points.push({ x: todayPct, y: toTopPct(bal) })
 
         const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')

@@ -327,7 +327,7 @@ function buildGraphEvents(formData) {
 
     // Rent
     const rentAmt = parseFloat(String(formData.rentAmount || '0').replace(/,/g, ''))
-    if (rentAmt > 0 && formData.rentFrequency) {
+    if (formData.expenseSources?.includes('rent') && rentAmt > 0 && formData.rentFrequency) {
         const rentDates = generateRentDates(formData.rentFrequency, formData.rentNextDate, formData)
         const isYearly = formData.rentEntryMode === 'yearly'
         const rentAmounts = isYearly ? distributeEvenly(rentAmt, rentDates.length) : rentDates.map(() => rentAmt)
@@ -339,7 +339,7 @@ function buildGraphEvents(formData) {
 
     // Bills
     const billsAmt = parseFloat(String(formData.billsAmount || '0').replace(/,/g, ''))
-    if (billsAmt > 0 && formData.billsFrequency) {
+    if (formData.expenseSources?.includes('bills') && billsAmt > 0 && formData.billsFrequency) {
         const billsMode = formData.billsEntryMode || 'yearly'
         const freq = formData.billsFrequency
         const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
@@ -742,16 +742,7 @@ function BalanceEditor({ value, onSave, onCancel }) {
 function SourceRow({ source, active, yearlyAmount, expanded, onToggle, onExpandToggle, scrollContainerRef, formData, updateField, children }) {
     const isInactive = !active
     const rowRef = useRef(null)
-    const expandContentRef = useRef(null)
-    const [contentHeight, setContentHeight] = useState(0)
-
-    useEffect(() => {
-        if (expanded && expandContentRef.current) {
-            setContentHeight(expandContentRef.current.scrollHeight)
-        } else {
-            setContentHeight(0)
-        }
-    }, [expanded, active])
+    const contentHeight = expanded ? 600 : 0
 
     useEffect(() => {
         if (expanded && rowRef.current && scrollContainerRef?.current) {
@@ -844,7 +835,7 @@ function SourceRow({ source, active, yearlyAmount, expanded, onToggle, onExpandT
                 overflow: 'hidden',
                 transition: 'max-height 0.3s ease',
             }}>
-                <div ref={expandContentRef}>
+                <div>
                     {children && (
                         <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 8, background: '#fafafa' }}>
                             {children}
@@ -1011,10 +1002,11 @@ export default function Dashboard() {
                     header.style.marginBottom = `${(1 - ct) * 6}px`
                 })
             }
-            // Hide balance footer in sync with graph shrink
+            // Hide balance footer early in scroll so it doesn't get clipped
             if (footerRef.current) {
-                footerRef.current.style.maxHeight = `${(1 - t) * 60}px`
-                footerRef.current.style.opacity = `${1 - t}`
+                const ft = Math.min(1, t / 0.15) // fully hidden by 15% of shrink
+                footerRef.current.style.maxHeight = `${(1 - ft) * 60}px`
+                footerRef.current.style.opacity = `${1 - ft}`
                 footerRef.current.style.overflow = 'hidden'
             }
         })
@@ -1038,6 +1030,9 @@ export default function Dashboard() {
     const balanceNum = parseFloat(String(formData.balance || '0').replace(/,/g, ''))
     const overdraftNum = formData.overdraft ? parseFloat(String(formData.overdraft || '0').replace(/,/g, '')) : undefined
     const events = buildGraphEvents(formData)
+    // Build all events (ignoring source toggles) for computing yearly amounts when sources are off
+    const allSourceIds = [...INCOME_SOURCES.map(s => s.id), ...EXPENSE_SOURCES.map(s => s.id), 'other_expense']
+    const allEvents = buildGraphEvents({ ...formData, incomeSources: allSourceIds, expenseSources: allSourceIds })
 
     // Calculate totals
     const yearlyIncome = calcYearlyTotal(events, 'income')
@@ -1056,19 +1051,33 @@ export default function Dashboard() {
 
     // Calculate per-source yearly amounts
     const getSourceYearly = (editTypes) => {
-        return events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot).reduce((s, e) => s + e.amount, 0)
+        return allEvents.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot).reduce((s, e) => s + e.amount, 0)
     }
 
     const toggleIncomeSource = (id) => {
         const sources = formData.incomeSources || []
-        const next = sources.includes(id) ? sources.filter(s => s !== id) : [...sources, id]
+        const turningOn = !sources.includes(id)
+        const next = turningOn ? [...sources, id] : sources.filter(s => s !== id)
         updateField('incomeSources', next)
+        if (turningOn) {
+            const yearly = getSourceYearly(incomeEditTypeMap[id] || [])
+            if (yearly <= 0) setExpandedSource(id)
+        } else {
+            if (expandedSource === id) setExpandedSource(null)
+        }
     }
 
     const toggleExpenseSource = (id) => {
         const sources = formData.expenseSources || []
-        const next = sources.includes(id) ? sources.filter(s => s !== id) : [...sources, id]
+        const turningOn = !sources.includes(id)
+        const next = turningOn ? [...sources, id] : sources.filter(s => s !== id)
         updateField('expenseSources', next)
+        if (turningOn) {
+            const yearly = getSourceYearly(expenseEditTypeMap[id] || [])
+            if (yearly <= 0) setExpandedSource(id)
+        } else {
+            if (expandedSource === id) setExpandedSource(null)
+        }
     }
 
     const handleBalanceSave = (val) => {
