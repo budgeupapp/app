@@ -1,9 +1,9 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
-import { ChevronUp, ChevronDown, Check, Clock, Plus, Trash, Eye, EyeOff } from 'react-feather'
+import { ChevronUp, ChevronDown, Check, Clock, Plus, Trash, Eye, EyeOff, AlertTriangle } from 'react-feather'
 import TermGraph, { refreshAY, AY_START, AY_END, datePct, datePctFromDate, daysBetween, fmt } from '../components/TermGraph'
 import { supabase } from '../lib/supabaseClient'
 import { fetchUserData, saveCashflowForecast, saveUserFinances, saveTermDates, saveBalanceHistory } from '../lib/api'
-import { getCurrencySymbol, getGraphStart } from '../lib/settings'
+import { getCurrencySymbol, getGraphStart, setGraphStart } from '../lib/settings'
 import {
     INITIAL_FORM_DATA,
     DEFAULT_LOAN_MONTHS,
@@ -1437,6 +1437,9 @@ export default function Dashboard() {
     const [expandedSource, setExpandedSource] = useState(null)
     const [balanceToast, setBalanceToast] = useState(null)
     const balanceToastTimer = useRef(null)
+    const [showInitialBalancePopup, setShowInitialBalancePopup] = useState(false)
+    const [balanceBannerDismissing, setBalanceBannerDismissing] = useState(false)
+    const [initialBalanceRaw, setInitialBalanceRaw] = useState('')
     const pendingExpandRef = useRef(null)
 
     // Switch expanded source immediately — scroll animation handles compensation
@@ -1511,22 +1514,32 @@ export default function Dashboard() {
         refreshAY()
     }, [])
 
-    // Re-sync formData from localStorage when navigating back (e.g. after editing in Settings)
+    // Re-sync from Supabase when navigating back or tab becomes visible
     useEffect(() => {
-        const sync = () => {
+        const sync = async () => {
             if (document.hidden) return
+            const userId = userIdRef.current
+            if (!userId) return
             try {
-                const saved = localStorage.getItem(STORAGE_KEY)
-                if (!saved) return
-                const parsed = JSON.parse(saved)
-                if (parsed.formData) {
+                const result = await fetchUserData(userId)
+                if (result.formData) {
+                    const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
                     setFormData(prev => {
-                        const merged = migrateOtherFields({ ...prev, ...parsed.formData })
                         if (JSON.stringify(prev) === JSON.stringify(merged)) return prev
                         return merged
                     })
+                    try {
+                        const saved = localStorage.getItem(STORAGE_KEY)
+                        const parsed = saved ? JSON.parse(saved) : {}
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, formData: merged }))
+                    } catch { /* ignore */ }
                 }
-            } catch { /* ignore */ }
+                if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
+                const bal = result.formData?.balance
+                if (bal && bal !== '' && bal !== '0' && Number(bal) !== 0) {
+                    originSetRef.current = true
+                }
+            } catch { /* ignore sync errors */ }
         }
         document.addEventListener('visibilitychange', sync)
         window.addEventListener('focus', sync)
@@ -1544,16 +1557,23 @@ export default function Dashboard() {
                     const { data: { user } } = await supabase.auth.getUser()
                     if (!user || cancelled) return
                     userIdRef.current = user.id
+
+                    // Default graph start to user's join date on first load
+                    if (!localStorage.getItem('budgeup_graph_start') && user.created_at) {
+                        const d = new Date(user.created_at)
+                        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                        setGraphStart(dateStr)
+                        if (!localStorage.getItem('budgeup_graph_start_mode')) {
+                            localStorage.setItem('budgeup_graph_start_mode', 'joined')
+                        }
+                        refreshAY()
+                    }
+
                     const result = await fetchUserData(user.id)
                     if (cancelled) return
                     if (result.formData) {
-                        // Merge Supabase data but prefer localStorage (which is always more up-to-date)
-                        let localFormData = null
-                        try {
-                            const saved = localStorage.getItem(STORAGE_KEY)
-                            if (saved) localFormData = JSON.parse(saved).formData
-                        } catch { /* ignore */ }
-                        const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData, ...localFormData })
+                        // Supabase is the source of truth — prefer it over localStorage
+                        const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
                         setFormData(merged)
                         try {
                             const saved = localStorage.getItem(STORAGE_KEY)
@@ -1564,7 +1584,12 @@ export default function Dashboard() {
                     if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
                     // Mark origin as set if balance already exists
                     const bal = result.formData?.balance
-                    if (bal && bal !== '' && bal !== '0' && Number(bal) !== 0) originSetRef.current = true
+                    if (bal && bal !== '' && bal !== '0' && Number(bal) !== 0) {
+                        originSetRef.current = true
+                    } else {
+                        // No balance set — show mandatory popup
+                        setShowInitialBalancePopup(true)
+                    }
                     setDbLoaded(true)
                 } catch (err) {
                     console.error('Failed to load from Supabase:', err)
@@ -2153,7 +2178,7 @@ export default function Dashboard() {
                 ref={scrollRef}
                 onScroll={handleScroll}
                 style={{
-                    flex: 1, overflowY: 'auto', overflowX: 'hidden',
+                    flex: 1, overflowY: showInitialBalancePopup ? 'hidden' : 'auto', overflowX: 'hidden',
                     WebkitOverflowScrolling: 'touch',
                     overscrollBehavior: 'none',
                     paddingBottom: 'calc(400px + env(safe-area-inset-bottom))',
@@ -2161,7 +2186,115 @@ export default function Dashboard() {
             >
                 {/* Graph + tabs — sticky, shrinks on scroll */}
                 <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 16, paddingBottom: 10 }}>
-                    <div style={{ position: 'relative' }}>
+                    {/* Balance entry banner — shown when no balance in user_profiles */}
+                    {showInitialBalancePopup && (
+                        <div style={{
+                            margin: '0 16px 12px', padding: balanceBannerDismissing ? 0 : '14px 16px 16px',
+                            background: '#fdf0f1', border: '1px solid #e06470',
+                            borderRadius: 12,
+                            animation: balanceBannerDismissing ? 'none' : 'fadeIn 0.3s ease',
+                            maxHeight: balanceBannerDismissing ? 0 : 300,
+                            opacity: balanceBannerDismissing ? 0 : 1,
+                            overflow: 'hidden',
+                            transition: 'max-height 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.25s ease, padding 0.35s cubic-bezier(0.4,0,0.2,1), margin 0.35s cubic-bezier(0.4,0,0.2,1)',
+                            marginBottom: balanceBannerDismissing ? 0 : 12,
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
+                                <AlertTriangle size={16} color="#e06470" strokeWidth={2.5} style={{ flexShrink: 0 }} />
+                                <p style={{
+                                    fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+                                    color: '#c0392b', margin: 0,
+                                }}>Enter your bank balance</p>
+                            </div>
+                            <p style={{
+                                fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                color: '#b03a2e', margin: '0 0 3px', lineHeight: 1.4,
+                            }}>You need to enter your current bank balance before you can use the app.</p>
+                            <p style={{
+                                fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
+                                color: '#c0928f', margin: '0 0 12px',
+                            }}>Add up all your accounts — a rough estimate is fine. Don't include savings or overdraft.</p>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', flex: 1,
+                                    background: '#fff', borderRadius: 8, border: '1px solid #e0c0c0',
+                                    padding: '0 12px', height: 40, gap: 4,
+                                }}>
+                                    <span style={{
+                                        fontSize: 15, fontWeight: 700, color: '#cba0a0', fontFamily: 'Nunito, sans-serif',
+                                    }}>{getCurrencySymbol()}</span>
+                                    <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        value={initialBalanceRaw}
+                                        onChange={(e) => {
+                                            let val = e.target.value.replace(/[^0-9.]/g, '')
+                                            const parts = val.split('.')
+                                            if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('')
+                                            if (parts.length === 2 && parts[1].length > 2) val = parts[0] + '.' + parts[1].slice(0, 2)
+                                            const [int, dec] = val.split('.')
+                                            const formattedInt = int ? new Intl.NumberFormat('en-GB').format(Number(int)) : ''
+                                            setInitialBalanceRaw(dec !== undefined ? `${formattedInt}.${dec}` : formattedInt)
+                                        }}
+                                        ref={(el) => {
+                                            if (el) el.focus({ preventScroll: true })
+                                        }}
+                                        style={{
+                                            flex: 1, border: 'none', background: 'transparent',
+                                            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                            color: '#000', outline: 'none', padding: 0,
+                                        }}
+                                    />
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        const n = parseFloat(String(initialBalanceRaw || '0').replace(/,/g, '')) || 0
+                                        if (n === 0) return
+                                        const val = String(n)
+                                        const today = toLocalDate(new Date())
+                                        originSetRef.current = true
+                                        updateField('balance', val)
+                                        if (userIdRef.current) {
+                                            saveUserFinances(userIdRef.current, {
+                                                balance: val,
+                                                university: formData.university,
+                                                overdraft: formData.overdraft,
+                                                savings: formData.savings,
+                                                weeklySpend: formData.weeklySpend,
+                                                weeklySpendNonTerm: formData.weeklySpendNonTerm,
+                                                weeklySpendVariesByTerm: formData.weeklySpendVariesByTerm,
+                                            })
+                                            saveBalanceHistory(userIdRef.current, n)
+                                        }
+                                        localStorage.setItem('budgeup_balance_last_date', today)
+                                        setBalanceHistory(prev => {
+                                            const entry = { balance: n, recorded_date: today, source: 'manual' }
+                                            return [entry, ...prev]
+                                        })
+                                        // Animate shrink then remove
+                                        setBalanceBannerDismissing(true)
+                                        setTimeout(() => setShowInitialBalancePopup(false), 380)
+                                    }}
+                                    style={{
+                                        height: 40, padding: '0 18px', border: 'none', borderRadius: 8,
+                                        background: (parseFloat(String(initialBalanceRaw || '0').replace(/,/g, '')) || 0) === 0
+                                            ? '#ddd' : '#e06470',
+                                        cursor: (parseFloat(String(initialBalanceRaw || '0').replace(/,/g, '')) || 0) === 0
+                                            ? 'not-allowed' : 'pointer',
+                                        fontSize: 13, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+                                        color: '#fff', flexShrink: 0,
+                                        boxShadow: (parseFloat(String(initialBalanceRaw || '0').replace(/,/g, '')) || 0) === 0
+                                            ? 'none' : '0 2px 6px rgba(224,100,112,0.35)',
+                                    }}
+                                >
+                                    Save
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div style={{ position: 'relative', opacity: showInitialBalancePopup ? 0.35 : 1, pointerEvents: showInitialBalancePopup ? 'none' : 'auto' }}>
                         {!dbLoaded && (
                             <div style={{
                                 position: 'absolute', inset: 0, zIndex: 20,
@@ -2208,7 +2341,7 @@ export default function Dashboard() {
                             footer={
                                 <div ref={footerRef} style={{ padding: '2px 1px 6px' }}>
                                     {/* Row 1: Balance pill + toggle buttons */}
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginLeft: 10 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginLeft: 10 }}>
                                         <BalancePill value={balanceNum} onSave={val => {
                                             const oldVal = balanceNum
                                             const newVal = parseFloat(String(val || '0').replace(/,/g, '')) || 0
@@ -2242,25 +2375,25 @@ export default function Dashboard() {
                                                 balanceToastTimer.current = setTimeout(() => setBalanceToast(null), 2500)
                                             }
                                         }} scrollContainerRef={scrollRef} />
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignItems: 'flex-end' }}>
-                                            <div style={{ display: 'flex', gap: 6 }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, alignItems: 'flex-end', flexShrink: 1 }}>
+                                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                                                 <button
                                                     onClick={() => setShowExpenses(prev => {
                                                         localStorage.setItem('budgeup_show_expenses', String(!prev))
                                                         return !prev
                                                     })}
                                                     style={{
-                                                        flex: 1,
                                                         background: showExpenses ? 'rgba(224,100,112,0.10)' : '#fafafa',
                                                         border: showExpenses ? '1px solid #e06470' : '1px solid #e6e6e6',
                                                         borderRadius: 16, cursor: 'pointer',
-                                                        padding: '4px 10px',
-                                                        display: 'flex', alignItems: 'center', gap: 6,
+                                                        padding: '4px 7px',
+                                                        display: 'flex', alignItems: 'center', gap: 4,
                                                         height: 20, transition: 'all 0.18s ease',
+                                                        whiteSpace: 'nowrap',
                                                         boxShadow: showExpenses ? '0 1px 3px rgba(224,100,112,0.15)' : 'none'
                                                     }}
                                                 >
-                                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: showExpenses ? '#e06470' : '#cfcfcf' }} />
+                                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: showExpenses ? '#e06470' : '#cfcfcf', flexShrink: 0 }} />
                                                     <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showExpenses ? '#e06470' : '#8f8f8f' }}>Expenses</span>
                                                 </button>
                                                 <button
@@ -2269,17 +2402,17 @@ export default function Dashboard() {
                                                         return !prev
                                                     })}
                                                     style={{
-                                                        flex: 1,
                                                         background: showIncome ? 'rgba(20,123,117,0.10)' : '#fafafa',
                                                         border: showIncome ? '1px solid #147b75' : '1px solid #e6e6e6',
                                                         borderRadius: 16, cursor: 'pointer',
-                                                        padding: '4px 10px',
-                                                        display: 'flex', alignItems: 'center', gap: 6,
+                                                        padding: '4px 7px',
+                                                        display: 'flex', alignItems: 'center', gap: 4,
                                                         height: 20, transition: 'all 0.18s ease',
+                                                        whiteSpace: 'nowrap',
                                                         boxShadow: showIncome ? '0 1px 3px rgba(20,123,117,0.18)' : 'none'
                                                     }}
                                                 >
-                                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: showIncome ? '#147b75' : '#cfcfcf' }} />
+                                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: showIncome ? '#147b75' : '#cfcfcf', flexShrink: 0 }} />
                                                     <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showIncome ? '#147b75' : '#8f8f8f' }}>Income</span>
                                                 </button>
                                             </div>
@@ -2289,17 +2422,17 @@ export default function Dashboard() {
                                                     return !prev
                                                 })}
                                                 style={{
-                                                    width: '100%',
                                                     background: showBalanceHistory ? 'rgba(236,140,23,0.10)' : '#fafafa',
                                                     border: showBalanceHistory ? '1px solid #EC8C17' : '1px solid #e6e6e6',
                                                     borderRadius: 16, cursor: 'pointer',
-                                                    padding: '4px 10px',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                                    padding: '4px 7px',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                                                     height: 20, transition: 'all 0.18s ease',
+                                                    whiteSpace: 'nowrap',
                                                     boxShadow: showBalanceHistory ? '0 1px 3px rgba(236,140,23,0.18)' : 'none'
                                                 }}
                                             >
-                                                <Clock size={10} strokeWidth={2.3} color={showBalanceHistory ? '#EC8C17' : '#b5b5b5'} />
+                                                <Clock size={10} strokeWidth={2.3} color={showBalanceHistory ? '#EC8C17' : '#b5b5b5'} style={{ flexShrink: 0 }} />
                                                 <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showBalanceHistory ? '#EC8C17' : '#8f8f8f' }}>Balance History</span>
                                             </button>
                                         </div>
@@ -2313,6 +2446,8 @@ export default function Dashboard() {
                     <div ref={cardDetailsRef} style={{
                         display: 'flex', gap: 10,
                         padding: '25px 16px 0px',
+                        opacity: showInitialBalancePopup ? 0.35 : 1,
+                        pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
                     }}>
                         {/* Fixed card */}
                         <div data-card onClick={() => handleTabChange('fixed')} style={{
@@ -2427,7 +2562,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Content below — held in place during graph shrink */}
-                <div ref={contentWrapRef} style={{ willChange: 'transform', contain: 'layout style', minHeight: '60vh' }}>
+                <div ref={contentWrapRef} style={{ willChange: 'transform', contain: 'layout style', minHeight: '60vh', opacity: showInitialBalancePopup ? 0.35 : 1, pointerEvents: showInitialBalancePopup ? 'none' : 'auto' }}>
                     <div key={activeTab} style={{ animation: 'tabFadeIn 0.2s ease' }}>
 
                         {activeTab === 'fixed' && (<div style={{ marginBottom: -120 }}>

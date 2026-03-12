@@ -10,3 +10,5 @@ We are doing a significant UI overhaul. When implementing new screens:
 ## Design System
 - Extract and use tokens from Figma (colors, spacing, typography) and use react-feather where possible
 - Create a /tokens or /theme file if one doesn't exist
+- Whenever you add/remove a component or expand/collapse a dropdown (or similar), animate the transition so it's not a  
+  sudden jump.

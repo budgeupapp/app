@@ -171,7 +171,7 @@ export default function SettingsScreen() {
   const [userEmail, setUserEmail] = useState('')
   const [currency, setCurrencyState] = useState(getCurrency)
   const [graphStart, setGraphStartState] = useState(getGraphStart)
-  const [graphStartMode, setGraphStartMode] = useState(localStorage.getItem('budgeup_graph_start_mode') || 'custom')
+  const [graphStartMode, setGraphStartMode] = useState(localStorage.getItem('budgeup_graph_start_mode') || 'joined')
   const graphStartRef = useRef(getGraphStart())
   const graphStartDirtyRef = useRef(false)
   const [userCreatedAt, setUserCreatedAt] = useState(null)
@@ -693,27 +693,28 @@ export default function SettingsScreen() {
               padding: '14px 20px', borderBottom: '1px solid #f0f0f0',
             }}>
               <Text style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif' }}>Show overdraft on graph</Text>
-              <div
+              <button
                 onClick={() => {
                   const current = localStorage.getItem('budgeup_show_overdraft') !== 'false'
                   localStorage.setItem('budgeup_show_overdraft', String(!current))
                   setShowOverdraftToggle(!current)
                 }}
                 style={{
-                  width: 44, height: 26, borderRadius: 13,
-                  background: showOverdraftToggle ? '#EC8C17' : '#ddd',
-                  position: 'relative', cursor: 'pointer',
+                  width: 48, height: 26, borderRadius: 13,
+                  background: showOverdraftToggle ? '#147b75' : '#e0e0e0',
+                  border: 'none', cursor: 'pointer', padding: 0,
+                  position: 'relative', flexShrink: 0,
                   transition: 'background 0.2s ease',
                 }}
               >
                 <div style={{
                   width: 22, height: 22, borderRadius: '50%',
                   background: '#fff', position: 'absolute', top: 2,
-                  left: showOverdraftToggle ? 20 : 2,
+                  left: showOverdraftToggle ? 24 : 2,
                   transition: 'left 0.2s ease',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
                 }} />
-              </div>
+              </button>
             </div>
 
             {/* Graph start date */}

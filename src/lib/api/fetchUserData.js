@@ -156,22 +156,38 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
         }
     }
 
-    // Other income
+    // Other income (array-based)
     const otherIncomeRows = (byCategory['otherIncome'] || []).filter(r => !r.is_removed)
     if (otherIncomeRows.length) {
         incomeSources.push('other_income')
         fd.otherIncome = true
-        const main = otherIncomeRows.find(r => r.subcategory !== 'non_term')
-        const nonTerm = otherIncomeRows.find(r => r.subcategory === 'non_term')
-        if (main) {
-            fd.otherIncomeAmount = String(main.amount)
-            fd.otherIncomeFrequency = main.recurrence
-            fd.otherIncomeNextDate = main.scheduled_date
-            fd.otherIncomeLabel = main.title
-            fd.otherIncomeVariesByTerm = main.term_specific || false
+        // Group main rows and their non-term pairs by title
+        const mainRows = otherIncomeRows.filter(r => r.subcategory !== 'non_term')
+        const nonTermRows = otherIncomeRows.filter(r => r.subcategory === 'non_term')
+        const otherIncomes = mainRows.map((main, idx) => {
+            const baseLabel = main.title || 'Other Income'
+            const nonTerm = nonTermRows.find(r => r.title === baseLabel + ' (non-term)')
+            return {
+                id: `other_income_${idx}`,
+                label: baseLabel,
+                amount: String(main.amount),
+                frequency: main.recurrence,
+                nextDate: main.scheduled_date,
+                variesByTerm: main.term_specific || false,
+                nonTermAmount: nonTerm ? String(nonTerm.amount) : '',
+            }
+        })
+        fd.otherIncomes = otherIncomes
+        // Also set legacy flat fields from first entry for backwards compat
+        if (mainRows[0]) {
+            fd.otherIncomeAmount = String(mainRows[0].amount)
+            fd.otherIncomeFrequency = mainRows[0].recurrence
+            fd.otherIncomeNextDate = mainRows[0].scheduled_date
+            fd.otherIncomeLabel = mainRows[0].title
+            fd.otherIncomeVariesByTerm = mainRows[0].term_specific || false
         }
-        if (nonTerm) {
-            fd.otherIncomeNonTermAmount = String(nonTerm.amount)
+        if (nonTermRows[0]) {
+            fd.otherIncomeNonTermAmount = String(nonTermRows[0].amount)
             fd.otherIncomeVariesByTerm = true
         }
     }
@@ -190,25 +206,75 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
     const billsRows = (byCategory['bills'] || []).filter(r => !r.is_removed)
     if (billsRows.length) {
         expenseSources.push('bills')
-        const r = billsRows[0]
-        fd.billsAmount = String(r.amount)
-        fd.billsFrequency = r.recurrence
+        const main = billsRows.find(r => r.subcategory !== 'non_term')
+        const nonTerm = billsRows.find(r => r.subcategory === 'non_term')
+        if (main) {
+            fd.billsAmount = String(main.amount)
+            fd.billsFrequency = main.recurrence
+            fd.billsNextDate = main.scheduled_date
+            fd.billsVariesByTerm = main.term_specific || false
+        }
+        if (nonTerm) {
+            fd.billsNonTermAmount = String(nonTerm.amount)
+            fd.billsVariesByTerm = true
+        }
     }
 
     // Uni fees
     const uniRows = (byCategory['uniFees'] || []).filter(r => !r.is_removed)
     if (uniRows.length) {
         expenseSources.push('uni_fees')
-        fd.uniFeesAmount = String(uniRows[0].amount)
+        const uniMain = uniRows.find(r => r.subcategory !== 'non_term')
+        const uniNonTerm = uniRows.find(r => r.subcategory === 'non_term')
+        if (uniMain) {
+            fd.uniFeesAmount = String(uniMain.amount)
+            fd.uniFeesFrequency = uniMain.recurrence
+            fd.uniFeesNextDate = uniMain.scheduled_date
+            fd.uniFeesVariesByTerm = uniMain.term_specific || false
+        }
+        if (uniNonTerm) {
+            fd.uniFeesNonTermAmount = String(uniNonTerm.amount)
+            fd.uniFeesVariesByTerm = true
+        }
     }
 
     // Savings & Investments
     const savingsRows = (byCategory['savingsInv'] || []).filter(r => !r.is_removed)
     if (savingsRows.length) {
         expenseSources.push('savings_investments')
-        const r = savingsRows[0]
-        fd.savingsInvAmount = String(r.amount)
-        fd.savingsInvFrequency = r.recurrence
+        const savMain = savingsRows.find(r => r.subcategory !== 'non_term')
+        const savNonTerm = savingsRows.find(r => r.subcategory === 'non_term')
+        if (savMain) {
+            fd.savingsInvAmount = String(savMain.amount)
+            fd.savingsInvFrequency = savMain.recurrence
+            fd.savingsInvNextDate = savMain.scheduled_date
+            fd.savingsInvVariesByTerm = savMain.term_specific || false
+        }
+        if (savNonTerm) {
+            fd.savingsInvNonTermAmount = String(savNonTerm.amount)
+            fd.savingsInvVariesByTerm = true
+        }
+    }
+
+    // Other expenses (array-based)
+    const otherExpenseRows = (byCategory['otherExpense'] || []).filter(r => !r.is_removed)
+    if (otherExpenseRows.length) {
+        expenseSources.push('other_expense')
+        const mainRows = otherExpenseRows.filter(r => r.subcategory !== 'non_term')
+        const nonTermRows = otherExpenseRows.filter(r => r.subcategory === 'non_term')
+        fd.otherExpenses = mainRows.map((main, idx) => {
+            const baseLabel = main.title || 'Other Expense'
+            const nonTerm = nonTermRows.find(r => r.title === baseLabel + ' (non-term)')
+            return {
+                id: `other_expense_${idx}`,
+                label: baseLabel,
+                amount: String(main.amount),
+                frequency: main.recurrence,
+                nextDate: main.scheduled_date,
+                variesByTerm: main.term_specific || false,
+                nonTermAmount: nonTerm ? String(nonTerm.amount) : '',
+            }
+        })
     }
 
     // One-off items

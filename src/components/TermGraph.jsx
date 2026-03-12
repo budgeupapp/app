@@ -6,8 +6,10 @@ import { getGraphStart, getMonthsFromStart, getCurrencySymbol } from '../lib/set
 function computeAY() {
     const start = getGraphStart()
     const [y, m, d] = start.split('-').map(Number)
-    const ayStart = new Date(y, m - 1, d) // Sep 1, 2025
-    const ayEnd = new Date(y + 1, m - 1, d - 1) // Aug 31, 2026
+    const ayStart = new Date(y, m - 1, d)
+    // Always end Aug 31: same year if start is Sep+, next year otherwise
+    const endYear = m >= 9 ? y + 1 : y
+    const ayEnd = new Date(endYear, 7, 31) // Aug 31
     return { ayStart, ayEnd, ayMs: ayEnd - ayStart }
 }
 
@@ -25,14 +27,11 @@ export function refreshAY() {
     MONTHS = getMonthsFromStart()
 }
 
-// Convert a Date object to evenly-spaced percentage (each month = 1/12 width)
+// Convert a Date object to percentage across the graph (AY_START = 0%, AY_END = 100%)
 export const datePctFromDate = (dt) => {
-    const startMonth = AY_START.getMonth()
-    const startYear = AY_START.getFullYear()
-    const monthIdx = (dt.getFullYear() - startYear) * 12 + dt.getMonth() - startMonth
-    const daysInMonth = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate()
-    const dayFrac = (dt.getDate() - 1) / daysInMonth
-    return Math.max(0, Math.min(100, (monthIdx + dayFrac) / 12 * 100))
+    const ms = dt.getTime() - AY_START.getTime()
+    const total = AY_END.getTime() - AY_START.getTime()
+    return Math.max(0, Math.min(100, (ms / total) * 100))
 }
 
 export const datePct = (d) => {
@@ -225,9 +224,11 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         projMin = Math.min(projMin, -overdraft)
     }
 
-    // Include balance history in y-range
+    // Include balance history in y-range (only entries on or after graph start)
+    const graphStartStr = getGraphStart()
     if (balanceHistory.length > 0) {
         for (const bh of balanceHistory) {
+            if (bh.recorded_date < graphStartStr) continue
             const v = Number(bh.balance)
             if (!isNaN(v)) {
                 projMin = Math.min(projMin, v)
@@ -501,18 +502,10 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             if (d < bestDist && d < threshold) { bestDist = d; nearbyDot = dot }
         }
 
-        // Convert xPct to date
-        const monthFloat = (xPct / 100) * 12
-        const monthIdx = Math.floor(monthFloat)
-        const dayFrac = monthFloat - monthIdx
-        const startMonth = AY_START.getMonth()
-        const startYear = AY_START.getFullYear()
-        const m = startMonth + monthIdx
-        const yr = startYear + Math.floor(m / 12)
-        const mo = m % 12
-        const daysInMonth = new Date(yr, mo + 1, 0).getDate()
-        const day = Math.min(daysInMonth, Math.max(1, Math.round(1 + dayFrac * daysInMonth)))
-        const date = new Date(yr, mo, day)
+        // Convert xPct to date (linear between AY_START and AY_END)
+        const totalMs = AY_END.getTime() - AY_START.getTime()
+        const ms = (xPct / 100) * totalMs
+        const date = new Date(AY_START.getTime() + ms)
 
         // Direct DOM update for scrub line + dot (60fps)
         const yPct = 100 - ((balance - ym) / (ymx - ym)) * 100
@@ -1576,8 +1569,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             // Exclude today — the dedicated today dot already covers it
                             const todayDate = new Date()
                             const todayIso = `${todayDate.getFullYear()}-${String(todayDate.getMonth()+1).padStart(2,'0')}-${String(todayDate.getDate()).padStart(2,'0')}`
+                            const gStart = getGraphStart()
                             const allHistPoints = sorted
-                                .filter(bh => bh.recorded_date !== todayIso)
+                                .filter(bh => bh.recorded_date !== todayIso && bh.recorded_date >= gStart)
                                 .map(bh => ({
                                     x: datePct(bh.recorded_date),
                                     y: toTopPct(Number(bh.balance)),
@@ -1777,7 +1771,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             .filter((_, idx) => idx % 2 === 0)
                             .map(({ label, date }, i) => {
                                 const idx = i * 2
-                                const pct = (idx + 0.5) / 12 * 100
+                                const midDate = new Date(date.getFullYear(), date.getMonth(), 15)
+                                const pct = datePctFromDate(midDate)
                                 const isNow = today.getMonth() === date.getMonth() &&
                                     today.getFullYear() === date.getFullYear()
                                 return (
@@ -1803,7 +1798,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                         {(() => {
                             // Generate date ticks that adapt to zoom level
                             const curZoom = labelZoomRef.current
-                            const viewWidthDays = (100 / curZoom) / 100 * 365
+                            const totalDays = Math.round((AY_END - AY_START) / 86400000)
+                            const viewWidthDays = (100 / curZoom) / 100 * totalDays
 
                             // Work out which portion of the container's 0-100% range is visible
                             const curPan = panRef.current
@@ -1819,7 +1815,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     .map(({ label, date }, idx) => ({ label, date, idx }))
                                     .filter(({ idx }) => idx % step === 0)
                                     .map(({ label, date, idx }) => {
-                                        const pct = (idx + 0.5) / 12 * 100
+                                        const midDate = new Date(date.getFullYear(), date.getMonth(), 15)
+                                        const pct = datePctFromDate(midDate)
                                         if (pct < visibleMin || pct > visibleMax) return null
                                         const isNow = today.getMonth() === date.getMonth() &&
                                             today.getFullYear() === date.getFullYear()
