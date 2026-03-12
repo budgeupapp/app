@@ -247,6 +247,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
     if (hasBalance) balTopPctRef.current = balTopPctLive
     // During exit animation, freeze position at last known value
     const balTopPct = hasBalance ? balTopPctLive : balTopPctRef.current
+    // Green line position: based on projection balance (balNum), not actual balance
+    const greenTopPct = hasBalance ? toTopPct(balNum) : balTopPct
 
     // Animate stepped line when event count changes
     const [eventsRevealed, setEventsRevealed] = useState(false)
@@ -1140,7 +1142,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 <div style={{
                                     position: 'absolute',
                                     left: 0, right: `${100 - todayPct}%`,
-                                    top: `${balTopPct}%`, bottom: 0,
+                                    top: `${greenTopPct}%`, bottom: 0,
                                     background: 'linear-gradient(to bottom, rgba(20,123,117,0.05), rgba(20,123,117,0))',
                                     pointerEvents: 'none',
                                     transformOrigin: 'right',
@@ -1153,7 +1155,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 <div style={{
                                     position: 'absolute',
                                     left: 0, right: `${100 - todayPct}%`,
-                                    top: `${balTopPct}%`,
+                                    top: `${greenTopPct}%`,
                                     height: 0,
                                     borderTop: `1.5px solid rgba(20,123,117,0.25)`,
                                     pointerEvents: 'none',
@@ -1230,7 +1232,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 <div style={{
                                     position: 'absolute',
                                     left: `${todayPct}%`, right: 0,
-                                    top: `${balTopPct}%`, bottom: 0,
+                                    top: `${greenTopPct}%`, bottom: 0,
                                     background: 'linear-gradient(to bottom, rgba(20,123,117,0.08), rgba(20,123,117,0))',
                                     pointerEvents: 'none',
                                     transformOrigin: 'left',
@@ -1243,7 +1245,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 <div style={{
                                     position: 'absolute',
                                     left: `${todayPct}%`, right: 0,
-                                    top: `${balTopPct}%`,
+                                    top: `${greenTopPct}%`,
                                     height: 0,
                                     borderTop: `1.5px solid #147b75`,
                                     pointerEvents: 'none',

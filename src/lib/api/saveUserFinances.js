@@ -7,7 +7,6 @@ export async function saveUserFinances(userId, profile) {
     const data = {
         user_id: userId,
         university: profile.university || null,
-        balance: Number(stripCommas(profile.balance)) || 0,
         savings: Number(stripCommas(profile.savings)) || 0,
         overdraft: Number(stripCommas(profile.overdraft)) || 0,
         weekly_spend: Number(stripCommas(profile.weeklySpend)) || null,
@@ -16,6 +15,11 @@ export async function saveUserFinances(userId, profile) {
         onboarding_completed: profile.onboardingCompleted ?? true,
         currency: profile.currency ?? 'GBP',
         updated_at: new Date().toISOString()
+    }
+
+    // Only include balance when explicitly provided (set once on first recording)
+    if (profile.balance !== undefined) {
+        data.balance = Number(stripCommas(profile.balance)) || 0
     }
 
     // Include referred_by if provided (only on first save)

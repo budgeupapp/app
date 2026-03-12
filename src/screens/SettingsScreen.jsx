@@ -357,6 +357,9 @@ export default function SettingsScreen() {
       parsed.formData = resetData
       localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
 
+      // Clear balance-related localStorage
+      localStorage.removeItem('budgeup_balance_last_date')
+
       // Reset on Supabase if user is logged in
       if (userIdRef.current) {
         await saveUserFinances(userIdRef.current, {
@@ -364,8 +367,13 @@ export default function SettingsScreen() {
           onboardingCompleted: true,
         })
         await saveCashflowForecast(userIdRef.current, [])
+        // Delete all balance history records
+        await supabase
+          .from('balance_history')
+          .delete()
+          .eq('user_id', userIdRef.current)
       }
-      showToast('All income & expenses have been reset', 'success')
+      showToast('All data has been reset', 'success')
     } catch (err) {
       console.error('Failed to reset finances:', err)
       showToast('Failed to reset. Please try again.', 'error', 5000)
@@ -498,8 +506,8 @@ export default function SettingsScreen() {
 
       <ConfirmModal
         open={showResetModal}
-        title="Reset all finances?"
-        description="This will clear all your income, expenses, balance, and weekly spending. Term dates and university will be kept."
+        title="Reset all data?"
+        description="This will clear all your income, expenses, balance, balance history, and weekly spending. Term dates and university will be kept."
         confirmText="Reset everything"
         danger
         loading={resetting}
@@ -912,7 +920,7 @@ export default function SettingsScreen() {
             onClick={() => setShowResetModal(true)}
             style={{ borderRadius: 8, height: 48, marginBottom: 12 }}
           >
-            Reset all income & expenses
+            Reset all data
           </Button>
 
           <Button

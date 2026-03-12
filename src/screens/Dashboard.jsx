@@ -1473,31 +1473,35 @@ export default function Dashboard() {
             return
         }
 
-        // Save current tab's scroll position and expanded dropdown
-        tabScrollRef.current[activeTab] = el.scrollTop
+        // Save current tab's expanded dropdown
         tabExpandedRef.current[activeTab] = expandedSource
         el.style.overflowY = 'auto'
         setActiveTab(tab)
         setExpandedSource(tabExpandedRef.current[tab] || null)
         setGoalsShowMore(false)
 
-        const savedScroll = tabScrollRef.current[tab]
-        if (savedScroll != null) {
-            el.scrollTop = savedScroll
-            applyScrollStyles(savedScroll)
-        } else if (wasScrolledPast) {
-            el.scrollTop = SHRINK_DIST
-            applyScrollStyles(SHRINK_DIST)
-        } else {
-            el.scrollTop = 0
-            applyScrollStyles(0)
-        }
+        // Stay in the same view state: collapsed stays collapsed, expanded stays expanded
+        const targetScroll = wasScrolledPast ? SHRINK_DIST : 0
+        // Suppress snap/scroll handlers during tab switch
+        isTabSwitchingRef.current = true
+        if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
+        // Apply immediately to prevent flash
+        el.scrollTop = targetScroll
+        applyScrollStyles(targetScroll)
+        // Re-apply after React renders new tab content (key={activeTab} remount)
+        requestAnimationFrame(() => {
+            el.scrollTop = targetScroll
+            applyScrollStyles(targetScroll)
+            // Clear flag after one more frame to let scroll events settle
+            requestAnimationFrame(() => { isTabSwitchingRef.current = false })
+        })
     }
     const [editingEvent, setEditingEvent] = useState(null)
     const [editAmount, setEditAmount] = useState('')
     const [editingOverdraft, setEditingOverdraft] = useState(null)
     const [editOverdraftAmount, setEditOverdraftAmount] = useState('')
     const [balanceHistory, setBalanceHistory] = useState([])
+    const originSetRef = useRef(false)
     const [dbLoaded, setDbLoaded] = useState(false)
     const saveTimerRef = useRef(null)
     const userIdRef = useRef(null)
@@ -1558,6 +1562,9 @@ export default function Dashboard() {
                         } catch { /* ignore */ }
                     }
                     if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
+                    // Mark origin as set if balance already exists
+                    const bal = result.formData?.balance
+                    if (bal && bal !== '' && bal !== '0' && Number(bal) !== 0) originSetRef.current = true
                     setDbLoaded(true)
                 } catch (err) {
                     console.error('Failed to load from Supabase:', err)
@@ -1581,7 +1588,6 @@ export default function Dashboard() {
                     saveCashflowForecast(userId, formData),
                     saveUserFinances(userId, {
                         university: formData.university,
-                        balance: formData.balance,
                         overdraft: formData.overdraft,
                         savings: formData.savings,
                         weeklySpend: formData.weeklySpend,
@@ -1589,7 +1595,6 @@ export default function Dashboard() {
                         weeklySpendVariesByTerm: formData.weeklySpendVariesByTerm,
                     }),
                     saveTermDates(userId, formData.termDates),
-                    saveBalanceHistory(userId, formData.balance),
                 ])
             } catch (err) {
                 console.error('Failed to save to Supabase:', err)
@@ -1631,6 +1636,7 @@ export default function Dashboard() {
 
     const snapTimerRef = useRef(null)
     const isSnappingRef = useRef(false)
+    const isTabSwitchingRef = useRef(false)
     const animFrameRef = useRef(null)
 
     const ease = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
@@ -1732,16 +1738,11 @@ export default function Dashboard() {
 
     const isAnimatingRef = useRef(false)
 
-    const scrollRafRef = useRef(null)
     const handleScroll = useCallback(() => {
         if (isAnimatingRef.current) return
-        if (scrollRafRef.current) return // already queued for this frame
-        scrollRafRef.current = requestAnimationFrame(() => {
-            scrollRafRef.current = null
-            const el = scrollRef.current
-            if (!el) return
-            applyScrollStyles(el.scrollTop)
-        })
+        const el = scrollRef.current
+        if (!el) return
+        applyScrollStyles(el.scrollTop)
     }, [applyScrollStyles])
 
     // Snap graph to expanded or collapsed when scroll stops in the shrink zone
@@ -1750,7 +1751,7 @@ export default function Dashboard() {
         if (!el) return
         let isTouching = false
         const snap = () => {
-            if (isTouching || isSnappingRef.current || isAnimatingRef.current) return
+            if (isTouching || isSnappingRef.current || isAnimatingRef.current || isTabSwitchingRef.current) return
             const s = el.scrollTop
             if (s > 3 && s < SHRINK_DIST - 3) {
                 // Expand if dragged past 40% of shrink distance
@@ -1792,7 +1793,7 @@ export default function Dashboard() {
             snapTimerRef.current = setTimeout(snap, 120)
         }
         const onScroll = () => {
-            if (isTouching || isSnappingRef.current || isAnimatingRef.current) return
+            if (isTouching || isSnappingRef.current || isAnimatingRef.current || isTabSwitchingRef.current) return
             // If momentum carries from shrunk into shrink zone, snap back
             if (wasAtShrink && el.scrollTop < SHRINK_DIST && el.scrollTop > 10) {
                 animateScroll(el, SHRINK_DIST)
@@ -1843,18 +1844,18 @@ export default function Dashboard() {
     }, [])
 
     const terms = formData.termDates?.terms || []
-    const balanceNum = parseFloat(String(formData.balance || '0').replace(/,/g, ''))
+    const originBalance = parseFloat(String(formData.balance || '0').replace(/,/g, ''))
     const overdraftNum = formData.overdraft ? parseFloat(String(formData.overdraft || '0').replace(/,/g, '')) : undefined
 
-    // Projection balance: use the earliest balance_history entry (set during onboarding)
-    // so that subsequent balance edits don't shift the green projection line
-    const projectionBalance = (() => {
+    // Projection balance (green line): anchored at formData.balance (set once on first recording)
+    const projectionBalance = originBalance
+
+    // Actual balance: latest balance_history entry, or formData.balance if no history
+    const balanceNum = (() => {
         if (balanceHistory.length > 0) {
-            // balanceHistory is sorted desc by recorded_date, so last entry is the earliest
-            const earliest = balanceHistory[balanceHistory.length - 1]
-            return earliest.balance
+            return balanceHistory[0].balance
         }
-        return balanceNum
+        return originBalance
     })()
 
     // Build dynamic source lists from other instances
@@ -2208,14 +2209,33 @@ export default function Dashboard() {
                                 <div ref={footerRef} style={{ padding: '2px 1px 6px' }}>
                                     {/* Row 1: Balance pill + toggle buttons */}
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginLeft: 10 }}>
-                                        <BalancePill value={formData.balance} onSave={val => {
-                                            const oldVal = parseFloat(String(formData.balance || '0').replace(/,/g, '')) || 0
+                                        <BalancePill value={balanceNum} onSave={val => {
+                                            const oldVal = balanceNum
                                             const newVal = parseFloat(String(val || '0').replace(/,/g, '')) || 0
                                             const today = toLocalDate(new Date())
                                             const lastRecorded = localStorage.getItem('budgeup_balance_last_date')
                                             const isUpdate = lastRecorded === today
-                                            updateField('balance', val)
+                                            if (!originSetRef.current) {
+                                                // First recording: set origin balance in user_profiles
+                                                originSetRef.current = true
+                                                updateField('balance', val)
+                                            }
+                                            // Always save to balance_history
+                                            if (userIdRef.current) {
+                                                saveBalanceHistory(userIdRef.current, newVal)
+                                            }
                                             localStorage.setItem('budgeup_balance_last_date', today)
+                                            // Update local balanceHistory immediately
+                                            setBalanceHistory(prev => {
+                                                const entry = { balance: newVal, recorded_date: today, source: 'manual' }
+                                                const existing = prev.findIndex(e => e.recorded_date === today)
+                                                if (existing >= 0) {
+                                                    const updated = [...prev]
+                                                    updated[existing] = { ...updated[existing], balance: newVal }
+                                                    return updated
+                                                }
+                                                return [entry, ...prev]
+                                            })
                                             if (oldVal !== newVal) {
                                                 if (balanceToastTimer.current) clearTimeout(balanceToastTimer.current)
                                                 setBalanceToast(isUpdate ? 'Updated today\u2019s balance' : 'Recorded balance for today')
@@ -2407,7 +2427,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* Content below — held in place during graph shrink */}
-                <div ref={contentWrapRef} style={{ willChange: 'transform', contain: 'layout style' }}>
+                <div ref={contentWrapRef} style={{ willChange: 'transform', contain: 'layout style', minHeight: '60vh' }}>
                     <div key={activeTab} style={{ animation: 'tabFadeIn 0.2s ease' }}>
 
                         {activeTab === 'fixed' && (<div style={{ marginBottom: -120 }}>
