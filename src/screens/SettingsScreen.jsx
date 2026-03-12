@@ -264,6 +264,28 @@ export default function SettingsScreen() {
     loadUser()
   }, [])
 
+  const clearAllAppData = async () => {
+    localStorage.clear()
+    sessionStorage.clear()
+    // Clear all Cache Storage entries
+    if ('caches' in window) {
+      const keys = await caches.keys()
+      await Promise.all(keys.map((k) => caches.delete(k)))
+    }
+    // Clear IndexedDB databases
+    if (window.indexedDB?.databases) {
+      try {
+        const dbs = await window.indexedDB.databases()
+        dbs.forEach((db) => { if (db.name) window.indexedDB.deleteDatabase(db.name) })
+      } catch (_) { /* not supported in all browsers */ }
+    }
+    // Unregister service workers
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(regs.map((r) => r.unregister()))
+    }
+  }
+
   const handleLogout = () => {
     analytics.track(AUTH_EVENTS.LOGOUT_CLICKED)
     setShowLogoutModal(true)
@@ -279,7 +301,7 @@ export default function SettingsScreen() {
       showToast('Failed to log out. Please try again.', 'error', 5000)
     } else {
       analytics.track(AUTH_EVENTS.LOGOUT)
-      localStorage.clear()
+      await clearAllAppData()
     }
   }
 
@@ -308,7 +330,7 @@ export default function SettingsScreen() {
       analytics.track(SETTINGS_EVENTS.ACCOUNT_DELETED)
       showToast('Account deleted successfully', 'success')
 
-      localStorage.clear()
+      await clearAllAppData()
       await supabase.auth.signOut()
     } catch (error) {
       console.error('Error deleting account:', error)
