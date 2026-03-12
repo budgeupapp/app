@@ -1071,7 +1071,7 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
                             onClick={handleConfirm}
                             style={{
                                 background: '#EC8C17', border: 'none', cursor: 'pointer',
-                                borderRadius: 8, margin: '0 5px', width: 26, height: 26,
+                                borderRadius: 8, width: 26, height: 26,
                                 flexShrink: 0, position: 'relative'
                             }}
                         >
@@ -2161,132 +2161,132 @@ export default function Dashboard() {
                 {/* Graph + tabs — sticky, shrinks on scroll */}
                 <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 16, paddingBottom: 10 }}>
                     <div style={{ position: 'relative' }}>
-                    {!dbLoaded && (
-                        <div style={{
-                            position: 'absolute', inset: 0, zIndex: 20,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            background: 'rgba(255,255,255,0.6)',
-                            borderRadius: 8,
-                        }}>
+                        {!dbLoaded && (
                             <div style={{
-                                width: 20, height: 20, borderRadius: '50%',
-                                border: '2.5px solid #f0f0f0', borderTopColor: '#EC8C17',
-                                animation: 'spin 0.8s linear infinite',
-                            }} />
-                        </div>
-                    )}
-                    <TermGraph
-                        key={graphKey}
-                        graphHeight={graphHeight}
-                        graphHeightRef={graphContainerRef}
-                        marginTop={0}
-                        terms={terms}
-                        balance={projectionBalance || undefined}
-                        actualBalance={balanceNum}
-                        overdraft={showOverdraft ? overdraftNum : undefined}
-                        onOverdraftClick={handleOverdraftClick}
-                        events={(activeTab === 'goals' && goalsShowMore) ? (() => {
-                            const now = new Date(); now.setHours(0, 0, 0, 0)
-                            const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() + 30)
-                            const nowStr = toLocalDate(now), cutoffStr = toLocalDate(cutoff)
-                            return events.filter(e => e.date > nowStr && e.date <= cutoffStr && e.editType !== 'weeklySpend')
-                        })() : events}
-                        hiddenEventTypes={(activeTab === 'goals' && goalsShowMore) ? [] : [
-                            ...(!showIncome ? ['loan', 'bursary', 'family', 'work', 'oneOffIncome', ...otherIncomes.map(i => i.id)] : []),
-                            ...(!showExpenses ? ['rent', 'bills', 'uniFees', 'savingsInv', 'weeklySpend', 'oneOffExpense', ...otherExpenses.map(i => i.id)] : []),
-                        ].filter(t => {
-                            if (t === currentEventType) return false
-                            if (activeTab === 'variable' && (t === 'oneOffIncome' || t === 'oneOffExpense')) return false
-                            return true
-                        })}
-                        currentEventType={currentEventType}
-                        onEventClick={handleEventClick}
-                        activeEventDot={editingEvent}
-                        balanceHistory={balanceHistory}
-                        showBalanceHistory={showBalanceHistory}
-                        footer={
-                            <div ref={footerRef} style={{ padding: '2px 1px 6px' }}>
-                                {/* Row 1: Balance pill + toggle buttons */}
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginLeft: 10 }}>
-                                    <BalancePill value={formData.balance} onSave={val => {
-                                        const oldVal = parseFloat(String(formData.balance || '0').replace(/,/g, '')) || 0
-                                        const newVal = parseFloat(String(val || '0').replace(/,/g, '')) || 0
-                                        const today = toLocalDate(new Date())
-                                        const lastRecorded = localStorage.getItem('budgeup_balance_last_date')
-                                        const isUpdate = lastRecorded === today
-                                        updateField('balance', val)
-                                        localStorage.setItem('budgeup_balance_last_date', today)
-                                        if (oldVal !== newVal) {
-                                            if (balanceToastTimer.current) clearTimeout(balanceToastTimer.current)
-                                            setBalanceToast(isUpdate ? 'Updated today\u2019s balance' : 'Recorded balance for today')
-                                            balanceToastTimer.current = setTimeout(() => setBalanceToast(null), 2500)
-                                        }
-                                    }} scrollContainerRef={scrollRef} />
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignItems: 'flex-end' }}>
-                                        <div style={{ display: 'flex', gap: 6 }}>
+                                position: 'absolute', inset: 0, zIndex: 20,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                background: 'rgba(255,255,255,0.6)',
+                                borderRadius: 8,
+                            }}>
+                                <div style={{
+                                    width: 20, height: 20, borderRadius: '50%',
+                                    border: '2.5px solid #f0f0f0', borderTopColor: '#EC8C17',
+                                    animation: 'spin 0.8s linear infinite',
+                                }} />
+                            </div>
+                        )}
+                        <TermGraph
+                            key={graphKey}
+                            graphHeight={graphHeight}
+                            graphHeightRef={graphContainerRef}
+                            marginTop={0}
+                            terms={terms}
+                            balance={projectionBalance || undefined}
+                            actualBalance={balanceNum}
+                            overdraft={showOverdraft ? overdraftNum : undefined}
+                            onOverdraftClick={handleOverdraftClick}
+                            events={(activeTab === 'goals' && goalsShowMore) ? (() => {
+                                const now = new Date(); now.setHours(0, 0, 0, 0)
+                                const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() + 30)
+                                const nowStr = toLocalDate(now), cutoffStr = toLocalDate(cutoff)
+                                return events.filter(e => e.date > nowStr && e.date <= cutoffStr && e.editType !== 'weeklySpend')
+                            })() : events}
+                            hiddenEventTypes={(activeTab === 'goals' && goalsShowMore) ? [] : [
+                                ...(!showIncome ? ['loan', 'bursary', 'family', 'work', 'oneOffIncome', ...otherIncomes.map(i => i.id)] : []),
+                                ...(!showExpenses ? ['rent', 'bills', 'uniFees', 'savingsInv', 'weeklySpend', 'oneOffExpense', ...otherExpenses.map(i => i.id)] : []),
+                            ].filter(t => {
+                                if (t === currentEventType) return false
+                                if (activeTab === 'variable' && (t === 'oneOffIncome' || t === 'oneOffExpense')) return false
+                                return true
+                            })}
+                            currentEventType={currentEventType}
+                            onEventClick={handleEventClick}
+                            activeEventDot={editingEvent}
+                            balanceHistory={balanceHistory}
+                            showBalanceHistory={showBalanceHistory}
+                            footer={
+                                <div ref={footerRef} style={{ padding: '2px 1px 6px' }}>
+                                    {/* Row 1: Balance pill + toggle buttons */}
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginLeft: 10 }}>
+                                        <BalancePill value={formData.balance} onSave={val => {
+                                            const oldVal = parseFloat(String(formData.balance || '0').replace(/,/g, '')) || 0
+                                            const newVal = parseFloat(String(val || '0').replace(/,/g, '')) || 0
+                                            const today = toLocalDate(new Date())
+                                            const lastRecorded = localStorage.getItem('budgeup_balance_last_date')
+                                            const isUpdate = lastRecorded === today
+                                            updateField('balance', val)
+                                            localStorage.setItem('budgeup_balance_last_date', today)
+                                            if (oldVal !== newVal) {
+                                                if (balanceToastTimer.current) clearTimeout(balanceToastTimer.current)
+                                                setBalanceToast(isUpdate ? 'Updated today\u2019s balance' : 'Recorded balance for today')
+                                                balanceToastTimer.current = setTimeout(() => setBalanceToast(null), 2500)
+                                            }
+                                        }} scrollContainerRef={scrollRef} />
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignItems: 'flex-end' }}>
+                                            <div style={{ display: 'flex', gap: 6 }}>
+                                                <button
+                                                    onClick={() => setShowExpenses(prev => {
+                                                        localStorage.setItem('budgeup_show_expenses', String(!prev))
+                                                        return !prev
+                                                    })}
+                                                    style={{
+                                                        flex: 1,
+                                                        background: showExpenses ? 'rgba(224,100,112,0.10)' : '#fafafa',
+                                                        border: showExpenses ? '1px solid #e06470' : '1px solid #e6e6e6',
+                                                        borderRadius: 16, cursor: 'pointer',
+                                                        padding: '4px 10px',
+                                                        display: 'flex', alignItems: 'center', gap: 6,
+                                                        height: 20, transition: 'all 0.18s ease',
+                                                        boxShadow: showExpenses ? '0 1px 3px rgba(224,100,112,0.15)' : 'none'
+                                                    }}
+                                                >
+                                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: showExpenses ? '#e06470' : '#cfcfcf' }} />
+                                                    <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showExpenses ? '#e06470' : '#8f8f8f' }}>Expenses</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => setShowIncome(prev => {
+                                                        localStorage.setItem('budgeup_show_income', String(!prev))
+                                                        return !prev
+                                                    })}
+                                                    style={{
+                                                        flex: 1,
+                                                        background: showIncome ? 'rgba(20,123,117,0.10)' : '#fafafa',
+                                                        border: showIncome ? '1px solid #147b75' : '1px solid #e6e6e6',
+                                                        borderRadius: 16, cursor: 'pointer',
+                                                        padding: '4px 10px',
+                                                        display: 'flex', alignItems: 'center', gap: 6,
+                                                        height: 20, transition: 'all 0.18s ease',
+                                                        boxShadow: showIncome ? '0 1px 3px rgba(20,123,117,0.18)' : 'none'
+                                                    }}
+                                                >
+                                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: showIncome ? '#147b75' : '#cfcfcf' }} />
+                                                    <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showIncome ? '#147b75' : '#8f8f8f' }}>Income</span>
+                                                </button>
+                                            </div>
                                             <button
-                                                onClick={() => setShowExpenses(prev => {
-                                                    localStorage.setItem('budgeup_show_expenses', String(!prev))
+                                                onClick={() => setShowBalanceHistory(prev => {
+                                                    localStorage.setItem('budgeup_show_balance_history', String(!prev))
                                                     return !prev
                                                 })}
                                                 style={{
-                                                    flex: 1,
-                                                    background: showExpenses ? 'rgba(224,100,112,0.10)' : '#fafafa',
-                                                    border: showExpenses ? '1px solid #e06470' : '1px solid #e6e6e6',
+                                                    width: '100%',
+                                                    background: showBalanceHistory ? 'rgba(236,140,23,0.10)' : '#fafafa',
+                                                    border: showBalanceHistory ? '1px solid #EC8C17' : '1px solid #e6e6e6',
                                                     borderRadius: 16, cursor: 'pointer',
                                                     padding: '4px 10px',
-                                                    display: 'flex', alignItems: 'center', gap: 6,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                                                     height: 20, transition: 'all 0.18s ease',
-                                                    boxShadow: showExpenses ? '0 1px 3px rgba(224,100,112,0.15)' : 'none'
+                                                    boxShadow: showBalanceHistory ? '0 1px 3px rgba(236,140,23,0.18)' : 'none'
                                                 }}
                                             >
-                                                <div style={{ width: 6, height: 6, borderRadius: '50%', background: showExpenses ? '#e06470' : '#cfcfcf' }} />
-                                                <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showExpenses ? '#e06470' : '#8f8f8f' }}>Expenses</span>
-                                            </button>
-                                            <button
-                                                onClick={() => setShowIncome(prev => {
-                                                    localStorage.setItem('budgeup_show_income', String(!prev))
-                                                    return !prev
-                                                })}
-                                                style={{
-                                                    flex: 1,
-                                                    background: showIncome ? 'rgba(20,123,117,0.10)' : '#fafafa',
-                                                    border: showIncome ? '1px solid #147b75' : '1px solid #e6e6e6',
-                                                    borderRadius: 16, cursor: 'pointer',
-                                                    padding: '4px 10px',
-                                                    display: 'flex', alignItems: 'center', gap: 6,
-                                                    height: 20, transition: 'all 0.18s ease',
-                                                    boxShadow: showIncome ? '0 1px 3px rgba(20,123,117,0.18)' : 'none'
-                                                }}
-                                            >
-                                                <div style={{ width: 6, height: 6, borderRadius: '50%', background: showIncome ? '#147b75' : '#cfcfcf' }} />
-                                                <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showIncome ? '#147b75' : '#8f8f8f' }}>Income</span>
+                                                <Clock size={10} strokeWidth={2.3} color={showBalanceHistory ? '#EC8C17' : '#b5b5b5'} />
+                                                <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showBalanceHistory ? '#EC8C17' : '#8f8f8f' }}>Balance History</span>
                                             </button>
                                         </div>
-                                        <button
-                                            onClick={() => setShowBalanceHistory(prev => {
-                                                localStorage.setItem('budgeup_show_balance_history', String(!prev))
-                                                return !prev
-                                            })}
-                                            style={{
-                                                width: '100%',
-                                                background: showBalanceHistory ? 'rgba(236,140,23,0.10)' : '#fafafa',
-                                                border: showBalanceHistory ? '1px solid #EC8C17' : '1px solid #e6e6e6',
-                                                borderRadius: 16, cursor: 'pointer',
-                                                padding: '4px 10px',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                                                height: 20, transition: 'all 0.18s ease',
-                                                boxShadow: showBalanceHistory ? '0 1px 3px rgba(236,140,23,0.18)' : 'none'
-                                            }}
-                                        >
-                                            <Clock size={10} strokeWidth={2.3} color={showBalanceHistory ? '#EC8C17' : '#b5b5b5'} />
-                                            <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showBalanceHistory ? '#EC8C17' : '#8f8f8f' }}>Balance History</span>
-                                        </button>
                                     </div>
                                 </div>
-                            </div>
-                        }
-                    />
+                            }
+                        />
                     </div>
 
                     {/* Summary cards */}
