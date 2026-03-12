@@ -93,7 +93,8 @@ export async function saveCashflowForecast(userId, data) {
     if (data.incomeSources?.includes('bursary') || data.bursary) {
         const rawAmount = stripCommas(data.bursaryAmount)
         const totalAmount = Number(rawAmount) || 0
-        const dates = data.bursaryDates?.filter(Boolean) || []
+        const rawDates = data.bursaryDates
+        const dates = (Array.isArray(rawDates) ? rawDates : Object.values(rawDates || {})).filter(Boolean)
         const dateCount = dates.length
         const perPayment = dateCount ? Number((totalAmount / dateCount).toFixed(2)) : 0
         let running = 0
@@ -169,8 +170,36 @@ export async function saveCashflowForecast(userId, data) {
         }
     }
 
-    /* --- Other income --- */
-    if (data.incomeSources?.includes('other_income')) {
+    /* --- Other income (array-based) --- */
+    for (const inst of (data.otherIncomes || [])) {
+        const amt = stripCommas(inst.amount)
+        const freq = inst.frequency || 'monthly'
+        if (amt) {
+            rows.push({
+                user_id: userId, direction: 'in', type: 'other_income',
+                title: inst.label || 'Other Income', amount: amt,
+                currency: 'GBP', recurrence: mapFrequencyToRecurrence(freq),
+                scheduled_date: inst.nextDate || '2025-09-01',
+                end_date: null, source: 'manual',
+                category: 'otherIncome',
+                term_specific: inst.variesByTerm || false,
+            })
+            if (inst.variesByTerm && inst.nonTermAmount) {
+                rows.push({
+                    user_id: userId, direction: 'in', type: 'other_income_non_term',
+                    title: (inst.label || 'Other Income') + ' (non-term)',
+                    amount: stripCommas(inst.nonTermAmount),
+                    currency: 'GBP', recurrence: mapFrequencyToRecurrence(freq),
+                    scheduled_date: inst.nextDate || '2025-09-01',
+                    end_date: null, source: 'manual',
+                    category: 'otherIncome', subcategory: 'non_term',
+                    term_specific: true,
+                })
+            }
+        }
+    }
+    // Legacy flat field fallback
+    if ((data.otherIncomes || []).length === 0 && data.incomeSources?.includes('other_income')) {
         const amt = stripCommas(data.otherIncomeAmount)
         const freq = data.otherIncomeFrequency
         if (amt && freq) {
@@ -183,18 +212,6 @@ export async function saveCashflowForecast(userId, data) {
                 category: 'otherIncome',
                 term_specific: data.otherIncomeVariesByTerm || false,
             })
-            if (data.otherIncomeVariesByTerm && data.otherIncomeNonTermAmount) {
-                rows.push({
-                    user_id: userId, direction: 'in', type: 'other_income_non_term',
-                    title: (data.otherIncomeLabel || 'Other Income') + ' (non-term)',
-                    amount: stripCommas(data.otherIncomeNonTermAmount),
-                    currency: 'GBP', recurrence: mapFrequencyToRecurrence(freq),
-                    scheduled_date: data.otherIncomeNextDate || '2025-09-01',
-                    end_date: null, source: 'manual',
-                    category: 'otherIncome', subcategory: 'non_term',
-                    term_specific: true,
-                })
-            }
         }
     }
 
@@ -232,14 +249,28 @@ export async function saveCashflowForecast(userId, data) {
     if (data.expenseSources?.includes('uni_fees')) {
         const amt = stripCommas(data.uniFeesAmount)
         if (amt) {
+            const uniAmtPeriod = data.uniFeesAmountPeriod || 'yearly'
+            const uniFreq = uniAmtPeriod === 'yearly' ? (data.uniFeesFrequency || 'monthly') : uniAmtPeriod
             rows.push({
                 user_id: userId, direction: 'out', type: 'uni_fees',
                 title: 'University Fees', amount: amt, currency: 'GBP',
-                recurrence: 'yearly',
-                scheduled_date: '2025-09-01',
+                recurrence: mapFrequencyToRecurrence(uniFreq),
+                scheduled_date: data.uniFeesNextDate || '2025-09-01',
                 end_date: null, source: 'manual',
                 category: 'uniFees',
+                term_specific: data.uniFeesVariesByTerm || false,
             })
+            if (data.uniFeesVariesByTerm && data.uniFeesNonTermAmount) {
+                rows.push({
+                    user_id: userId, direction: 'out', type: 'uni_fees_non_term',
+                    title: 'University Fees (non-term)', amount: stripCommas(data.uniFeesNonTermAmount),
+                    currency: 'GBP', recurrence: mapFrequencyToRecurrence(uniFreq),
+                    scheduled_date: data.uniFeesNextDate || '2025-09-01',
+                    end_date: null, source: 'manual',
+                    category: 'uniFees', subcategory: 'non_term',
+                    term_specific: true,
+                })
+            }
         }
     }
 
@@ -255,6 +286,35 @@ export async function saveCashflowForecast(userId, data) {
                 end_date: null, source: 'manual',
                 category: 'savingsInv',
             })
+        }
+    }
+
+    /* --- Other expense (array-based) --- */
+    for (const inst of (data.otherExpenses || [])) {
+        const amt = stripCommas(inst.amount)
+        const freq = inst.frequency || 'monthly'
+        if (amt) {
+            rows.push({
+                user_id: userId, direction: 'out', type: 'other_expense',
+                title: inst.label || 'Other Expense', amount: amt,
+                currency: 'GBP', recurrence: mapFrequencyToRecurrence(freq),
+                scheduled_date: inst.nextDate || '2025-09-01',
+                end_date: null, source: 'manual',
+                category: 'otherExpense',
+                term_specific: inst.variesByTerm || false,
+            })
+            if (inst.variesByTerm && inst.nonTermAmount) {
+                rows.push({
+                    user_id: userId, direction: 'out', type: 'other_expense_non_term',
+                    title: (inst.label || 'Other Expense') + ' (non-term)',
+                    amount: stripCommas(inst.nonTermAmount),
+                    currency: 'GBP', recurrence: mapFrequencyToRecurrence(freq),
+                    scheduled_date: inst.nextDate || '2025-09-01',
+                    end_date: null, source: 'manual',
+                    category: 'otherExpense', subcategory: 'non_term',
+                    term_specific: true,
+                })
+            }
         }
     }
 

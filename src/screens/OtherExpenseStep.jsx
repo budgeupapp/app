@@ -1,40 +1,95 @@
+import { getCurrencySymbol } from '../lib/settings'
 import { useState, useRef, useEffect } from 'react'
 import { fmt } from '../components/TermGraph'
 
-function formatDisplay(raw) { if (!raw) return ''; const [whole, ...rest] = raw.split('.'); const f = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ','); return rest.length ? `${f}.${rest.join('.')}` : f }
-function cleanNum(val) { let v = val.replace(/[^0-9.]/g, ''); const p = v.split('.'); if (p.length > 2) v = p[0] + '.' + p.slice(1).join(''); if (parseFloat(v) > 500000) v = '500000'; return v }
+/* ---------- HELPERS ---------- */
+
+function formatDisplay(raw) {
+    if (!raw) return ''
+    const [whole, ...rest] = raw.split('.')
+    const formatted = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+    return rest.length ? `${formatted}.${rest.join('.')}` : formatted
+}
+
+function cleanNum(val) {
+    let v = val.replace(/[^0-9.]/g, '')
+    const parts = v.split('.')
+    if (parts.length > 2) v = parts[0] + '.' + parts.slice(1).join('')
+    if (parseFloat(v) > 500000) v = '500000'
+    return v
+}
 
 const PERIOD_OPTIONS = [
-    { id: 'weekly', label: 'Weekly' }, { id: 'monthly', label: 'Monthly' },
-    { id: 'quarterly', label: 'Quarterly' }, { id: 'termly', label: 'Per Term' }, { id: 'yearly', label: 'Yearly' },
+    { id: 'weekly', label: 'Weekly' },
+    { id: 'monthly', label: 'Monthly' },
+    { id: 'quarterly', label: 'Quarterly' },
+    { id: 'termly', label: 'Per Term' },
+    { id: 'yearly', label: 'Yearly' },
 ]
+
 const FREQ_PILL_OPTIONS = [
-    { id: 'weekly', label: 'Weekly' }, { id: 'monthly', label: 'Monthly' },
-    { id: 'quarterly', label: 'Quarterly' }, { id: 'termly', label: 'Per Term' }, { id: 'yearly', label: 'Yearly' },
+    { id: 'weekly', label: 'Weekly' },
+    { id: 'monthly', label: 'Monthly' },
+    { id: 'quarterly', label: 'Quarterly' },
+    { id: 'termly', label: 'Per Term' },
+    { id: 'yearly', label: 'Yearly' },
 ]
+
 const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4']
 const QUARTER_DEFAULTS = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
 
+/* ---------- SMALL COMPONENTS ---------- */
+
 function DropdownArrow({ color = '#e06470' }) {
-    return (<svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}><path d="M1 1L5 5L9 1" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>)
+    return (
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{
+            position: 'absolute', right: 8, top: '50%',
+            transform: 'translateY(-50%)', pointerEvents: 'none',
+        }}>
+            <path d="M1 1L5 5L9 1" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    )
 }
+
 function Chevron({ open }) {
-    return (<svg width="18" height="15" viewBox="0 0 18 15" fill="none" style={{ transform: open ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease', flexShrink: 0 }}><path d="M4 5.5L9 10.5L14 5.5" stroke="#9f9c9c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>)
+    return (
+        <svg width="18" height="15" viewBox="0 0 18 15" fill="none" style={{
+            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s ease', flexShrink: 0,
+        }}>
+            <path d="M4 5.5L9 10.5L14 5.5" stroke="#9f9c9c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    )
 }
+
 function DateRow({ label, value, onChange, onDateTap, scrollRef }) {
     return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0' }}>
             <span style={{ fontSize: 12, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif' }}>{label}</span>
             <div style={{ position: 'relative' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#e06470', borderBottom: '1px dotted rgba(224,100,112,0.45)', paddingBottom: 1, fontFamily: 'Nunito, sans-serif', pointerEvents: 'none' }}>{value ? fmt(value) : 'Select date'}</span>
+                <span style={{
+                    fontSize: 13, fontWeight: 600, color: '#e06470',
+                    borderBottom: '1px dotted rgba(224,100,112,0.45)',
+                    paddingBottom: 1, fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
+                }}>
+                    {value ? fmt(value) : 'Select date'}
+                </span>
                 <input type="date" value={value || ''}
-                    onFocus={() => { onDateTap?.(true); const c = scrollRef?.current; if (c) { const p = c.scrollTop; requestAnimationFrame(() => { c.scrollTop = p }) } }}
-                    onBlur={() => onDateTap?.(false)} onChange={(e) => e.target.value && onChange(e.target.value)}
-                    style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }} />
+                    onFocus={() => {
+                        onDateTap?.(true)
+                        const container = scrollRef?.current
+                        if (container) { const pos = container.scrollTop; requestAnimationFrame(() => { container.scrollTop = pos }) }
+                    }}
+                    onBlur={() => onDateTap?.(false)}
+                    onChange={(e) => e.target.value && onChange(e.target.value)}
+                    style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
+                />
             </div>
         </div>
     )
 }
+
+/* ---------- MAIN ---------- */
 
 export default function OtherExpenseStep({
     otherExpenseAmount, updateOtherExpenseAmount,
@@ -45,31 +100,138 @@ export default function OtherExpenseStep({
     terms,
     otherExpenseTermDates, updateOtherExpenseTermDates,
     otherExpenseQuarterlyDates, updateOtherExpenseQuarterlyDates,
+    otherExpenseVariesByTerm, updateOtherExpenseVariesByTerm,
+    otherExpenseNonTermAmount, updateOtherExpenseNonTermAmount,
+    compact = false,
 }) {
-    const amountPeriod = otherExpenseAmountPeriod || 'monthly'
+    const amountPeriod = otherExpenseAmountPeriod || otherExpenseFrequency || 'monthly'
     const freq = amountPeriod === 'yearly' ? (otherExpenseFrequency || 'monthly') : amountPeriod
 
-    const [rawAmount, setRawAmount] = useState(() => { const n = parseFloat(String(otherExpenseAmount || '').replace(/,/g, '')); return n ? String(n) : '' })
-    useEffect(() => { const n = parseFloat(String(otherExpenseAmount || '').replace(/,/g, '')); setRawAmount(n ? String(n) : '') }, [otherExpenseAmount])
+    const [rawAmount, setRawAmount] = useState(() => {
+        const n = parseFloat(String(otherExpenseAmount || '').replace(/,/g, ''))
+        return n ? String(n) : ''
+    })
+    const [rawNonTermAmount, setRawNonTermAmount] = useState(() => {
+        const n = parseFloat(String(otherExpenseNonTermAmount || '').replace(/,/g, ''))
+        return n ? String(n) : ''
+    })
+    useEffect(() => {
+        const n = parseFloat(String(otherExpenseAmount || '').replace(/,/g, ''))
+        setRawAmount(n ? String(n) : '')
+    }, [otherExpenseAmount])
+    useEffect(() => {
+        const n = parseFloat(String(otherExpenseNonTermAmount || '').replace(/,/g, ''))
+        setRawNonTermAmount(n ? String(n) : '')
+    }, [otherExpenseNonTermAmount])
 
     const [datesExpanded, setDatesExpanded] = useState(!!otherExpenseNextDate)
     const [inputFocused, setInputFocused] = useState(false)
-    const scrollRef = useRef(null), blurTimerRef = useRef(null), datesBoxRef = useRef(null)
-    const dateActiveRef = useRef(false), freqTapRef = useRef(false)
+    const scrollRef = useRef(null)
+    const blurTimerRef = useRef(null)
+    const datesBoxRef = useRef(null)
+    const nextDateBoxRef = useRef(null)
+    const dateActiveRef = useRef(false)
+    const freqTapRef = useRef(false)
+
+    const scrollBoxIntoView = () => {
+        setTimeout(() => {
+            const box = datesBoxRef.current
+            if (!box) return
+            box.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 450)
+    }
+
+    const questionRef = useRef(null)
+    const rootRef = useRef(null)
+
+    // Find the nearest scrollable ancestor
+    const findScrollParent = (el) => {
+        let node = el
+        while (node) {
+            const style = window.getComputedStyle(node)
+            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && node.scrollHeight > node.clientHeight) return node
+            node = node.parentElement
+        }
+        return null
+    }
+
+    // Find the parent [data-inst-id] wrapper for this instance
+    const findInstWrapper = () => {
+        let el = rootRef.current
+        while (el) {
+            if (el.hasAttribute?.('data-inst-id')) return el
+            el = el.parentElement
+        }
+        return null
+    }
+
+    const touchStartRef = useRef(null)
+    const handleInputTouchStart = (e) => { touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }
+    const handleInputTouchEnd = (e) => {
+        if (!touchStartRef.current) return
+        const dx = e.changedTouches[0].clientX - touchStartRef.current.x
+        const dy = e.changedTouches[0].clientY - touchStartRef.current.y
+        touchStartRef.current = null
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return
+        if (!compact) return
+        const input = e.target
+        input.focus({ preventScroll: true })
+        const wrapper = rootRef.current
+        if (!wrapper) return
+        const scrollParent = findScrollParent(wrapper.parentElement)
+        if (scrollParent) {
+            const containerRect = scrollParent.getBoundingClientRect()
+            const inputRect = input.getBoundingClientRect()
+            const stickyHeader = scrollParent.querySelector('[data-sticky-header]')
+            const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
+            scrollParent.scrollTo({ top: Math.max(0, inputRect.top - containerRect.top + scrollParent.scrollTop - headerH - 8), behavior: 'smooth' })
+        }
+    }
 
     const scrollInputToTop = (e) => {
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
-        setInputFocused(true); const input = e.target
-        const c = scrollRef.current; if (c) { const pos = c.scrollTop; requestAnimationFrame(() => { c.scrollTop = pos }) }
-        setTimeout(() => { if (!c) return; const cr = c.getBoundingClientRect(); const ir = input.getBoundingClientRect(); c.scrollTo({ top: Math.max(0, ir.top - cr.top + c.scrollTop - 20), behavior: 'smooth' }) }, 301)
+        setInputFocused(true)
+        const input = e.target
+        if (compact) return
+        setTimeout(() => {
+            const container = scrollRef.current
+            if (!container) return
+            const containerRect = container.getBoundingClientRect()
+            if (questionRef.current) {
+                const qr = questionRef.current.getBoundingClientRect()
+                const qTop = qr.top - containerRect.top + container.scrollTop
+                container.scrollTo({ top: Math.max(0, qTop), behavior: 'smooth' })
+            } else {
+                const ir = input.getBoundingClientRect()
+                container.scrollTo({ top: Math.max(0, ir.top - containerRect.top + container.scrollTop - 30), behavior: 'smooth' })
+            }
+        }, 301)
     }
+
     const handleInputBlur = () => {
         blurTimerRef.current = setTimeout(() => {
             if (dateActiveRef.current || freqTapRef.current) { setInputFocused(false); freqTapRef.current = false; return }
-            setInputFocused(false); setTimeout(() => { if (!dateActiveRef.current) scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }) }, 100)
+            if (compact) {
+                // Scroll so this expense's instance wrapper is at the top of the scroll container
+                const instWrapper = findInstWrapper()
+                const scrollParent = findScrollParent(rootRef.current?.parentElement)
+                if (instWrapper && scrollParent) {
+                    const containerRect = scrollParent.getBoundingClientRect()
+                    const wrapperRect = instWrapper.getBoundingClientRect()
+                    const stickyHeader = scrollParent.querySelector('[data-sticky-header]')
+                    const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
+                    scrollParent.scrollTo({ top: Math.max(0, wrapperRect.top - containerRect.top + scrollParent.scrollTop - headerH - 8), behavior: 'smooth' })
+                }
+                setTimeout(() => { if (!dateActiveRef.current) setInputFocused(false) }, 500)
+            } else {
+                scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+                setTimeout(() => { if (!dateActiveRef.current) setInputFocused(false) }, 500)
+            }
         }, 50)
     }
-    const handleAmountChange = (e) => { const v = cleanNum(e.target.value); setRawAmount(v); updateOtherExpenseAmount(v) }
+
+    const handleAmountChange = (e) => { const val = cleanNum(e.target.value); setRawAmount(val); updateOtherExpenseAmount(val) }
+    const handleNonTermAmountChange = (e) => { const val = cleanNum(e.target.value); setRawNonTermAmount(val); updateOtherExpenseNonTermAmount(val) }
 
     const handleAmountPeriodChange = (newPeriod) => {
         updateOtherExpenseAmountPeriod(newPeriod)
@@ -86,38 +248,94 @@ export default function OtherExpenseStep({
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>Other Expenses</h2>
-                <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>Any other regular expense not covered above?</p>
-            </div>
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+        <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            {!compact && (
+                <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
+                    <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>Other Expenses</h2>
+                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>Gym, subscriptions, or anything else going out.</p>
+                </div>
+            )}
 
-                <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>What is this expense for?</p>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+
+                <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Give it a name</p>
                 <input type="text" placeholder="e.g. Gym, Subscriptions, etc." value={otherExpenseLabel || ''} onChange={(e) => updateOtherExpenseLabel(e.target.value)}
+                    onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd}
                     onFocus={scrollInputToTop} onBlur={handleInputBlur}
                     style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 10, padding: '10px 14px', fontSize: 15, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', marginBottom: 20 }} />
 
-                <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much do you pay?</p>
-                <div style={{ display: 'flex', marginBottom: 20 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderRadius: '10px 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6, flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>£</span>
-                        <input type="text" inputMode="decimal" placeholder="0.00" value={formatDisplay(rawAmount)} onChange={handleAmountChange}
-                            onFocus={scrollInputToTop} onBlur={handleInputBlur}
-                            style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }} />
-                    </div>
-                    <div style={{ position: 'relative', flexShrink: 0 }}>
-                        <select value={amountPeriod} onChange={(e) => handleAmountPeriodChange(e.target.value)}
-                            style={{ height: 40, boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: '0 10px 10px 0', padding: '0 26px 0 10px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470', background: 'rgba(224,100,112,0.06)', WebkitAppearance: 'none', appearance: 'none', cursor: 'pointer', outline: 'none' }}>
-                            {PERIOD_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                        </select>
-                        <DropdownArrow />
-                    </div>
-                </div>
+                {(() => {
+                    const showDual = amountPeriod !== 'yearly' && otherExpenseVariesByTerm && (freq === 'weekly' || freq === 'monthly')
+                    return (
+                        <>
+                            <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much does it cost?</p>
+                            <div style={{ display: 'flex', marginBottom: showDual ? 16 : 20, transition: 'margin-bottom 0.3s ease' }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{
+                                        display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none',
+                                        borderRadius: `10px 0 0 ${showDual ? '0' : '10px'}`,
+                                        borderBottom: showDual ? '1px dashed #e8e8e8' : '1px solid #e8e8e8',
+                                        padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
+                                        transition: 'border-radius 0.3s ease',
+                                    }}>
+                                        <span style={{
+                                            fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif',
+                                            whiteSpace: 'nowrap', flexShrink: 0, overflow: 'hidden',
+                                            width: showDual ? 52 : 0, opacity: showDual ? 1 : 0,
+                                            transition: 'width 0.3s ease, opacity 0.2s ease',
+                                        }}>Term time</span>
+                                        <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                        <input type="text" inputMode="decimal" placeholder="0.00"
+                                            value={formatDisplay(rawAmount)} onChange={handleAmountChange}
+                                            onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd}
+                                            onFocus={scrollInputToTop} onBlur={handleInputBlur}
+                                            style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }}
+                                        />
+                                    </div>
+                                    <div style={{
+                                        maxHeight: showDual ? 40 : 0, opacity: showDual ? 1 : 0, overflow: 'hidden',
+                                        transition: 'max-height 0.3s ease, opacity 0.2s ease',
+                                    }}>
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderTop: 'none',
+                                            borderRadius: '0 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
+                                        }}>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Holidays</span>
+                                            <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                            <input type="text" inputMode="decimal" placeholder="0.00"
+                                                value={formatDisplay(rawNonTermAmount)} onChange={handleNonTermAmountChange}
+                                                onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd}
+                                            onFocus={scrollInputToTop} onBlur={handleInputBlur}
+                                                style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                                    <select value={amountPeriod} onChange={(e) => handleAmountPeriodChange(e.target.value)}
+                                        style={{ height: showDual ? 80 : 40, boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: '0 10px 10px 0', padding: '0 26px 0 10px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470', background: 'rgba(224,100,112,0.06)', WebkitAppearance: 'none', appearance: 'none', cursor: 'pointer', outline: 'none', transition: 'height 0.3s ease' }}>
+                                        {PERIOD_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                                    </select>
+                                    <DropdownArrow />
+                                </div>
+                            </div>
+                        </>
+                    )
+                })()}
+
+                {amountPeriod !== 'yearly' && (freq === 'weekly' || freq === 'monthly') && (
+                    <button onClick={() => updateOtherExpenseVariesByTerm(!otherExpenseVariesByTerm)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 20px', margin: 0 }}>
+                        <div style={{ width: 36, height: 20, borderRadius: 10, background: otherExpenseVariesByTerm ? '#e06470' : '#e0e0e0', transition: 'background 0.2s ease', position: 'relative', flexShrink: 0 }}>
+                            <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: otherExpenseVariesByTerm ? 18 : 2, transition: 'left 0.2s ease' }} />
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Different amount during holidays</span>
+                    </button>
+                )}
 
                 {amountPeriod === 'yearly' ? (
                     <div ref={datesBoxRef} style={{ background: 'rgba(224,100,112,0.1)', borderRadius: 10, padding: '10px 12px' }}>
-                        <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How often do you pay?</p>
+                        <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How often do you pay it?</p>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                             {FREQ_PILL_OPTIONS.map(o => (
                                 <button key={o.id} onClick={() => handleFrequencyChange(o.id)}
@@ -134,21 +352,30 @@ export default function OtherExpenseStep({
                         </div>
 
                         {(freq === 'weekly' || freq === 'monthly') && (
-                            <div onClick={() => { const next = !datesExpanded; setDatesExpanded(next) }}
-                                style={{ cursor: 'pointer', paddingTop: 4 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div>
-                                        <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
-                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
+                            <>
+                                <button onClick={() => updateOtherExpenseVariesByTerm(!otherExpenseVariesByTerm)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 10px', margin: 0 }}>
+                                    <div style={{ width: 36, height: 20, borderRadius: 10, background: otherExpenseVariesByTerm ? '#e06470' : 'rgba(224,100,112,0.25)', transition: 'background 0.2s ease', position: 'relative', flexShrink: 0 }}>
+                                        <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: otherExpenseVariesByTerm ? 18 : 2, transition: 'left 0.2s ease' }} />
                                     </div>
-                                    <Chevron open={datesExpanded} />
-                                </div>
-                                <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: datesExpanded ? 200 : 0, opacity: datesExpanded ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.2s ease' }}>
-                                    <div style={{ marginTop: 10 }}>
-                                        <DateRow label="Next payment" value={otherExpenseNextDate} onChange={updateOtherExpenseNextDate} onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
+                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Only during term time</span>
+                                </button>
+                                <div ref={nextDateBoxRef} onClick={() => { const next = !datesExpanded; setDatesExpanded(next); if (next) scrollBoxIntoView() }}
+                                    style={{ cursor: 'pointer', paddingTop: 4 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div>
+                                            <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
+                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
+                                        </div>
+                                        <Chevron open={datesExpanded} />
+                                    </div>
+                                    <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: datesExpanded ? 200 : 0, opacity: datesExpanded ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.2s ease' }}>
+                                        <div style={{ marginTop: 10 }}>
+                                            <DateRow label="Next payment" value={otherExpenseNextDate} onChange={updateOtherExpenseNextDate} onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            </>
                         )}
 
                         {freq === 'termly' && (
@@ -205,9 +432,14 @@ export default function OtherExpenseStep({
                             if (freq === 'termly' || freq === 'quarterly') return
                             const next = !datesExpanded; setDatesExpanded(next)
                             if (next) setTimeout(() => {
-                                const container = scrollRef.current; const box = datesBoxRef.current
+                                const container = compact ? findScrollParent(rootRef.current?.parentElement) : scrollRef.current
+                                const box = datesBoxRef.current
                                 if (!container || !box) return
-                                container.scrollTo({ top: Math.max(0, box.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - 2), behavior: 'smooth' })
+                                const boxBottom = box.getBoundingClientRect().bottom
+                                const containerBottom = container.getBoundingClientRect().bottom
+                                if (boxBottom > containerBottom) {
+                                    container.scrollTo({ top: container.scrollTop + (boxBottom - containerBottom) + 16, behavior: 'smooth' })
+                                }
                             }, 320)
                         }}
                         style={{ background: 'rgba(224,100,112,0.1)', borderRadius: 10, padding: '10px 12px', cursor: (freq === 'termly' || freq === 'quarterly') ? 'default' : 'pointer' }}>
@@ -274,7 +506,7 @@ export default function OtherExpenseStep({
                     </div>
                 )}
 
-                {inputFocused && <div style={{ height: '60vh', flexShrink: 0 }} />}
+                {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
         </div>
     )

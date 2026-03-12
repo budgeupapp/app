@@ -1,8 +1,18 @@
+import { getCurrencySymbol } from '../lib/settings'
 import { useState, useRef, useEffect } from 'react'
 import { ALL_MONTH_KEYS, MONTH_LABELS } from '../config/onboardingConfig'
 import { fmt } from '../components/TermGraph'
 
 /* ---------- HELPERS ---------- */
+
+function splitEvenly(total, n) {
+    if (n <= 0) return []
+    const base = Math.floor(total * 100 / n) / 100
+    const remainder = Math.round((total - base * n) * 100)
+    return Array.from({ length: n }, (_, i) =>
+        Math.round((base + (i < remainder ? 0.01 : 0)) * 100) / 100
+    )
+}
 
 function formatDisplay(raw) {
     if (!raw) return ''
@@ -109,15 +119,51 @@ export default function BursaryStep({
     const blurTimerRef = useRef(null)
     const datesBoxRef = useRef(null)
     const dateActiveRef = useRef(false)
+    const amountInputRef = useRef(null)
 
     const months = (bursaryMonths || DEFAULT_BURSARY_MONTHS)
         .slice()
         .sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
 
+    const questionRef = useRef(null)
+    const touchStartRef = useRef(null)
+
+    const handleInputTouchStart = (e) => {
+        touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    }
+
+    const handleInputTouchEnd = (e) => {
+        if (!touchStartRef.current) return
+        const dx = e.changedTouches[0].clientX - touchStartRef.current.x
+        const dy = e.changedTouches[0].clientY - touchStartRef.current.y
+        touchStartRef.current = null
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return
+        if (!compact) return
+        const input = e.target
+        input.focus({ preventScroll: true })
+        const label = questionRef.current
+        if (!label) return
+        let scrollParent = label.parentElement
+        while (scrollParent) {
+            const style = window.getComputedStyle(scrollParent)
+            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollParent.scrollHeight > scrollParent.clientHeight) break
+            scrollParent = scrollParent.parentElement
+        }
+        if (scrollParent) {
+            const parentRect = scrollParent.getBoundingClientRect()
+            const labelRect = label.getBoundingClientRect()
+            const offset = labelRect.top - parentRect.top + scrollParent.scrollTop
+            const stickyHeader = scrollParent.querySelector('[data-sticky-header]')
+            const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
+            scrollParent.scrollTo({ top: Math.max(0, offset - headerH - 8), behavior: 'smooth' })
+        }
+    }
+
     const scrollInputToTop = (e) => {
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
         const input = e.target
         setInputFocused(true)
+        if (compact) return
         setTimeout(() => {
             const container = scrollRef.current
             if (!container) return
@@ -131,10 +177,8 @@ export default function BursaryStep({
     const handleInputBlur = () => {
         blurTimerRef.current = setTimeout(() => {
             if (dateActiveRef.current) { setInputFocused(false); return }
-            setInputFocused(false)
-            setTimeout(() => {
-                if (!dateActiveRef.current) scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-            }, 100)
+            scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+            setTimeout(() => { if (!dateActiveRef.current) setInputFocused(false) }, 500)
         }, 50)
     }
 
@@ -142,12 +186,37 @@ export default function BursaryStep({
         const val = cleanNum(e.target.value)
         setRawAmount(val)
         updateBursaryAmount(val)
+        // Recalculate instalments from new yearly total
+        const yearlyVal = parseFloat(val) || 0
+        if (yearlyVal > 0 && months.length > 0) {
+            const amounts = splitEvenly(yearlyVal, months.length)
+            const newInstalments = {}
+            const newRaw = {}
+            months.forEach((m, i) => {
+                newInstalments[m] = String(amounts[i])
+                newRaw[m] = String(amounts[i])
+            })
+            updateBursaryInstalmentAmounts(newInstalments)
+            setRawInstalments(newRaw)
+        } else {
+            updateBursaryInstalmentAmounts({})
+            setRawInstalments({})
+        }
     }
 
     const handleInstalmentChange = (month, e) => {
         const val = cleanNum(e.target.value)
+        const newInstalments = { ...bursaryInstalmentAmounts, [month]: val }
         setRawInstalments(prev => ({ ...prev, [month]: val }))
-        updateBursaryInstalmentAmounts({ ...bursaryInstalmentAmounts, [month]: val })
+        updateBursaryInstalmentAmounts(newInstalments)
+        // Update yearly total to sum of all instalments
+        const total = months.reduce((sum, m) => {
+            const v = m === month ? val : (bursaryInstalmentAmounts?.[m] || '')
+            return sum + (parseFloat(String(v).replace(/,/g, '')) || 0)
+        }, 0)
+        const rounded = Math.round(total * 100) / 100
+        setRawAmount(String(rounded))
+        updateBursaryAmount(String(rounded))
     }
 
     const toggleMonth = (month) => {
@@ -156,13 +225,27 @@ export default function BursaryStep({
             : [...months, month]
         if (next.length === 0) return
         updateBursaryMonths(next)
-        if (!next.includes(month)) {
-            const { [month]: _, ...rest } = rawInstalments
-            setRawInstalments(rest)
-            if (bursaryDates?.[month]) {
-                const { [month]: __, ...restDates } = bursaryDates
-                updateBursaryDates(restDates)
-            }
+        // Redistribute yearly total equally among new month set
+        const yearlyVal = parseFloat(String(bursaryAmount || '').replace(/,/g, '')) || 0
+        if (yearlyVal > 0 && next.length > 0) {
+            const sortedNext = next.slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
+            const amounts = splitEvenly(yearlyVal, sortedNext.length)
+            const newInstalments = {}
+            const newRaw = {}
+            sortedNext.forEach((m, i) => {
+                newInstalments[m] = String(amounts[i])
+                newRaw[m] = String(amounts[i])
+            })
+            updateBursaryInstalmentAmounts(newInstalments)
+            setRawInstalments(newRaw)
+        } else {
+            updateBursaryInstalmentAmounts({})
+            setRawInstalments({})
+        }
+        // Clean up stale dates for removed months
+        if (!next.includes(month) && bursaryDates?.[month]) {
+            const { [month]: __, ...restDates } = bursaryDates
+            updateBursaryDates(restDates)
         }
     }
 
@@ -185,7 +268,7 @@ export default function BursaryStep({
                         fontSize: 15, fontFamily: 'Nunito, sans-serif',
                         color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5,
                     }}>
-                        How much do you receive in bursary payments?
+                        Scholarships, grants, or uni bursaries you've been awarded.
                     </p>
                 </div>
             )}
@@ -193,7 +276,8 @@ export default function BursaryStep({
             <div style={{
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
-                padding: '0 24px 24px',
+                padding: compact ? '0 24px 0' : '0 24px 24px',
+                marginBottom: -5,
                 minHeight: 0,
             }} ref={scrollRef}>
                 {/* Tab switcher */}
@@ -208,7 +292,37 @@ export default function BursaryStep({
                     ].map(({ id, label }) => (
                         <button
                             key={id}
-                            onClick={() => setTab(id)}
+                            onClick={() => {
+                                const ms = (bursaryMonths || DEFAULT_BURSARY_MONTHS)
+                                    .slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
+                                if (id === 'instalment' && tab !== 'instalment') {
+                                    // Split yearly total equally among selected months
+                                    const yearlyVal = parseFloat(String(bursaryAmount || '').replace(/,/g, ''))
+                                    if (yearlyVal > 0 && ms.length > 0) {
+                                        const amounts = splitEvenly(yearlyVal, ms.length)
+                                        const newInstalments = {}
+                                        const newRaw = {}
+                                        ms.forEach((m, i) => {
+                                            newInstalments[m] = String(amounts[i])
+                                            newRaw[m] = String(amounts[i])
+                                        })
+                                        updateBursaryInstalmentAmounts(newInstalments)
+                                        setRawInstalments(newRaw)
+                                    }
+                                }
+                                if (id === 'yearly' && tab !== 'yearly') {
+                                    // Sum instalment amounts into yearly total
+                                    const total = ms.reduce((sum, m) => {
+                                        return sum + (parseFloat(String(bursaryInstalmentAmounts?.[m] || '').replace(/,/g, '')) || 0)
+                                    }, 0)
+                                    if (total > 0) {
+                                        const rounded = Math.round(total * 100) / 100
+                                        setRawAmount(String(rounded))
+                                        updateBursaryAmount(String(rounded))
+                                    }
+                                }
+                                setTab(id)
+                            }}
                             style={{
                                 flex: 1, height: 36, border: 'none',
                                 borderRadius: 10, cursor: 'pointer',
@@ -227,29 +341,32 @@ export default function BursaryStep({
                 {/* Year Total */}
                 {tab === 'yearly' && (
                     <>
-                        <p style={{
+                        <p ref={questionRef} style={{
                             fontSize: 14, fontWeight: 700,
                             fontFamily: 'Nunito, sans-serif',
                             color: '#000', margin: '0 0 8px',
                         }}>
-                            What is your total yearly bursary?
+                            Yearly bursary amount
                         </p>
                         <div style={{
-                            display: 'flex', alignItems: 'center',
+                            display: 'inline-flex', alignItems: 'center',
                             border: '1px solid #e8e8e8', borderRadius: 10,
                             padding: '0 14px', height: 38, gap: 6,
-                            marginBottom: 20, maxWidth: 160,
+                            marginBottom: 20, width: 160,
                         }}>
                             <span style={{
                                 fontSize: 16, fontWeight: 600,
                                 color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
-                            }}>£</span>
+                            }}>{getCurrencySymbol()}</span>
                             <input
+                                ref={amountInputRef}
                                 type="text"
                                 inputMode="decimal"
                                 placeholder="0.00"
                                 value={formatDisplay(rawAmount)}
                                 onChange={handleAmountChange}
+                                onTouchStart={handleInputTouchStart}
+                                onTouchEnd={handleInputTouchEnd}
                                 onFocus={scrollInputToTop}
                                 onBlur={handleInputBlur}
                                 style={{
@@ -258,7 +375,6 @@ export default function BursaryStep({
                                     fontSize: 16, fontWeight: 500,
                                     fontFamily: 'Nunito, sans-serif',
                                     color: '#000', outline: 'none', padding: 0,
-                                    height: 50,
                                 }}
                             />
                         </div>
@@ -332,13 +448,14 @@ export default function BursaryStep({
                                 <span style={{
                                     fontSize: 14, fontWeight: 600,
                                     color: '#aaa', fontFamily: 'Nunito, sans-serif',
-                                }}>£</span>
+                                }}>{getCurrencySymbol()}</span>
                                 <input
                                     type="text"
                                     inputMode="decimal"
                                     placeholder="0.00"
                                     value={formatDisplay(rawInstalments[m] || '')}
                                     onChange={(e) => handleInstalmentChange(m, e)}
+                                    onTouchStart={handleInputTouchStart}
                                     onFocus={scrollInputToTop}
                                     onBlur={handleInputBlur}
                                     style={{
@@ -466,7 +583,7 @@ export default function BursaryStep({
                         </div>
                     </div>
                 </div>
-                {inputFocused && <div style={{ height: '60vh', flexShrink: 0 }} />}
+                {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
         </div>
     )

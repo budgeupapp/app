@@ -1,286 +1,187 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { Button, Form, Input, Checkbox, Typography, message } from 'antd'
 import { Link, useSearchParams } from 'react-router-dom'
-import AuthContainer from '../components/AuthContainer'
 import { POLICY_URLS } from '../lib/policyVersions'
 import { analytics, AUTH_EVENTS, getEmailDomain } from '../lib/analytics/index.js'
-
-const { Text } = Typography
+import PasswordField from '../components/PasswordField'
 
 export default function SignupForm() {
   const [searchParams] = useSearchParams()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [cooldownSeconds, setCooldownSeconds] = useState(0)
-  const [lastEmail, setLastEmail] = useState('')
   const [consentChecked, setConsentChecked] = useState(false)
-  const [isExistingUser, setIsExistingUser] = useState(false)
-  const [messageApi, contextHolder] = message.useMessage({
-    maxCount: 1
-  })
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(null)
 
-  // Capture referral code from URL
   useEffect(() => {
     const refCode = searchParams.get('ref')
     if (refCode) {
       localStorage.setItem('referral_code', refCode)
-      // Track that user arrived via referral
-      analytics.track(AUTH_EVENTS.REFERRAL_SIGNUP_STARTED, {
-        referral_code: refCode
-      })
+      analytics.track(AUTH_EVENTS.REFERRAL_SIGNUP_STARTED, { referral_code: refCode })
     }
   }, [searchParams])
 
-  useEffect(() => {
-    if (cooldownSeconds > 0) {
-      const timer = setTimeout(() => {
-        setCooldownSeconds(cooldownSeconds - 1)
-      }, 1000)
-      return () => clearTimeout(timer)
-    }
-  }, [cooldownSeconds])
-
-  const handleSignup = async ({ email }) => {
-    if (!consentChecked) {
-      messageApi.error({
-        content: 'Please agree to the Terms and Privacy Policy to continue',
-        duration: 5,
-        style: { fontSize: 15, cursor: 'pointer' },
-        onClick: () => messageApi.destroy()
-      })
-      return
-    }
+  const handleSignup = async (e) => {
+    e.preventDefault()
+    if (loading) return
+    if (!email) { setError('Please enter your email'); return }
+    if (!password) { setError('Please choose a password'); return }
+    if (password.length < 6) { setError('Password must be at least 6 characters'); return }
+    if (!consentChecked) { setError('Please agree to the Terms and Privacy Policy'); return }
 
     setLoading(true)
+    setError(null)
+    setSuccess(null)
 
-    // First, check if account already exists by trying to send OTP without creating user
-    const { error: checkError } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: window.location.origin
-      }
-    })
+    analytics.track(AUTH_EVENTS.SIGNUP_STARTED, { email_domain: getEmailDomain(email) })
 
-    // If no error, user exists - send them a login link
-    if (!checkError) {
-      setLoading(false)
-      setLastEmail(email)
-      setIsExistingUser(true)
-      setCooldownSeconds(60)
-      messageApi.info({
-        content: 'You already have an account. Check your inbox for login link (and spam/junk folder).',
-        duration: 10,
-        style: { fontSize: 15, cursor: 'pointer' },
-        onClick: () => messageApi.destroy()
-      })
-
-      analytics.track(AUTH_EVENTS.LOGIN_STARTED, {
-        email_domain: getEmailDomain(email),
-        context: 'attempted_signup_with_existing_account'
-      })
-      return
-    }
-
-    // Track signup attempt
-    analytics.track(AUTH_EVENTS.SIGNUP_STARTED, {
-      email_domain: getEmailDomain(email)
-    })
-
-    // Store signup intent in localStorage
     localStorage.setItem('signup_email', email)
     localStorage.setItem('signup_timestamp', Date.now().toString())
 
-    // Get referral code from localStorage
     const referralCode = localStorage.getItem('referral_code')
 
-    // Proceed with signup
-    const { error } = await supabase.auth.signInWithOtp({
+    const { error: authError } = await supabase.auth.signUp({
       email,
+      password,
       options: {
-        shouldCreateUser: true,
         emailRedirectTo: window.location.origin,
-        data: {
-          referred_by: referralCode || null
-        }
+        data: { referred_by: referralCode || null }
       }
     })
 
     setLoading(false)
 
-    if (error) {
-      // Clean up localStorage on error
+    if (authError) {
       localStorage.removeItem('signup_email')
       localStorage.removeItem('signup_timestamp')
 
-      // Track signup failure
       analytics.track(AUTH_EVENTS.SIGNUP_FAILED, {
-        error_message: error.message,
+        error_message: authError.message,
         email_domain: getEmailDomain(email)
       })
 
-      // Provide clearer error messages for common issues
-      let errorMessage = error.message
-
-      if (error.message.toLowerCase().includes('signups not allowed')) {
-        errorMessage = 'New signups are currently disabled. Please contact support or try again later.'
-      } else if (error.message.toLowerCase().includes('email not confirmed')) {
-        errorMessage = 'Please check your email and click the confirmation link before signing in.'
+      if (authError.message.toLowerCase().includes('already registered')) {
+        setError('An account with this email already exists. Try logging in instead.')
+      } else {
+        setError(authError.message)
       }
-
-      messageApi.error({
-        content: errorMessage,
-        duration: 10,
-        style: { fontSize: 15, cursor: 'pointer' },
-        onClick: () => messageApi.destroy()
-      })
     } else {
-      setLastEmail(email)
-      setCooldownSeconds(60)
-      messageApi.success({
-        content: 'Your signup link is on its way. Check your inbox (and spam/junk folder).',
-        duration: 10,
-        style: { fontSize: 15, cursor: 'pointer' },
-        onClick: () => messageApi.destroy()
-      })
+      setSuccess('Check your inbox to confirm your email, then log in.')
     }
   }
 
-  const getButtonText = () => {
-    if (loading) return isExistingUser ? 'Sending login link...' : 'Sending signup link...'
-    if (cooldownSeconds > 0) {
-      return isExistingUser
-        ? `Check inbox for login link (${cooldownSeconds}s)`
-        : `Check inbox for signup link (${cooldownSeconds}s)`
-    }
-    return 'Create account'
-  }
+  const msg = error || success
 
   return (
-    <AuthContainer>
-      {contextHolder}
-      <Form
-        layout="vertical"
-        onFinish={handleSignup}
-        requiredMark={false}
-        autoComplete="on"
-        onValuesChange={(changedValues) => {
-          if (changedValues.email && changedValues.email !== lastEmail) {
-            setCooldownSeconds(0)
-            setIsExistingUser(false)
-            messageApi.destroy()
-          }
-        }}
-      >
-        <Form.Item
-          label={<Text strong>Your email address</Text>}
-          name="email"
-          validateTrigger="onSubmit"
-          rules={[
-            { required: true, message: 'Please enter your email' },
-            { type: 'email', message: 'Enter a valid email address' }
-          ]}
-        >
-          <Input
-            size="large"
-            placeholder="Personal email address"
-            type="email"
-            inputMode="email"
-            autoComplete="username email"
-            style={{
-              borderRadius: 999,
-              padding: '12px 20px'
-            }}
-          />
-        </Form.Item>
+    <form onSubmit={handleSignup} autoComplete="on" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <label style={lbl}>Email</label>
+        <input
+          type="email"
+          inputMode="email"
+          autoComplete="username email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setError(null) }}
+          style={inp}
+        />
+      </div>
 
-        <Form.Item
-          name="consent"
-          valuePropName="checked"
-          rules={[
-            {
-              validator: (_, value) =>
-                value
-                  ? Promise.resolve()
-                  : Promise.reject(new Error('You must agree to continue'))
-            }
-          ]}
-        >
-          <Checkbox
-            checked={consentChecked}
-            onChange={(e) => setConsentChecked(e.target.checked)}
-            style={{ alignItems: 'flex-start' }}
-          >
-            <Text style={{ fontSize: 14 }}>
-              I agree to the{' '}
-              <a
-                href={POLICY_URLS.terms}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: 'var(--ant-color-primary)' }}
-              >
-                Terms of Service
-              </a>{' '}
-              and{' '}
-              <a
-                href={POLICY_URLS.privacy}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ color: 'var(--ant-color-primary)' }}
-              >
-                Privacy Policy
-              </a>
-            </Text>
-          </Checkbox>
-        </Form.Item>
+      <PasswordField
+        label="Password"
+        autoComplete="new-password"
+        placeholder="At least 6 characters"
+        value={password}
+        onChange={(e) => { setPassword(e.target.value); setError(null) }}
+        labelStyle={lbl}
+        inputStyle={inp}
+      />
 
-        <Button
-          type="primary"
-          htmlType="submit"
-          size="large"
-          loading={loading}
-          disabled={cooldownSeconds > 0 || !consentChecked}
-          block
+      {/* Consent checkbox */}
+      <label style={{
+        display: 'flex', alignItems: 'flex-start', gap: 10,
+        cursor: 'pointer', padding: '2px 0',
+      }}>
+        <div
+          onClick={(e) => { e.preventDefault(); setConsentChecked(!consentChecked); setError(null) }}
           style={{
-            borderRadius: 999,
-            height: 52,
-            fontSize: 16,
-            marginTop: 8
+            width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1,
+            border: consentChecked ? '2px solid #147b75' : '1.5px solid #d0d0d0',
+            background: consentChecked ? '#147b75' : '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.15s ease',
           }}
         >
-          {getButtonText()}
-        </Button>
+          {consentChecked && (
+            <svg width="12" height="9" viewBox="0 0 14 10" fill="none">
+              <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', lineHeight: 1.4 }}>
+          I agree to the{' '}
+          <a href={POLICY_URLS.terms} target="_blank" rel="noopener noreferrer" style={{ color: '#147b75', textDecoration: 'none', fontWeight: 700 }}>
+            Terms
+          </a>{' '}and{' '}
+          <a href={POLICY_URLS.privacy} target="_blank" rel="noopener noreferrer" style={{ color: '#147b75', textDecoration: 'none', fontWeight: 700 }}>
+            Privacy Policy
+          </a>
+        </span>
+      </label>
 
-        <Text
-          type="secondary"
-          style={{
-            display: 'block',
-            textAlign: 'center',
-            marginTop: 16,
-            fontSize: 13
-          }}
-        >
-          We'll email you a secure, password-free login link.
-        </Text>
+      <button type="submit" disabled={loading || !consentChecked} style={{
+        ...btn,
+        background: consentChecked ? '#147b75' : '#ccc',
+      }}>
+        {loading ? 'Creating account...' : 'Create account'}
+      </button>
 
-        <Text
-          type="secondary"
-          style={{
-            display: 'block',
-            textAlign: 'center',
-            marginTop: 24,
-            fontSize: 14
-          }}
-        >
-          Already have an account?{' '}
-          <Link
-            to="/login"
-            style={{ color: 'var(--ant-color-primary)', fontWeight: 500 }}
-          >
-            Log in
-          </Link>
-        </Text>
-      </Form>
-    </AuthContainer>
+      {msg && (
+        <p style={{
+          margin: 0, fontSize: 13, fontWeight: 600,
+          fontFamily: 'Nunito, sans-serif',
+          color: error ? '#e06470' : '#147b75',
+          textAlign: 'center',
+        }}>
+          {msg}
+        </p>
+      )}
+
+      <p style={{
+        textAlign: 'center', margin: '4px 0 0',
+        fontSize: 14, fontWeight: 600,
+        fontFamily: 'Nunito, sans-serif', color: '#9f9c9c',
+      }}>
+        Already have an account?{' '}
+        <Link to="/login" style={{ color: '#147b75', fontWeight: 700, textDecoration: 'none' }}>
+          Log in
+        </Link>
+      </p>
+    </form>
   )
+}
+
+/* ---- shared styles ---- */
+
+const lbl = {
+  fontSize: 13, fontWeight: 700,
+  fontFamily: 'Nunito, sans-serif',
+  color: '#5e5e5e', marginBottom: 6, display: 'block',
+}
+
+const inp = {
+  width: '100%', height: 50, borderRadius: 10,
+  border: '1px solid #e8e8e8', padding: '0 14px',
+  fontSize: 16, fontWeight: 500,
+  fontFamily: 'Nunito, sans-serif', color: '#000',
+  background: '#fff', outline: 'none',
+  boxSizing: 'border-box', WebkitAppearance: 'none',
+}
+
+const btn = {
+  width: '100%', height: 52, borderRadius: 10,
+  border: 'none', background: '#147b75',
+  color: '#fff', fontSize: 16, fontWeight: 700,
+  fontFamily: 'Nunito, sans-serif',
 }

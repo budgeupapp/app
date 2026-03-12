@@ -72,6 +72,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
     const contentRef = useRef(null)
     const [contentHeight, setContentHeight] = useState(0)
     const prevExpanded = useRef(expanded)
+    const [removingBreak, setRemovingBreak] = useState(null)
 
     useEffect(() => {
         if (expanded) {
@@ -85,12 +86,9 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
             // Re-measure after a frame in case content is still rendering
             requestAnimationFrame(measure)
         }
-    }, [expanded, term.breaks.length])
+    }, [expanded, term.breaks.length, removingBreak])
 
     useEffect(() => {
-        if (expanded && !prevExpanded.current) {
-            setTimeout(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
-        }
         prevExpanded.current = expanded
     }, [expanded])
 
@@ -119,15 +117,56 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
     }
 
     const addBreak = () => {
-        const mid = (new Date(term.start + 'T00:00:00').getTime() +
-            new Date(term.end + 'T00:00:00').getTime()) / 2
-        const s = new Date(mid).toISOString().slice(0, 10)
-        const e = new Date(mid + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-        onUpdate({ ...term, breaks: [...term.breaks, { id: `b_${Date.now()}`, start: s, end: e }] })
+        const termStart = new Date(term.start + 'T00:00:00').getTime()
+        const termEnd = new Date(term.end + 'T00:00:00').getTime()
+        const DAY = 24 * 60 * 60 * 1000
+        const existingBreaks = term.breaks
+        const n = existingBreaks.length
+        const newId = `b_${Date.now()}`
+
+        let s, e
+        if (n === 0) {
+            const mid = (termStart + termEnd) / 2
+            s = new Date(mid).toISOString().slice(0, 10)
+            e = new Date(mid + 7 * DAY).toISOString().slice(0, 10)
+            onUpdate({ ...term, breaks: [{ id: newId, start: s, end: e }] })
+        } else {
+            const sorted = [...existingBreaks].sort((a, b) => a.start.localeCompare(b.start))
+            const edges = [termStart, ...sorted.flatMap(b => [
+                new Date(b.start + 'T00:00:00').getTime(),
+                new Date(b.end + 'T00:00:00').getTime()
+            ]), termEnd]
+            let bestGapStart = termStart
+            let bestGapEnd = termEnd
+            let bestGapSize = 0
+            for (let i = 0; i < edges.length - 1; i += 2) {
+                const gapStart = edges[i]
+                const gapEnd = edges[i + 1]
+                if (gapEnd - gapStart > bestGapSize) {
+                    bestGapSize = gapEnd - gapStart
+                    bestGapStart = gapStart
+                    bestGapEnd = gapEnd
+                }
+            }
+            const mid = (bestGapStart + bestGapEnd) / 2
+            s = new Date(mid).toISOString().slice(0, 10)
+            e = new Date(mid + 7 * DAY).toISOString().slice(0, 10)
+            onUpdate({ ...term, breaks: [...existingBreaks, { id: newId, start: s, end: e }] })
+        }
+
+        // Scroll new holiday into view after render
+        setTimeout(() => {
+            const el = document.querySelector(`[data-break-id="${newId}"]`)
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 150)
     }
 
     const removeBreak = (i) => {
-        onUpdate({ ...term, breaks: term.breaks.filter((_, idx) => idx !== i) })
+        setRemovingBreak(i)
+        setTimeout(() => {
+            setRemovingBreak(null)
+            onUpdate({ ...term, breaks: term.breaks.filter((_, idx) => idx !== i) })
+        }, 300)
     }
 
     return (
@@ -136,10 +175,19 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
             {/* ── Header (2-line) ── */}
             <div onClick={onToggle} style={{ padding: '10px 12px', cursor: 'pointer' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{
-                        fontSize: 14, fontWeight: 700, color: '#147b75',
-                        fontFamily: 'Nunito, sans-serif',
-                    }}>{term.name}</span>
+                    <input
+                        value={term.name}
+                        onChange={(e) => onUpdate({ ...term, name: e.target.value })}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                            fontSize: 14, fontWeight: 700, color: '#147b75',
+                            fontFamily: 'Nunito, sans-serif',
+                            border: 'none', background: 'transparent',
+                            outline: 'none', padding: 0,
+                            width: Math.max(40, term.name.length * 8),
+                            borderBottom: '1px dotted rgba(20,123,117,0.45)',
+                        }}
+                    />
                     <span style={{
                         fontSize: 9, fontWeight: 600, color: '#9f9c9c',
                         fontFamily: 'Nunito, sans-serif',
@@ -170,18 +218,24 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                     <DateRow label="End" value={term.end} onChange={v => updateDate('end', v)} last />
                     <div style={{ height: 6 }} />
 
-                    {/* ── Breaks ── */}
+                    {/* ── Holidays ── */}
                     {term.breaks.map((brk, i) => {
                         const days = daysBetween(brk.start, brk.end)
+                        const isRemoving = removingBreak === i
                         return (
-                            <div key={brk.id || i}>
+                            <div key={brk.id || i} data-break-id={brk.id} style={{
+                                maxHeight: isRemoving ? 0 : 200,
+                                opacity: isRemoving ? 0 : 1,
+                                overflow: 'hidden',
+                                transition: 'max-height 0.3s ease, opacity 0.2s ease',
+                            }}>
                                 <div style={{
                                     background: 'rgba(243,243,243,0.8)',
                                     margin: '10px 10px',
                                     borderRadius: 10,
                                     overflow: 'hidden',
                                 }}>
-                                    {/* Break header */}
+                                    {/* Holiday header */}
                                     <div style={{
                                         display: 'flex', alignItems: 'center',
                                         padding: '8px 12px 4px 12px', gap: 6,
@@ -189,7 +243,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                         <span style={{
                                             fontSize: 12, fontWeight: 700, color: '#4b4a4a',
                                             fontFamily: 'Nunito, sans-serif',
-                                        }}>Break</span>
+                                        }}>Holiday</span>
                                         <span style={{
                                             fontSize: 9, fontWeight: 600, color: '#9f9c9c',
                                             fontFamily: 'Nunito, sans-serif',
@@ -219,7 +273,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                             style={{
                                 width: '100%', height: 32,
                                 background: 'none',
-                                border: '1px dashed #4b4a4a',
+                                border: '1px solid #e0e0e0',
                                 borderRadius: 10,
                                 fontSize: 12, fontWeight: 600,
                                 fontFamily: 'Nunito, sans-serif',
@@ -229,7 +283,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                             }}
                         >
                             <span style={{ fontSize: 18, lineHeight: 1, marginTop: -1 }}>+</span>
-                            Add Break
+                            Add Holiday
                         </button>
                     </div>
                     {canDelete && (
@@ -239,7 +293,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                 style={{
                                     fontSize: 10, fontWeight: 600,
                                     fontFamily: 'Nunito, sans-serif',
-                                    color: '#9f9c9c', cursor: 'pointer',
+                                    color: '#e06470', cursor: 'pointer',
                                 }}
                             >
                                 Delete term
@@ -257,16 +311,59 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
 export default function TermDatesStep({
     termData, updateTermDates,
     expandedTerm, onExpandedTermChange,
+    compact = false,
 }) {
     const updateTerm = (updated) => {
-        const terms = termData.terms.map(t => t.id === updated.id ? updated : t)
-        updateTermDates({ ...termData, terms })
+        const terms = termData.terms
+        const idx = terms.findIndex(t => t.id === updated.id)
+        // Clamp to prevent overlap with adjacent terms
+        const prevTerm = idx > 0 ? terms[idx - 1] : null
+        const nextTerm = idx < terms.length - 1 ? terms[idx + 1] : null
+        const dayBefore = (dateStr) => {
+            const d = new Date(dateStr + 'T00:00:00')
+            d.setDate(d.getDate() - 1)
+            return d.toISOString().slice(0, 10)
+        }
+        const dayAfter = (dateStr) => {
+            const d = new Date(dateStr + 'T00:00:00')
+            d.setDate(d.getDate() + 1)
+            return d.toISOString().slice(0, 10)
+        }
+        if (prevTerm && updated.start <= prevTerm.end) {
+            updated = { ...updated, start: dayAfter(prevTerm.end) }
+            if (updated.end < updated.start) updated.end = updated.start
+        }
+        if (nextTerm && updated.end >= nextTerm.start) {
+            updated = { ...updated, end: dayBefore(nextTerm.start) }
+            if (updated.start > updated.end) updated.start = updated.end
+        }
+        const newTerms = terms.map(t => t.id === updated.id ? updated : t)
+        updateTermDates({ ...termData, terms: newTerms })
     }
 
+    const [removingTermId, setRemovingTermId] = useState(null)
+    const [collapsingTermId, setCollapsingTermId] = useState(null)
+    const termHeights = useRef({})
+
     const deleteTerm = (id) => {
-        const filtered = termData.terms.filter(t => t.id !== id)
-        updateTermDates({ ...termData, terms: filtered })
+        const el = document.querySelector(`[data-term-id="${id}"]`)
+        if (el) termHeights.current[id] = el.offsetHeight
         if (expandedTerm === id) onExpandedTermChange?.(null)
+        // Phase 1: lock to measured height
+        setRemovingTermId(id)
+        // Phase 2: collapse on next frame
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                setCollapsingTermId(id)
+                setTimeout(() => {
+                    setRemovingTermId(null)
+                    setCollapsingTermId(null)
+                    delete termHeights.current[id]
+                    const filtered = termData.terms.filter(t => t.id !== id)
+                    updateTermDates({ ...termData, terms: filtered })
+                }, 350)
+            })
+        })
     }
 
     const addTerm = () => {
@@ -291,6 +388,60 @@ export default function TermDatesStep({
 
     const terms = termData?.terms || []
 
+    if (compact) {
+        return (
+            <div data-term-scroll style={{ display: 'flex', flexDirection: 'column' }}>
+                {terms.map(term => {
+                    const isRemoving = removingTermId === term.id
+                    return (
+                        <div key={term.id} data-term-id={term.id} style={{
+                            marginBottom: collapsingTermId === term.id ? 0 : 10,
+                            ...(collapsingTermId === term.id ? {
+                                maxHeight: 0,
+                                opacity: 0,
+                                overflow: 'hidden',
+                                transition: 'max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease',
+                            } : isRemoving ? {
+                                maxHeight: termHeights.current[term.id],
+                                overflow: 'hidden',
+                                transition: 'max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease',
+                            } : {}),
+                        }}>
+                            <TermAccordion
+                                term={term}
+                                expanded={expandedTerm === term.id}
+                                onToggle={() => onExpandedTermChange?.(
+                                    expandedTerm === term.id ? null : term.id
+                                )}
+                                onUpdate={updateTerm}
+                                onDelete={() => deleteTerm(term.id)}
+                                canDelete={terms.length > 1}
+                            />
+                        </div>
+                    )
+                })}
+                <button
+                    onClick={addTerm}
+                    style={{
+                        width: '100%', height: 38,
+                        background: 'none',
+                        border: '1px solid #e0e0e0',
+                        borderRadius: 10,
+                        fontSize: 13, fontWeight: 700,
+                        fontFamily: 'Nunito, sans-serif',
+                        color: '#147b75', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', gap: 6,
+                        flexShrink: 0,
+                    }}
+                >
+                    <span style={{ fontSize: 20, lineHeight: 1, marginTop: -1 }}>+</span>
+                    Add Term
+                </button>
+            </div>
+        )
+    }
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             {/* Title */}
@@ -311,7 +462,7 @@ export default function TermDatesStep({
             </div>
 
             {/* Scrollable terms */}
-            <div style={{
+            <div data-term-scroll style={{
                 flex: 1,
                 overflowY: 'auto',
                 overflowX: 'hidden',
@@ -319,21 +470,36 @@ export default function TermDatesStep({
                 padding: '0 19px 16px',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 10,
             }}>
-                {terms.map(term => (
-                    <TermAccordion
-                        key={term.id}
-                        term={term}
-                        expanded={expandedTerm === term.id}
-                        onToggle={() => onExpandedTermChange?.(
-                            expandedTerm === term.id ? null : term.id
-                        )}
-                        onUpdate={updateTerm}
-                        onDelete={() => deleteTerm(term.id)}
-                        canDelete={terms.length > 1}
-                    />
-                ))}
+                {terms.map(term => {
+                    const isRemoving = removingTermId === term.id
+                    return (
+                        <div key={term.id} data-term-id={term.id} style={{
+                            marginBottom: collapsingTermId === term.id ? 0 : 10,
+                            ...(collapsingTermId === term.id ? {
+                                maxHeight: 0,
+                                opacity: 0,
+                                overflow: 'hidden',
+                                transition: 'max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease',
+                            } : isRemoving ? {
+                                maxHeight: termHeights.current[term.id],
+                                overflow: 'hidden',
+                                transition: 'max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease',
+                            } : {}),
+                        }}>
+                            <TermAccordion
+                                term={term}
+                                expanded={expandedTerm === term.id}
+                                onToggle={() => onExpandedTermChange?.(
+                                    expandedTerm === term.id ? null : term.id
+                                )}
+                                onUpdate={updateTerm}
+                                onDelete={() => deleteTerm(term.id)}
+                                canDelete={terms.length > 1}
+                            />
+                        </div>
+                    )
+                })}
 
                 {/* Add term button */}
                 <button
@@ -341,7 +507,7 @@ export default function TermDatesStep({
                     style={{
                         width: '100%', height: 38,
                         background: 'none',
-                        border: '1px dashed #147b75',
+                        border: '1px solid #e0e0e0',
                         borderRadius: 10,
                         fontSize: 13, fontWeight: 700,
                         fontFamily: 'Nunito, sans-serif',

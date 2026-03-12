@@ -1,3 +1,4 @@
+import { getCurrencySymbol } from '../lib/settings'
 import { useState, useRef, useEffect } from 'react'
 
 /* ---------- HELPERS ---------- */
@@ -92,7 +93,7 @@ export default function BankBalanceStep({ balance, updateBalance }) {
                     <span style={{
                         fontSize: 20, fontWeight: 600,
                         color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
-                    }}>£</span>
+                    }}>{getCurrencySymbol()}</span>
 
                     <input
                         type="text"

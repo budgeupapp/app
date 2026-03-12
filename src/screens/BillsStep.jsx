@@ -1,3 +1,4 @@
+import { getCurrencySymbol } from '../lib/settings'
 import { useState, useRef, useEffect } from 'react'
 import { fmt } from '../components/TermGraph'
 
@@ -41,6 +42,9 @@ export default function BillsStep({
     billsAmountPeriod, updateBillsAmountPeriod,
     billsFrequency, updateBillsFrequency,
     billsNextDate, updateBillsNextDate,
+    billsStartDate, updateBillsStartDate,
+    billsEndDate, updateBillsEndDate,
+    rentStartDate, rentEndDate,
     terms,
     billsTermDates, updateBillsTermDates,
     billsQuarterlyDates, updateBillsQuarterlyDates,
@@ -53,20 +57,67 @@ export default function BillsStep({
     useEffect(() => { const n = parseFloat(String(billsAmount || '').replace(/,/g, '')); setRawAmount(n ? String(n) : '') }, [billsAmount])
 
     const [datesExpanded, setDatesExpanded] = useState(!!billsNextDate)
+    const [periodExpanded, setPeriodExpanded] = useState(!!(billsStartDate || billsEndDate))
+
+
     const [inputFocused, setInputFocused] = useState(false)
-    const scrollRef = useRef(null), blurTimerRef = useRef(null), datesBoxRef = useRef(null)
+    const scrollRef = useRef(null), blurTimerRef = useRef(null), datesBoxRef = useRef(null), periodBoxRef = useRef(null), nextDateBoxRef = useRef(null)
     const dateActiveRef = useRef(false), freqTapRef = useRef(false)
+
+    const scrollBoxIntoView = (ref) => {
+        setTimeout(() => {
+            const container = scrollRef.current; const box = ref.current
+            if (!container || !box) return
+            container.scrollTo({ top: Math.max(0, box.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - 2), behavior: 'smooth' })
+        }, 320)
+    }
+
+    const questionRef = useRef(null)
+    const touchStartRef = useRef(null)
+
+    const handleInputTouchStart = (e) => {
+        touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    }
+
+    const handleInputTouchEnd = (e) => {
+        if (!touchStartRef.current) return
+        const dx = e.changedTouches[0].clientX - touchStartRef.current.x
+        const dy = e.changedTouches[0].clientY - touchStartRef.current.y
+        touchStartRef.current = null
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return
+        if (!compact) return
+        const input = e.target
+        input.focus({ preventScroll: true })
+        const label = questionRef.current
+        if (!label) return
+        let scrollParent = label.parentElement
+        while (scrollParent) {
+            const style = window.getComputedStyle(scrollParent)
+            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollParent.scrollHeight > scrollParent.clientHeight) break
+            scrollParent = scrollParent.parentElement
+        }
+        if (scrollParent) {
+            const parentRect = scrollParent.getBoundingClientRect()
+            const labelRect = label.getBoundingClientRect()
+            const offset = labelRect.top - parentRect.top + scrollParent.scrollTop
+            const stickyHeader = scrollParent.querySelector('[data-sticky-header]')
+            const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
+            scrollParent.scrollTo({ top: Math.max(0, offset - headerH - 8), behavior: 'smooth' })
+        }
+    }
 
     const scrollInputToTop = (e) => {
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
-        setInputFocused(true); const input = e.target
+        setInputFocused(true)
+        if (compact) return
+        const input = e.target
         const c = scrollRef.current; if (c) { const pos = c.scrollTop; requestAnimationFrame(() => { c.scrollTop = pos }) }
-        setTimeout(() => { if (!c) return; const cr = c.getBoundingClientRect(); const ir = input.getBoundingClientRect(); c.scrollTo({ top: Math.max(0, ir.top - cr.top + c.scrollTop - 20), behavior: 'smooth' }) }, 301)
+        setTimeout(() => { if (!c) return; const cr = c.getBoundingClientRect(); const ir = input.getBoundingClientRect(); c.scrollTo({ top: Math.max(0, ir.top - cr.top + c.scrollTop - 30), behavior: 'smooth' }) }, 301)
     }
     const handleInputBlur = () => {
         blurTimerRef.current = setTimeout(() => {
             if (dateActiveRef.current || freqTapRef.current) { setInputFocused(false); freqTapRef.current = false; return }
-            setInputFocused(false); setTimeout(() => { if (!dateActiveRef.current) scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }) }, 100)
+            scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }); setTimeout(() => { if (!dateActiveRef.current) setInputFocused(false) }, 500)
         }, 50)
     }
     const handleAmountChange = (e) => { const v = cleanNum(e.target.value); setRawAmount(v); updateBillsAmount(v) }
@@ -85,22 +136,52 @@ export default function BillsStep({
         updateBillsFrequency(newFreq)
     }
 
+    const hasRentDates = !!(rentStartDate || rentEndDate)
+
+    const DateRangeSection = ({ stopProp = false }) => (
+        <div
+            onClick={(e) => { if (stopProp) e.stopPropagation(); setPeriodExpanded(p => !p) }}
+            style={{ marginBottom: 10, cursor: 'pointer' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                    <p style={{ fontSize: stopProp ? 13 : 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Set a specific date range</p>
+                    <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – e.g. September to June</p>
+                </div>
+                <Chevron open={periodExpanded} />
+            </div>
+            <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: periodExpanded ? 300 : 0, opacity: periodExpanded ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.2s ease' }}>
+                <div style={{ marginTop: 10 }}>
+                    {hasRentDates && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); updateBillsStartDate(rentStartDate || ''); updateBillsEndDate(rentEndDate || '') }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(224,100,112,0.12)', border: 'none', borderRadius: 20, padding: '5px 12px', cursor: 'pointer', marginBottom: 8 }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: '#e06470', fontFamily: 'Nunito, sans-serif' }}>Same as rent</span>
+                        </button>
+                    )}
+                    <DateRow label="From" value={billsStartDate} onChange={updateBillsStartDate} onDateTap={(a) => { dateActiveRef.current = a }} scrollRef={scrollRef} />
+                    <DateRow label="To" value={billsEndDate} onChange={updateBillsEndDate} onDateTap={(a) => { dateActiveRef.current = a }} scrollRef={scrollRef} />
+                </div>
+            </div>
+        </div>
+    )
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             {!compact && (
                 <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
                     <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>Bills</h2>
-                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>How much do you pay?</p>
+                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>WiFi, electric, water — the boring but important stuff.</p>
                 </div>
             )}
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
-                <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much do you pay?</p>
-                <div style={{ display: 'flex', marginBottom: 20 }}>
+                <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much are your bills?</p>
+                <div style={{ display: 'flex', marginBottom: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderRadius: '10px 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6, flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>£</span>
+                        <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                         <input type="text" inputMode="decimal" placeholder="0.00" value={formatDisplay(rawAmount)} onChange={handleAmountChange}
-                            onFocus={scrollInputToTop} onBlur={handleInputBlur}
+                            onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd} onFocus={scrollInputToTop} onBlur={handleInputBlur}
                             style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }} />
                     </div>
                     <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -112,9 +193,36 @@ export default function BillsStep({
                     </div>
                 </div>
 
+                {amountPeriod !== 'yearly' && (freq === 'weekly' || freq === 'monthly') && (
+                    <div ref={periodBoxRef} onClick={() => { setPeriodExpanded(p => { if (!p) scrollBoxIntoView(periodBoxRef); return !p }) }}
+                        style={{ background: 'rgba(224,100,112,0.1)', borderRadius: 10, padding: '10px 12px', marginBottom: 16, cursor: 'pointer' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div>
+                                <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Set a specific date range</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – e.g. September to June</p>
+                            </div>
+                            <Chevron open={periodExpanded} />
+                        </div>
+                        <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: periodExpanded ? 300 : 0, opacity: periodExpanded ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.2s ease' }}>
+                            <div style={{ marginTop: 10 }}>
+                                {hasRentDates && (
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); updateBillsStartDate(rentStartDate || ''); updateBillsEndDate(rentEndDate || '') }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(224,100,112,0.12)', border: 'none', borderRadius: 20, padding: '5px 12px', cursor: 'pointer', marginBottom: 8 }}>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+                                        <span style={{ fontSize: 12, fontWeight: 600, color: '#e06470', fontFamily: 'Nunito, sans-serif' }}>Same as rent</span>
+                                    </button>
+                                )}
+                                <DateRow label="From" value={billsStartDate} onChange={updateBillsStartDate} onDateTap={(a) => { dateActiveRef.current = a }} scrollRef={scrollRef} />
+                                <DateRow label="To" value={billsEndDate} onChange={updateBillsEndDate} onDateTap={(a) => { dateActiveRef.current = a }} scrollRef={scrollRef} />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {amountPeriod === 'yearly' ? (
                     <div ref={datesBoxRef} style={{ background: 'rgba(224,100,112,0.1)', borderRadius: 10, padding: '10px 12px' }}>
-                        <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How often do you pay?</p>
+                        <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How often do you pay bills?</p>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                             {FREQ_PILL_OPTIONS.map(o => (
                                 <button key={o.id} onClick={() => handleFrequencyChange(o.id)}
@@ -131,21 +239,47 @@ export default function BillsStep({
                         </div>
 
                         {(freq === 'weekly' || freq === 'monthly') && (
-                            <div onClick={() => { const next = !datesExpanded; setDatesExpanded(next) }}
-                                style={{ cursor: 'pointer', paddingTop: 4 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div>
-                                        <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
-                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
+                            <>
+                                <div ref={periodBoxRef} onClick={(e) => { e.stopPropagation(); setPeriodExpanded(p => { const next = !p; if (next) { setDatesExpanded(false); scrollBoxIntoView(periodBoxRef) } return next }) }}
+                                    style={{ marginBottom: 10, cursor: 'pointer' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div>
+                                            <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Set a specific date range</p>
+                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – e.g. September to June</p>
+                                        </div>
+                                        <Chevron open={periodExpanded} />
                                     </div>
-                                    <Chevron open={datesExpanded} />
-                                </div>
-                                <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: datesExpanded ? 200 : 0, opacity: datesExpanded ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.2s ease' }}>
-                                    <div style={{ marginTop: 10 }}>
-                                        <DateRow label="Next payment" value={billsNextDate} onChange={updateBillsNextDate} onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
+                                    <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: periodExpanded ? 300 : 0, opacity: periodExpanded ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.2s ease' }}>
+                                        <div style={{ marginTop: 10 }}>
+                                            {hasRentDates && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); updateBillsStartDate(rentStartDate || ''); updateBillsEndDate(rentEndDate || '') }}
+                                                    style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(224,100,112,0.12)', border: 'none', borderRadius: 20, padding: '5px 12px', cursor: 'pointer', marginBottom: 8 }}>
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+                                                    <span style={{ fontSize: 12, fontWeight: 600, color: '#e06470', fontFamily: 'Nunito, sans-serif' }}>Same as rent</span>
+                                                </button>
+                                            )}
+                                            <DateRow label="From" value={billsStartDate} onChange={updateBillsStartDate} onDateTap={(a) => { dateActiveRef.current = a }} scrollRef={scrollRef} />
+                                            <DateRow label="To" value={billsEndDate} onChange={updateBillsEndDate} onDateTap={(a) => { dateActiveRef.current = a }} scrollRef={scrollRef} />
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                                <div ref={nextDateBoxRef} onClick={() => { setDatesExpanded(d => { const next = !d; if (next) { setPeriodExpanded(false); scrollBoxIntoView(nextDateBoxRef) } return next }) }}
+                                    style={{ cursor: 'pointer', paddingTop: 8, borderTop: '0.5px solid rgba(224,100,112,0.2)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <div>
+                                            <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
+                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
+                                        </div>
+                                        <Chevron open={datesExpanded} />
+                                    </div>
+                                    <div onClick={(e) => e.stopPropagation()} style={{ maxHeight: datesExpanded ? 200 : 0, opacity: datesExpanded ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.2s ease' }}>
+                                        <div style={{ marginTop: 10 }}>
+                                            <DateRow label="Next payment" value={billsNextDate} onChange={updateBillsNextDate} onDateTap={(active) => { dateActiveRef.current = active }} scrollRef={scrollRef} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
                         )}
 
                         {freq === 'termly' && (
@@ -261,7 +395,7 @@ export default function BillsStep({
                     </div>
                 )}
 
-                {inputFocused && <div style={{ height: '60vh', flexShrink: 0 }} />}
+                {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
         </div>
     )

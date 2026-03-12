@@ -18,28 +18,126 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 32px;
 }
 
-.sunflower-spinner {
-    width: 120px;
-    height: 120px;
+/* Logo with ring */
+.loading-logo-wrap {
+    position: relative;
+    width: 90px;
+    height: 90px;
     display: flex;
     align-items: center;
     justify-content: center;
-    animation: spin 2s linear infinite;
 }
 
-.sunflower-spinner img {
-    width: 100%;
-    height: 100%;
+.loading-logo {
+    width: 52px;
+    height: 52px;
     object-fit: contain;
+    animation: logoFadeIn 0.6s ease both;
 }
 
-@keyframes spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.loading-logo-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 3px solid #e8f5f4;
+    border-top-color: #147b75;
+    animation: ringSpin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Steps */
+.loading-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 200px;
+}
+
+.loading-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.loading-step.active {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.loading-step-dot {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.loading-step-dot-inner {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #d0d0d0;
+    transition: background 0.3s ease;
+}
+
+.loading-step.active .loading-step-dot-inner {
+    background: #147b75;
+}
+
+.loading-step-dot-inner.pulse {
+    animation: dotPulse 1s ease-in-out infinite;
+}
+
+.loading-step-label {
+    font-size: 15px;
+    font-weight: 600;
+    font-family: 'Nunito', sans-serif;
+    color: #999;
+    transition: color 0.3s ease;
+}
+
+.loading-step.active .loading-step-label {
+    color: #333;
+}
+
+.loading-step.current .loading-step-label {
+    color: #147b75;
+}
+
+/* Done message */
+.loading-done {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Nunito', sans-serif;
+    color: #147b75;
+    margin: 0;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.loading-done.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Animations */
+@keyframes ringSpin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes logoFadeIn {
+    from { opacity: 0; transform: scale(0.85); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes dotPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.7; }
 }

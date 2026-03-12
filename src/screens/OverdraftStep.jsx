@@ -1,3 +1,4 @@
+import { getCurrencySymbol } from '../lib/settings'
 import { useState, useEffect } from 'react'
 
 function formatDisplay(raw) {
@@ -51,7 +52,7 @@ export default function OverdraftStep({ overdraft, updateOverdraft }) {
                 <span style={{
                     fontSize: 20, fontWeight: 600,
                     color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
-                }}>£</span>
+                }}>{getCurrencySymbol()}</span>
 
                 <input
                     type="text"

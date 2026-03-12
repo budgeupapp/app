@@ -90,6 +90,11 @@ export const STEPS = [
         id: 'weeklySpend',
         heading: 'How much do you typically spend each week?',
         subtitle: 'Excluding rent and bills.'
+    },
+    {
+        id: 'summary',
+        heading: 'Your Budget',
+        subtitle: "Here's a summary of your finances for the year."
     }
 ]
 
@@ -237,7 +242,7 @@ export const MONTH_LABELS = {
 }
 
 export const ALL_MONTH_KEYS = Object.keys(MONTH_LABELS)
-export const DEFAULT_LOAN_MONTHS = ['october', 'january', 'april']
+export const DEFAULT_LOAN_MONTHS = ['september', 'january', 'april']
 
 export const OTHER_INCOME_TYPE_OPTIONS = [
     { value: 'part_time_job', label: 'Part-time job' },
@@ -314,11 +319,19 @@ export const INITIAL_FORM_DATA = {
     rentNextDate: '',
     rentTermDates: {},
     rentQuarterlyDates: {},
+    rentVariesByTerm: false,
+    rentNonTermAmount: '',
+    rentStartDate: '',
+    rentEndDate: '',
 
     billsAmount: '',
     billsAmountPeriod: 'monthly',
     billsFrequency: 'monthly',
     billsQuarterlyDates: {},
+    billsVariesByTerm: false,
+    billsNonTermAmount: '',
+    billsStartDate: '',
+    billsEndDate: '',
 
     uniFeesAmount: '9250',
     uniFeesAmountPeriod: 'yearly',
@@ -326,6 +339,8 @@ export const INITIAL_FORM_DATA = {
     uniFeesNextDate: '2025-10-27',
     uniFeesTermDates: {},
     uniFeesQuarterlyDates: {},
+    uniFeesVariesByTerm: false,
+    uniFeesNonTermAmount: '',
 
     familyNextDate: '',
     familyAmountPeriod: 'monthly',
@@ -337,12 +352,17 @@ export const INITIAL_FORM_DATA = {
     otherIncomeTermDates: {},
     otherIncomeQuarterlyDates: {},
 
+    otherIncomes: [],
+    otherExpenses: [],
+
     savingsInvAmount: '',
     savingsInvAmountPeriod: 'monthly',
     savingsInvFrequency: 'monthly',
     savingsInvNextDate: '',
     savingsInvTermDates: {},
     savingsInvQuarterlyDates: {},
+    savingsInvVariesByTerm: false,
+    savingsInvNonTermAmount: '',
 
     otherExpenseAmount: '',
     otherExpenseAmountPeriod: 'monthly',
@@ -351,6 +371,8 @@ export const INITIAL_FORM_DATA = {
     otherExpenseNextDate: '',
     otherExpenseTermDates: {},
     otherExpenseQuarterlyDates: {},
+    otherExpenseVariesByTerm: false,
+    otherExpenseNonTermAmount: '',
 
     bursary: null,
     bursaryAmount: '',

@@ -1,3 +1,4 @@
+import { getCurrencySymbol } from '../lib/settings'
 import { useState, useRef, useEffect } from 'react'
 import { fmt } from '../components/TermGraph'
 
@@ -130,27 +131,77 @@ export default function WorkIncomeStep({
     const scrollRef = useRef(null)
     const blurTimerRef = useRef(null)
     const datesBoxRef = useRef(null)
+    const nextDateBoxRef = useRef(null)
     const dateActiveRef = useRef(false)
     const freqTapRef = useRef(false)
+
+    const scrollBoxIntoView = (ref) => {
+        setTimeout(() => {
+            const container = scrollRef.current; const box = ref.current
+            if (!container || !box) return
+            container.scrollTo({ top: Math.max(0, box.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - 2), behavior: 'smooth' })
+        }, 320)
+    }
+
+    const questionRef = useRef(null)
+    const touchStartRef = useRef(null)
+
+    const handleInputTouchStart = (e) => {
+        touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    }
+
+    const handleInputTouchEnd = (e) => {
+        if (!touchStartRef.current) return
+        const dx = e.changedTouches[0].clientX - touchStartRef.current.x
+        const dy = e.changedTouches[0].clientY - touchStartRef.current.y
+        touchStartRef.current = null
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return
+        if (!compact) return
+        const input = e.target
+        input.focus({ preventScroll: true })
+        const label = questionRef.current
+        if (!label) return
+        let scrollParent = label.parentElement
+        while (scrollParent) {
+            const style = window.getComputedStyle(scrollParent)
+            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollParent.scrollHeight > scrollParent.clientHeight) break
+            scrollParent = scrollParent.parentElement
+        }
+        if (scrollParent) {
+            const parentRect = scrollParent.getBoundingClientRect()
+            const labelRect = label.getBoundingClientRect()
+            const offset = labelRect.top - parentRect.top + scrollParent.scrollTop
+            const stickyHeader = scrollParent.querySelector('[data-sticky-header]')
+            const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
+            scrollParent.scrollTo({ top: Math.max(0, offset - headerH - 8), behavior: 'smooth' })
+        }
+    }
 
     const scrollInputToTop = (e) => {
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
         setInputFocused(true)
+        if (compact) return
         const input = e.target
         setTimeout(() => {
             const container = scrollRef.current
             if (!container) return
             const containerRect = container.getBoundingClientRect()
-            const inputRect = input.getBoundingClientRect()
-            container.scrollTo({ top: Math.max(0, inputRect.top - containerRect.top + container.scrollTop - 20), behavior: 'smooth' })
+            if (questionRef.current) {
+                const qr = questionRef.current.getBoundingClientRect()
+                const qTop = qr.top - containerRect.top + container.scrollTop
+                container.scrollTo({ top: Math.max(0, qTop), behavior: 'smooth' })
+            } else {
+                const ir = input.getBoundingClientRect()
+                container.scrollTo({ top: Math.max(0, ir.top - containerRect.top + container.scrollTop - 30), behavior: 'smooth' })
+            }
         }, 301)
     }
 
     const handleInputBlur = () => {
         blurTimerRef.current = setTimeout(() => {
             if (dateActiveRef.current || freqTapRef.current) { setInputFocused(false); freqTapRef.current = false; return }
-            setInputFocused(false)
-            setTimeout(() => { if (!dateActiveRef.current) scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' }) }, 100)
+            scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+            setTimeout(() => { if (!dateActiveRef.current) setInputFocused(false) }, 500)
         }, 50)
     }
 
@@ -181,78 +232,69 @@ export default function WorkIncomeStep({
                         Work
                     </h2>
                     <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>
-                        How much do you earn from part-time or casual work?
+                        Part-time jobs, freelancing, or casual work.
                     </p>
                 </div>
             )}
 
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
-                {amountPeriod !== 'yearly' && workVariesByTerm ? (
-                    <>
-                        <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much do you earn?</p>
-                        <div style={{ display: 'flex', marginBottom: 16 }}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{
-                                    display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none',
-                                    borderRadius: '10px 0 0 0', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
-                                    borderBottom: '1px dashed #e8e8e8',
-                                }}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Term</span>
-                                    <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>£</span>
-                                    <input type="text" inputMode="decimal" placeholder="0.00"
-                                        value={formatDisplay(rawAmount)} onChange={handleAmountChange}
-                                        onFocus={scrollInputToTop} onBlur={handleInputBlur}
-                                        style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }}
-                                    />
+                {(() => {
+                    const showDual = amountPeriod !== 'yearly' && workVariesByTerm && (freq === 'weekly' || freq === 'monthly')
+                    return (
+                        <>
+                            <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much do you take home?</p>
+                            <div style={{ display: 'flex', marginBottom: showDual ? 16 : 20, transition: 'margin-bottom 0.3s ease' }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{
+                                        display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none',
+                                        borderRadius: `10px 0 0 ${showDual ? '0' : '10px'}`,
+                                        borderBottom: showDual ? '1px dashed #e8e8e8' : '1px solid #e8e8e8',
+                                        padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
+                                        transition: 'border-radius 0.3s ease',
+                                    }}>
+                                        <span style={{
+                                            fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif',
+                                            whiteSpace: 'nowrap', flexShrink: 0, overflow: 'hidden',
+                                            width: showDual ? 52 : 0, opacity: showDual ? 1 : 0,
+                                            transition: 'width 0.3s ease, opacity 0.2s ease',
+                                        }}>Term time</span>
+                                        <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                        <input type="text" inputMode="decimal" placeholder="0.00"
+                                            value={formatDisplay(rawAmount)} onChange={handleAmountChange}
+                                            onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd} onFocus={scrollInputToTop} onBlur={handleInputBlur}
+                                            style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }}
+                                        />
+                                    </div>
+                                    <div style={{
+                                        maxHeight: showDual ? 40 : 0, opacity: showDual ? 1 : 0, overflow: 'hidden',
+                                        transition: 'max-height 0.3s ease, opacity 0.2s ease',
+                                    }}>
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderTop: 'none',
+                                            borderRadius: '0 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
+                                        }}>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Holidays</span>
+                                            <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                            <input type="text" inputMode="decimal" placeholder="0.00"
+                                                value={formatDisplay(rawNonTermAmount)} onChange={handleNonTermAmountChange}
+                                                onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd} onFocus={scrollInputToTop} onBlur={handleInputBlur}
+                                                style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
-                                <div style={{
-                                    display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderTop: 'none',
-                                    borderRadius: '0 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
-                                }}>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Non-term</span>
-                                    <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>£</span>
-                                    <input type="text" inputMode="decimal" placeholder="0.00"
-                                        value={formatDisplay(rawNonTermAmount)} onChange={handleNonTermAmountChange}
-                                        onFocus={scrollInputToTop} onBlur={handleInputBlur}
-                                        style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }}
-                                    />
+                                <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                                    <select value={amountPeriod} onChange={(e) => handleAmountPeriodChange(e.target.value)}
+                                        style={{ height: showDual ? 80 : 40, boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: '0 10px 10px 0', padding: '0 26px 0 10px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75', background: 'rgba(20,123,117,0.06)', WebkitAppearance: 'none', appearance: 'none', cursor: 'pointer', outline: 'none', transition: 'height 0.3s ease' }}>
+                                        {PERIOD_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+                                    </select>
+                                    <DropdownArrow />
                                 </div>
                             </div>
-                            <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-                                <select value={amountPeriod} onChange={(e) => handleAmountPeriodChange(e.target.value)}
-                                    style={{ height: 80, boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: '0 10px 10px 0', padding: '0 26px 0 10px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75', background: 'rgba(20,123,117,0.06)', WebkitAppearance: 'none', appearance: 'none', cursor: 'pointer', outline: 'none' }}>
-                                    {PERIOD_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                                </select>
-                                <DropdownArrow />
-                            </div>
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much do you earn?</p>
-                        <div style={{ display: 'flex', marginBottom: 20 }}>
-                            <div style={{
-                                display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none',
-                                borderRadius: '10px 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6, flex: 1, minWidth: 0,
-                            }}>
-                                <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>£</span>
-                                <input type="text" inputMode="decimal" placeholder="0.00"
-                                    value={formatDisplay(rawAmount)} onChange={handleAmountChange}
-                                    onFocus={scrollInputToTop} onBlur={handleInputBlur}
-                                    style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }}
-                                />
-                            </div>
-                            <div style={{ position: 'relative', flexShrink: 0 }}>
-                                <select value={amountPeriod} onChange={(e) => handleAmountPeriodChange(e.target.value)}
-                                    style={{ height: 40, boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: '0 10px 10px 0', padding: '0 26px 0 10px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75', background: 'rgba(20,123,117,0.06)', WebkitAppearance: 'none', appearance: 'none', cursor: 'pointer', outline: 'none' }}>
-                                    {PERIOD_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
-                                </select>
-                                <DropdownArrow />
-                            </div>
-                        </div>
-                    </>
-                )}
+                        </>
+                    )
+                })()}
 
                 {amountPeriod !== 'yearly' && (freq === 'weekly' || freq === 'monthly') && (
                     <button onClick={() => updateWorkVariesByTerm(!workVariesByTerm)}
@@ -260,13 +302,13 @@ export default function WorkIncomeStep({
                         <div style={{ width: 36, height: 20, borderRadius: 10, background: workVariesByTerm ? '#147b75' : '#e0e0e0', transition: 'background 0.2s ease', position: 'relative', flexShrink: 0 }}>
                             <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: workVariesByTerm ? 18 : 2, transition: 'left 0.2s ease' }} />
                         </div>
-                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Different amount outside term</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Different amount during holidays</span>
                     </button>
                 )}
 
                 {amountPeriod === 'yearly' ? (
                     <div ref={datesBoxRef} style={{ background: 'rgba(20,123,117,0.1)', borderRadius: 10, padding: '10px 12px' }}>
-                        <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How often are you paid?</p>
+                        <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How often do you get paid?</p>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                             {FREQ_PILL_OPTIONS.map(o => (
                                 <button key={o.id} onClick={() => handleFrequencyChange(o.id)}
@@ -291,11 +333,11 @@ export default function WorkIncomeStep({
                                     </div>
                                     <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Only during term time</span>
                                 </button>
-                                <div onClick={() => { const next = !datesExpanded; setDatesExpanded(next) }}
+                                <div ref={nextDateBoxRef} onClick={() => { const next = !datesExpanded; setDatesExpanded(next); if (next) scrollBoxIntoView(nextDateBoxRef) }}
                                     style={{ cursor: 'pointer', paddingTop: 4 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <div>
-                                            <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
+                                            <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know when I next get paid</p>
                                             <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
                                         </div>
                                         <Chevron open={datesExpanded} />
@@ -374,7 +416,7 @@ export default function WorkIncomeStep({
                             <>
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <div>
-                                        <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
+                                        <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know when I next get paid</p>
                                         <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast your budget more accurately</p>
                                     </div>
                                     <Chevron open={datesExpanded} />
@@ -432,7 +474,7 @@ export default function WorkIncomeStep({
                     </div>
                 )}
 
-                {inputFocused && <div style={{ height: '60vh', flexShrink: 0 }} />}
+                {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
         </div>
     )

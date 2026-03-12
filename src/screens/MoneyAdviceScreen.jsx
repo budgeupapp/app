@@ -132,15 +132,21 @@ export default function MoneyAdviceScreen() {
                     rel="noopener noreferrer"
                     onClick={() => analytics.track(MONEY_ADVICE_EVENTS.BUTTON_CLICKED)}
                     style={{
-                        background: '#147B75',
-                        borderColor: '#147B75',
-                        height: 50,
-                        borderRadius: 25,
+                        background: 'linear-gradient(135deg,#147B75,#1E9C94)',
+                        border: 'none',
+                        height: 52,
+                        borderRadius: 999,
                         fontSize: 16,
                         fontWeight: 600,
-                        paddingLeft: 32,
-                        paddingRight: 32,
-                        boxShadow: '0 4px 12px rgba(20, 123, 117, 0.2)'
+                        padding: '0 34px',
+                        fontFamily: 'Nunito, sans-serif',
+                        letterSpacing: 0.2,
+                        boxShadow: '0 8px 20px rgba(20,123,117,0.25)',
+                        transition: 'all 0.2s ease',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8
                     }}
                 >
                     Contact Money Advice Team

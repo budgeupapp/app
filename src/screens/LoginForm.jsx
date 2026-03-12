@@ -1,172 +1,133 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { Button, Form, Input, Typography, message } from 'antd'
 import { Link } from 'react-router-dom'
-import AuthContainer from '../components/AuthContainer'
 import { analytics, AUTH_EVENTS, getEmailDomain } from '../lib/analytics/index.js'
-
-const { Text } = Typography
+import PasswordField from '../components/PasswordField'
 
 export default function LoginForm() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [cooldownSeconds, setCooldownSeconds] = useState(0)
-  const [lastEmail, setLastEmail] = useState('')
-  const [messageApi, contextHolder] = message.useMessage({
-    maxCount: 1
-  })
+  const [error, setError] = useState(null)
 
-  useEffect(() => {
-    if (cooldownSeconds > 0) {
-      const timer = setTimeout(() => {
-        setCooldownSeconds(cooldownSeconds - 1)
-      }, 1000)
-      return () => clearTimeout(timer)
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    if (loading) return
+    if (!email || !password) {
+      setError(!email ? 'Please enter your email' : 'Please enter your password')
+      return
     }
-  }, [cooldownSeconds])
 
-  const handleLogin = async ({ email }) => {
     setLoading(true)
+    setError(null)
 
-    // Track login attempt
-    analytics.track(AUTH_EVENTS.LOGIN_STARTED, {
-      email_domain: getEmailDomain(email)
-    })
+    analytics.track(AUTH_EVENTS.LOGIN_STARTED, { email_domain: getEmailDomain(email) })
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: false,
-        emailRedirectTo: window.location.origin
-      }
-    })
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
     setLoading(false)
 
-    if (error) {
-      // Track login failure
+    if (authError) {
       analytics.track(AUTH_EVENTS.LOGIN_FAILED, {
-        error_message: error.message,
+        error_message: authError.message,
         email_domain: getEmailDomain(email)
       })
 
-      // Provide clearer error messages for common issues
-      let errorMessage = error.message
-
-      if (error.message.toLowerCase().includes('signups not allowed')) {
-        errorMessage = 'No account found with this email. Please sign up first.'
-      } else if (error.message.toLowerCase().includes('email not confirmed')) {
-        errorMessage = 'Please check your email and click the confirmation link before signing in.'
+      if (authError.message.toLowerCase().includes('invalid login credentials')) {
+        setError('Incorrect email or password. Please try again.')
+      } else if (authError.message.toLowerCase().includes('email not confirmed')) {
+        setError('Please confirm your email before logging in. Check your inbox.')
+      } else {
+        setError(authError.message)
       }
-
-      messageApi.error({
-        content: errorMessage,
-        duration: 10,
-        style: { fontSize: 15, cursor: 'pointer' },
-        onClick: () => messageApi.destroy()
-      })
     } else {
       localStorage.setItem('login_initiated', 'true')
-      setLastEmail(email)
-      setCooldownSeconds(60)
-      messageApi.success({
-        content: 'Your secure login link is on its way. Check your inbox (and spam/junk folder).',
-        duration: 10,
-        style: { fontSize: 15, cursor: 'pointer' },
-        onClick: () => messageApi.destroy()
-      })
     }
   }
 
-  const getButtonText = () => {
-    if (loading) return 'Sending magic link...'
-    if (cooldownSeconds > 0) return `Check inbox for login link (${cooldownSeconds}s)`
-    return 'Send magic link'
-  }
-
   return (
-    <AuthContainer>
-      {contextHolder}
-      <Form
-        layout="vertical"
-        onFinish={handleLogin}
-        requiredMark={false}
-        autoComplete="on"
-        onValuesChange={(changedValues) => {
-          if (changedValues.email && changedValues.email !== lastEmail) {
-            setCooldownSeconds(0)
-            messageApi.destroy()
-          }
-        }}
-      >
-        <Form.Item
-          label={<Text strong>Your email address</Text>}
-          name="email"
-          validateTrigger="onSubmit"
-          rules={[
-            { required: true, message: 'Please enter your email' },
-            { type: 'email', message: 'Enter a valid email address' }
-          ]}
-        >
-          <Input
-            size="large"
-            placeholder="Personal email address"
-            type="email"
-            inputMode="email"
-            autoComplete="username email"
-            style={{
-              borderRadius: 999,
-              padding: '12px 20px'
-            }}
-          />
-        </Form.Item>
+    <form onSubmit={handleLogin} autoComplete="on" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div>
+        <label style={lbl}>Email</label>
+        <input
+          type="email"
+          inputMode="email"
+          autoComplete="username email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => { setEmail(e.target.value); setError(null) }}
+          style={inp}
+        />
+      </div>
 
-        <Button
-          type="primary"
-          htmlType="submit"
-          size="large"
-          loading={loading}
-          disabled={cooldownSeconds > 0}
-          block
-          style={{
-            borderRadius: 999,
-            height: 52,
-            fontSize: 16,
-            marginTop: 8
-          }}
-        >
-          {getButtonText()}
-        </Button>
+      <PasswordField
+        label="Password"
+        autoComplete="current-password"
+        placeholder="Your password"
+        value={password}
+        onChange={(e) => { setPassword(e.target.value); setError(null) }}
+        labelStyle={lbl}
+        inputStyle={inp}
+      />
 
-        <Text
-          type="secondary"
-          style={{
-            display: 'block',
-            textAlign: 'center',
-            marginTop: 16,
-            fontSize: 13
-          }}
-        >
-          We'll email you a secure, password-free login link.
-        </Text>
+      <div style={{ textAlign: 'right', marginTop: -10 }}>
+        <Link to="/forgot-password" style={{
+          fontSize: 13, fontWeight: 600,
+          fontFamily: 'Nunito, sans-serif', color: '#147b75',
+          textDecoration: 'none',
+        }}>
+          Forgot password?
+        </Link>
+      </div>
 
-        <Text
-          type="secondary"
-          style={{
-            display: 'block',
-            textAlign: 'center',
-            marginTop: 24,
-            fontSize: 14
-          }}
-        >
-          Don't have an account?{' '}
-          <Link
-            to="/signup"
-            style={{ color: 'var(--ant-color-primary)', fontWeight: 500 }}
-          >
-            Sign up
-          </Link>
-        </Text>
-      </Form>
-    </AuthContainer>
+      <button type="submit" disabled={loading} style={btn}>
+        {loading ? 'Logging in...' : 'Log in'}
+      </button>
+
+      {error && (
+        <p style={{
+          margin: 0, fontSize: 13, fontWeight: 600,
+          fontFamily: 'Nunito, sans-serif', color: '#e06470',
+          textAlign: 'center',
+        }}>
+          {error}
+        </p>
+      )}
+
+      <p style={{
+        textAlign: 'center', margin: '4px 0 0',
+        fontSize: 14, fontWeight: 600,
+        fontFamily: 'Nunito, sans-serif', color: '#9f9c9c',
+      }}>
+        Don't have an account?{' '}
+        <Link to="/signup" style={{ color: '#147b75', fontWeight: 700, textDecoration: 'none' }}>
+          Sign up
+        </Link>
+      </p>
+    </form>
   )
+}
+
+/* ---- shared styles ---- */
+
+const lbl = {
+  fontSize: 13, fontWeight: 700,
+  fontFamily: 'Nunito, sans-serif',
+  color: '#5e5e5e', marginBottom: 6, display: 'block',
+}
+
+const inp = {
+  width: '100%', height: 50, borderRadius: 10,
+  border: '1px solid #e8e8e8', padding: '0 14px',
+  fontSize: 16, fontWeight: 500,
+  fontFamily: 'Nunito, sans-serif', color: '#000',
+  background: '#fff', outline: 'none',
+  boxSizing: 'border-box', WebkitAppearance: 'none',
+}
+
+const btn = {
+  width: '100%', height: 52, borderRadius: 10,
+  border: 'none', background: '#147b75',
+  color: '#fff', fontSize: 16, fontWeight: 700,
+  fontFamily: 'Nunito, sans-serif',
 }

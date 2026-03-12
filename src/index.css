@@ -6,6 +6,9 @@ body {
   overscroll-behavior: none;
   position: fixed;
   width: 100%;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
   font-family: 'Nunito', system-ui, -apple-system, BlinkMacSystemFont,
     'Segoe UI', Roboto, sans-serif;
   background-color: #ffffff;
@@ -96,6 +99,12 @@ body {
   transition: filter 0.2s ease;
 }
 
+/* Allow text selection in inputs */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* Left align text inside date inputs (iOS Safari) */
 input[type="date"] {
   text-align: left !important;
@@ -162,6 +171,16 @@ button:focus {
   to { opacity: 1; }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pillIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 /* Pulse animation for loading placeholders */
 @keyframes pulse {
 
@@ -189,4 +208,19 @@ button:focus {
     overflow: hidden;
     position: relative;
   }
+}
+
+@keyframes authFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }

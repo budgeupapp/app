@@ -9,11 +9,16 @@ import { supabase } from './lib/supabaseClient'
 const authCallbackPending =
     window.location.hash.includes('access_token') ||
     new URLSearchParams(window.location.search).has('code')
+const recoveryPending =
+    window.location.hash.includes('type=recovery')
 import { Spin } from 'antd'
 import { analytics, AUTH_EVENTS, SESSION_EVENTS, getSessionProperties } from './lib/analytics/index.js'
 
 import LoginForm from './screens/LoginForm'
 import SignupForm from './screens/SignupForm'
+import ForgotPasswordForm from './screens/ForgotPasswordForm'
+import ResetPasswordForm from './screens/ResetPasswordForm'
+import AuthContainer from './components/AuthContainer'
 import FinancialOnboardingForm from './screens/FinancialOnboardingForm'
 import LoadingScreen from './screens/LoadingScreen'
 import Dashboard from './screens/Dashboard'
@@ -32,6 +37,7 @@ export default function App() {
     const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(null)
     const [onboardingLoading, setOnboardingLoading] = useState(true)
     const [showLoadingScreen, setShowLoadingScreen] = useState(false)
+    const [passwordRecovery, setPasswordRecovery] = useState(recoveryPending)
 
     /* ---------------- PRELOAD ASSETS ---------------- */
 
@@ -69,6 +75,18 @@ export default function App() {
 
         const { data: listener } = supabase.auth.onAuthStateChange(
             async (event, session) => {
+                if (event === 'PASSWORD_RECOVERY') {
+                    setSession(session)
+                    setPasswordRecovery(true)
+                    return
+                }
+
+                // Skip normal sign-in flow during password recovery
+                if (recoveryPending && event === 'SIGNED_IN') {
+                    setSession(session)
+                    return
+                }
+
                 setSession(session)
 
                 // Handle new signup consent insertion
@@ -168,15 +186,23 @@ export default function App() {
     }
 
 
-    /* ---------------- NOT AUTHENTICATED ---------------- */
+    /* ---------------- NOT AUTHENTICATED / PASSWORD RECOVERY ---------------- */
 
-    if (!session) {
+    if (!session || passwordRecovery) {
         return (
             <BrowserRouter>
                 <Routes>
-                    <Route path="/login" element={<LoginForm />} />
-                    <Route path="/signup" element={<SignupForm />} />
-                    <Route path="*" element={<Navigate to="/signup" replace />} />
+                    <Route element={<AuthContainer />}>
+                        <Route path="/login" element={<LoginForm />} />
+                        <Route path="/signup" element={<SignupForm />} />
+                        <Route path="/forgot-password" element={<ForgotPasswordForm />} />
+                        <Route path="/reset-password" element={
+                            <ResetPasswordForm onComplete={() => setPasswordRecovery(false)} />
+                        } />
+                        <Route path="*" element={
+                            <Navigate to={passwordRecovery ? '/reset-password' : '/signup'} replace />
+                        } />
+                    </Route>
                 </Routes>
             </BrowserRouter>
         )
@@ -238,9 +264,11 @@ export default function App() {
                 {/* Redirect root to dashboard */}
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-                {/* Redirect login/signup to dashboard */}
+                {/* Redirect auth routes to dashboard */}
                 <Route path="/login" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/signup" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/reset-password" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/forgot-password" element={<Navigate to="/dashboard" replace />} />
 
                 {/* 404 page for invalid routes */}
                 <Route path="*" element={<NotFound />} />

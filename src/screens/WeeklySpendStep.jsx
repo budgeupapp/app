@@ -1,6 +1,7 @@
+import { getCurrencySymbol } from '../lib/settings'
 import { useState, useRef, useCallback } from 'react'
 
-const MAX_SPEND = 400
+const MAX_SPEND = 350
 const SLIDER_STEP = 5
 
 function clamp(val, min, max) {
@@ -22,21 +23,21 @@ export default function WeeklySpendStep({
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             {!compact && (
-            <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                <h2 style={{
-                    fontSize: 25, fontWeight: 700,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: '#000', margin: '0 0 8px', lineHeight: 1.3,
-                }}>
-                    Weekly spend
-                </h2>
-                <p style={{
-                    fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                    color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5,
-                }}>
-                    Estimate your average weekly spending, including unpredictable expenses not already covered. You can always edit this later.
-                </p>
-            </div>
+                <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
+                    <h2 style={{
+                        fontSize: 25, fontWeight: 700,
+                        fontFamily: 'Nunito, sans-serif',
+                        color: '#000', margin: '0 0 8px', lineHeight: 1.3,
+                    }}>
+                        Weekly Spend
+                    </h2>
+                    <p style={{
+                        fontSize: 15, fontFamily: 'Nunito, sans-serif',
+                        color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5,
+                    }}>
+                        Groceries, going out, transport — your everyday spending.
+                    </p>
+                </div>
             )}
 
             <div style={{
@@ -45,83 +46,35 @@ export default function WeeklySpendStep({
                 padding: compact ? '0 0 24px' : '0 24px 24px',
                 minHeight: 0,
             }}>
-                {/* Main spend card */}
                 <SpendSliderCard
-                    label={weeklySpendVariesByTerm ? 'During Term' : 'Average Weekly Spending'}
+                    label="Average Weekly Spending"
                     sublabel="Adjust to see how your forecast changes in real time."
                     description="Groceries, going out, transport etc."
                     value={termVal}
                     onChange={updateWeeklySpend}
                     max={MAX_SPEND}
-                    color="#147b75"
+                    color="#e06470"
+                    variesByTerm={weeklySpendVariesByTerm}
+                    onToggleVaries={() => updateWeeklySpendVariesByTerm(!weeklySpendVariesByTerm)}
+                    nonTermVal={nonTermVal}
+                    onChangeNonTerm={updateWeeklySpendNonTerm}
                 />
-
-                {/* Non-term spend card */}
-                {weeklySpendVariesByTerm && (
-                    <div style={{ marginTop: 12 }}>
-                        <SpendSliderCard
-                            label="Outside Term"
-                            sublabel="Your average weekly spend during holidays."
-                            description="Groceries, going out, transport etc."
-                            value={nonTermVal}
-                            onChange={updateWeeklySpendNonTerm}
-                            max={MAX_SPEND}
-                            color="#EC8C17"
-                        />
-                    </div>
-                )}
-
-                {/* Varies by term toggle */}
-                <button
-                    onClick={() => updateWeeklySpendVariesByTerm(!weeklySpendVariesByTerm)}
-                    style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        padding: '16px 0 0', margin: 0,
-                    }}
-                >
-                    <div style={{
-                        width: 36, height: 20, borderRadius: 10,
-                        background: weeklySpendVariesByTerm ? '#147b75' : '#e0e0e0',
-                        transition: 'background 0.2s ease',
-                        position: 'relative', flexShrink: 0,
-                    }}>
-                        <div style={{
-                            width: 16, height: 16, borderRadius: 8,
-                            background: '#fff',
-                            position: 'absolute', top: 2,
-                            left: weeklySpendVariesByTerm ? 18 : 2,
-                            transition: 'left 0.2s ease',
-                        }} />
-                    </div>
-                    <span style={{
-                        fontSize: 13, fontWeight: 600,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#5e5e5e',
-                    }}>
-                        Different amount outside term
-                    </span>
-                </button>
             </div>
         </div>
     )
 }
 
-function SpendSliderCard({ label, sublabel, description, value, onChange, max, color }) {
+function Slider({ value, onChange, max, color }) {
     const trackRef = useRef(null)
     const [dragging, setDragging] = useState(false)
     const pct = (value / max) * 100
-
-    const monthly = Math.round(value * (52 / 12))
-    const yearly = value * 52
 
     const updateFromX = useCallback((clientX) => {
         const track = trackRef.current
         if (!track) return
         const rect = track.getBoundingClientRect()
         const ratio = clamp((clientX - rect.left) / rect.width, 0, 1)
-        const raw = ratio * max
-        const snapped = Math.round(raw / SLIDER_STEP) * SLIDER_STEP
+        const snapped = Math.round(ratio * max / SLIDER_STEP) * SLIDER_STEP
         onChange(String(snapped))
     }, [max, onChange])
 
@@ -140,106 +93,88 @@ function SpendSliderCard({ label, sublabel, description, value, onChange, max, c
     }
 
     return (
-        <div style={{
-            border: '1px solid #f3f3f3', borderRadius: 10,
-            padding: '14px',
-        }}>
-            {/* Header */}
-            <p style={{
-                fontSize: 15, fontWeight: 700,
-                fontFamily: 'Nunito, sans-serif',
-                color: '#000', margin: 0,
-            }}>
-                {label}
-            </p>
-            <p style={{
-                fontSize: 10, fontWeight: 400,
-                fontFamily: 'Nunito, sans-serif',
-                color: '#9f9c9c', margin: '2px 0 12px',
-            }}>
-                {sublabel}
-            </p>
+        <div ref={trackRef} onPointerDown={handlePointerDown}
+            style={{ position: 'relative', height: 20, cursor: 'pointer', touchAction: 'none', display: 'flex', alignItems: 'center' }}>
+            <div style={{ position: 'absolute', left: 0, right: 0, height: 4, borderRadius: 2, background: '#f0f0f0' }} />
+            <div style={{ position: 'absolute', left: 0, width: `${pct}%`, height: 4, borderRadius: 2, background: color, transition: dragging ? 'none' : 'width 0.1s ease' }} />
+            <div style={{ position: 'absolute', left: `clamp(0px, calc(${pct}% - 7px), calc(100% - 14px))`, width: 14, height: 14, borderRadius: 7, background: '#fff', border: `2.5px solid ${color}`, boxShadow: '0 1px 3px rgba(0,0,0,0.15)', transition: dragging ? 'none' : 'left 0.1s ease' }} />
+        </div>
+    )
+}
 
-            {/* Description + Value */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{
-                    fontSize: 11, fontWeight: 400,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: '#5e5e5e',
+function SpendSliderCard({ label, sublabel, description, value, onChange, max, color, variesByTerm, onToggleVaries, nonTermVal, onChangeNonTerm }) {
+    const monthly = Math.round(value * (52 / 12))
+    const yearly = value * 52
+    const nonTermMonthly = Math.round((nonTermVal || 0) * (52 / 12))
+    const nonTermYearly = (nonTermVal || 0) * 52
+
+    return (
+        <div style={{ border: '1px solid #f3f3f3', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 14px 12px' }}>
+                <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>{label}</p>
+                <p style={{ fontSize: 10, fontWeight: 400, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c', margin: '2px 0 12px' }}>{sublabel}</p>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: variesByTerm ? 700 : 400, fontFamily: 'Nunito, sans-serif', color: variesByTerm ? color : '#5e5e5e' }}>
+                        {variesByTerm ? 'Term time' : description}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000' }}>{getCurrencySymbol()}{value}</span>
+                </div>
+                <Slider value={value} onChange={onChange} max={max} color={color} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                    <span style={{ fontSize: 10, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c' }}>{getCurrencySymbol()}0</span>
+                    <span style={{ fontSize: 10, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c' }}>{getCurrencySymbol()}{max}</span>
+                </div>
+                <div style={{ marginTop: 10, background: '#fdf0f1', borderRadius: 5, padding: '6px 0', textAlign: 'center' }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: color }}>
+                        {`≈${getCurrencySymbol()}${monthly.toLocaleString()}/month · ${getCurrencySymbol()}${yearly.toLocaleString()}/year`}
+                    </span>
+                </div>
+
+                {/* Second slider for during holidays — animated */}
+                {onChangeNonTerm !== undefined && (
+                    <div style={{
+                        maxHeight: variesByTerm ? 200 : 0,
+                        opacity: variesByTerm ? 1 : 0,
+                        overflow: 'hidden',
+                        transition: 'max-height 0.3s ease, opacity 0.2s ease',
+                    }}>
+                        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #f3f3f3' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#EC8C17' }}>Holidays</span>
+                                <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000' }}>{getCurrencySymbol()}{nonTermVal || 0}</span>
+                            </div>
+                            <Slider value={nonTermVal || 0} onChange={onChangeNonTerm} max={max} color="#EC8C17" />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+                                <span style={{ fontSize: 10, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c' }}>{getCurrencySymbol()}0</span>
+                                <span style={{ fontSize: 10, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c' }}>{getCurrencySymbol()}{max}</span>
+                            </div>
+                            <div style={{ marginTop: 10, background: '#fdf6ee', borderRadius: 5, padding: '6px 0', textAlign: 'center' }}>
+                                <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#EC8C17' }}>
+                                    {`≈${getCurrencySymbol()}${nonTermMonthly.toLocaleString()}/month · ${getCurrencySymbol()}${nonTermYearly.toLocaleString()}/year`}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Toggle row */}
+            {onToggleVaries !== undefined && (
+                <button onClick={onToggleVaries} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    width: '100%', boxSizing: 'border-box',
+                    background: 'none', border: 'none', borderTop: '1px solid #f3f3f3',
+                    cursor: 'pointer', padding: '10px 14px', margin: 0,
                 }}>
-                    {description}
-                </span>
-                <span style={{
-                    fontSize: 12, fontWeight: 700,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: '#000',
-                }}>
-                    £{value}
-                </span>
-            </div>
-
-            {/* Slider track */}
-            <div
-                ref={trackRef}
-                onPointerDown={handlePointerDown}
-                style={{
-                    position: 'relative', height: 20,
-                    cursor: 'pointer',
-                    touchAction: 'none',
-                    display: 'flex', alignItems: 'center',
-                }}
-            >
-                {/* Background track */}
-                <div style={{
-                    position: 'absolute', left: 0, right: 0,
-                    height: 4, borderRadius: 2,
-                    background: '#f0f0f0',
-                }} />
-                {/* Filled track */}
-                <div style={{
-                    position: 'absolute', left: 0,
-                    width: `${pct}%`,
-                    height: 4, borderRadius: 2,
-                    background: color,
-                    transition: dragging ? 'none' : 'width 0.1s ease',
-                }} />
-                {/* Thumb */}
-                <div style={{
-                    position: 'absolute',
-                    left: `${pct}%`,
-                    transform: 'translateX(-50%)',
-                    width: 14, height: 14, borderRadius: 7,
-                    background: '#fff',
-                    border: `2.5px solid ${color}`,
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-                    transition: dragging ? 'none' : 'left 0.1s ease',
-                }} />
-            </div>
-
-            {/* Min / Max labels */}
-            <div style={{
-                display: 'flex', justifyContent: 'space-between',
-                marginTop: 2,
-            }}>
-                <span style={{ fontSize: 10, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c' }}>£0</span>
-                <span style={{ fontSize: 10, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c' }}>£{max}</span>
-            </div>
-
-            {/* Summary */}
-            <div style={{
-                marginTop: 10,
-                background: '#f3f8f8', borderRadius: 5,
-                padding: '6px 0',
-                textAlign: 'center',
-            }}>
-                <span style={{
-                    fontSize: 10, fontWeight: 600,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: color,
-                }}>
-                    ≈£{monthly.toLocaleString()}/month · £{yearly.toLocaleString()}/year
-                </span>
-            </div>
+                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>
+                        Different amount during holidays
+                    </span>
+                    <div style={{ width: 36, height: 20, borderRadius: 10, background: variesByTerm ? '#e06470' : '#e0e0e0', transition: 'background 0.2s ease', position: 'relative', flexShrink: 0 }}>
+                        <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: variesByTerm ? 18 : 2, transition: 'left 0.2s ease' }} />
+                    </div>
+                </button>
+            )}
         </div>
     )
 }

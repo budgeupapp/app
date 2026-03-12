@@ -1,58 +1,58 @@
-import { Typography } from 'antd'
+import { Outlet, useLocation } from 'react-router-dom'
 
-const { Title } = Typography
+export default function AuthContainer() {
+  const { pathname } = useLocation()
 
-export default function AuthContainer({ children }) {
   return (
     <div
       style={{
-        minHeight: '100svh',
-        background: '#ffffff',
-        padding: '24px 16px',
+        height: '100%',
+        background: '#fff',
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
+        flexDirection: 'column',
+        overflow: 'hidden',
       }}
     >
+      {/* Logo */}
       <div
         style={{
-          width: '100%',
-          maxWidth: 420,
-          padding: '0 8px'
+          flexShrink: 1,
+          minHeight: 60,
+          maxHeight: 180,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+          flex: '1 1 180px',
         }}
       >
-        {/* Brand Logo and Title */}
-        <div
+        <img src="/logo.svg" alt="Budge Up" style={{ height: 40 }} />
+        <span
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 12,
-            marginBottom: 40
+            fontSize: 24,
+            fontWeight: 700,
+            fontFamily: 'Nunito, sans-serif',
+            color: '#147b75',
           }}
         >
-          <img
-            src="/logo.svg"
-            alt="Budge Up"
-            style={{
-              height: 44
-            }}
-          />
+          budge up
+        </span>
+      </div>
 
-          <Title
-            level={2}
-            style={{
-              margin: 0,
-              fontWeight: 700,
-              color: 'var(--ant-color-primary)'
-            }}
-          >
-            budge up
-          </Title>
-        </div>
-
-        {/* Form Content */}
-        {children}
+      {/* Form — fades in on route change */}
+      <div
+        key={pathname}
+        style={{
+          flexShrink: 1,
+          overflowY: 'auto',
+          padding: '0 28px 40px',
+          maxWidth: 420,
+          width: '100%',
+          margin: '0 auto',
+          animation: 'authFadeIn 0.3s ease',
+        }}
+      >
+        <Outlet />
       </div>
     </div>
   )

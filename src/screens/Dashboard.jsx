@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import TermGraph from '../components/TermGraph'
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { ChevronUp, ChevronDown, Check, Clock, Plus, Trash, Eye, EyeOff } from 'react-feather'
+import TermGraph, { refreshAY, AY_START, AY_END, datePct, datePctFromDate, daysBetween, fmt } from '../components/TermGraph'
 import { supabase } from '../lib/supabaseClient'
 import { fetchUserData, saveCashflowForecast, saveUserFinances, saveTermDates, saveBalanceHistory } from '../lib/api'
+import { getCurrencySymbol, getGraphStart } from '../lib/settings'
 import {
     INITIAL_FORM_DATA,
     DEFAULT_LOAN_MONTHS,
@@ -17,6 +19,7 @@ import RentStep from './RentStep'
 import BillsStep from './BillsStep'
 import UniFeesStep from './UniFeesStep'
 import SavingsInvestmentsStep from './SavingsInvestmentsStep'
+import OtherExpenseStep from './OtherExpenseStep'
 import WeeklySpendStep from './WeeklySpendStep'
 import OneOffItemsStep from './OneOffItemsStep'
 
@@ -36,20 +39,27 @@ const STORAGE_KEY = 'budgeup_onboarding_state'
 
 /* ---------- SOURCE CONFIGS ---------- */
 
-const INCOME_SOURCES = [
+const FIXED_INCOME_SOURCES = [
     { id: 'maintenance_loan', label: 'Maintenance Loan', icon: incomeLoan, panelId: 'maintenanceLoan', editable: true },
     { id: 'bursary', label: 'Bursary', icon: incomeFamily, panelId: 'bursary' },
     { id: 'family_friends', label: 'Family & Friends', icon: incomeFriends, panelId: 'familyFriends' },
     { id: 'work', label: 'Work', icon: incomeWork, panelId: 'work' },
-    { id: 'other_income', label: 'Other', icon: iconOtherIncome, panelId: 'otherIncome' },
 ]
 
-const EXPENSE_SOURCES = [
+const FIXED_EXPENSE_SOURCES = [
     { id: 'rent', label: 'Rent', icon: expenseRent, panelId: 'rent' },
     { id: 'bills', label: 'Bills & Utilities', icon: expenseBills, panelId: 'bills' },
     { id: 'uni_fees', label: 'University Fees', icon: expenseUnifees, panelId: 'uniFees' },
     { id: 'savings_investments', label: 'Savings & Investments', icon: expenseSavings, panelId: 'savingsInvestments' },
 ]
+
+// Default empty "other" instance
+const makeOtherInstance = (prefix) => ({
+    id: `${prefix}_${Date.now()}`,
+    amount: '', frequency: 'monthly', amountPeriod: 'monthly', label: '',
+    nextDate: null, termDates: {}, quarterlyDates: {},
+    variesByTerm: false, nonTermAmount: '',
+})
 
 
 /* ---------- GRAPH EVENT HELPERS (same as onboarding) ---------- */
@@ -60,22 +70,31 @@ const MONTH_KEY_TO_DATE = {
     may: '2026-05-01', june: '2026-06-01', july: '2026-07-01', august: '2026-08-01',
 }
 
+const MONTH_KEY_TO_DATE_MID = {
+    september: '2025-09-15', october: '2025-10-15', november: '2025-11-15', december: '2025-12-15',
+    january: '2026-01-15', february: '2026-02-15', march: '2026-03-15', april: '2026-04-15',
+    may: '2026-05-15', june: '2026-06-15', july: '2026-07-15', august: '2026-08-15',
+}
+
 const MONTH_SHORT = {
     september: 'September', october: 'October', november: 'November', december: 'December',
     january: 'January', february: 'February', march: 'March', april: 'April',
     may: 'May', june: 'June', july: 'July', august: 'August',
 }
 
+// Use local date to avoid UTC timezone shift (BST → dates shift back 1 day with toISOString)
+const toLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
 function generateRentDates(frequency, nextDate, formData = {}) {
     const dates = []
-    const ayStart = new Date(2025, 8, 1)
-    const ayEnd = new Date(2026, 7, 31)
+    const ayStart = AY_START
+    const ayEnd = AY_END
     if (!frequency) return dates
     if (frequency === 'weekly') {
-        let d = nextDate ? new Date(nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+        let d = nextDate ? new Date(nextDate + 'T00:00:00') : new Date(AY_START)
         while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
         while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-        while (d <= ayEnd) { dates.push(d.toISOString().split('T')[0]); d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000) }
+        while (d <= ayEnd) { dates.push(toLocalDate(d)); d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000) }
         return dates
     }
     if (frequency === 'termly') {
@@ -98,15 +117,16 @@ function generateRentDates(frequency, nextDate, formData = {}) {
         dates.sort()
         return dates
     }
-    let current = nextDate ? new Date(nextDate + 'T00:00:00') : new Date(2025, 8, 1)
-    let count = 0
-    while (current <= ayEnd && count < 12) {
-        if (current >= ayStart) { dates.push(current.toISOString().split('T')[0]); count++ }
-        switch (frequency) {
-            case 'monthly': current = new Date(current.getFullYear(), current.getMonth() + 1, current.getDate()); break
-            case 'quarterly': current = new Date(current.getFullYear(), current.getMonth() + 3, current.getDate()); break
-            default: return dates
-        }
+    let current = nextDate ? new Date(nextDate + 'T00:00:00') : new Date(AY_START)
+    const dom = current.getDate()
+    const step = frequency === 'quarterly' ? 3 : 1
+    // Backtrack to before ayStart, preserving day-of-month
+    while (current > ayStart) current = new Date(current.getFullYear(), current.getMonth() - step, dom)
+    // Advance to first occurrence on or after ayStart
+    while (current < ayStart) current = new Date(current.getFullYear(), current.getMonth() + step, dom)
+    while (current <= ayEnd) {
+        dates.push(toLocalDate(current))
+        current = new Date(current.getFullYear(), current.getMonth() + step, dom)
     }
     return dates
 }
@@ -125,15 +145,25 @@ function isInTerm(dateStr, terms) {
 
 function distributeEvenly(total, count) {
     if (count <= 0) return []
-    const per = Math.round(total / count)
+    const per = Math.round((total / count) * 100) / 100
     const amounts = Array(count).fill(per)
-    amounts[count - 1] = total - per * (count - 1)
+    amounts[count - 1] = Math.round((total - per * (count - 1)) * 100) / 100
     return amounts
 }
 
-function buildGraphEvents(formData) {
+// Distribute yearly total only among non-removed dates; removed dates keep original amount for display
+function distributeExcludingRemoved(total, dates, editType, removedSet) {
+    const activeDates = dates.filter(d => !removedSet.has(`${editType}:${d.date}`))
+    const activeAmounts = distributeEvenly(total, activeDates.length)
+    const originalAmounts = distributeEvenly(total, dates.length)
+    let ai = 0
+    return dates.map((d, i) => removedSet.has(`${editType}:${d.date}`) ? originalAmounts[i] : activeAmounts[ai++])
+}
+
+function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
     const events = []
     const terms = formData.termDates?.terms || []
+    const removedSet = new Set(formData.removedEvents || [])
 
     // Maintenance loan
     if (formData.incomeSources?.includes('maintenance_loan')) {
@@ -142,7 +172,7 @@ function buildGraphEvents(formData) {
         let runningTotal = 0
         for (let mi = 0; mi < months.length; mi++) {
             const month = months[mi]
-            const date = formData.loanDates?.[month] || MONTH_KEY_TO_DATE[month]
+            const date = formData.loanDates?.[month] || MONTH_KEY_TO_DATE_MID[month]
             if (!date) continue
             const instalmentAmt = parseFloat(String(formData.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
             let amount
@@ -191,28 +221,28 @@ function buildGraphEvents(formData) {
     // Family/friends
     if (formData.incomeSources?.includes('family_friends')) {
         const famAmtRaw = parseFloat(String(formData.familyAmount || '0').replace(/,/g, ''))
-        const freq = formData.familyFrequency
+        const freq = formData.familyFrequency || 'monthly'
         const famAmtPeriod = formData.familyAmountPeriod || freq || 'monthly'
         const isYearlyInput = famAmtPeriod === 'yearly'
         const onlyTermTime = isYearlyInput && formData.familyVariesByTerm
         if (famAmtRaw > 0 && freq) {
-            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+            const ayStart = AY_START, ayEnd = AY_END
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyTotal = famAmtRaw * (YM[famAmtPeriod] || 1)
             if (isYearlyInput) {
                 // Collect all payment dates first, then distribute yearly total evenly
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly support' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly support' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.familyTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} support` }) }
@@ -225,26 +255,26 @@ function buildGraphEvents(formData) {
                 }
                 const dates = onlyTermTime ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (dates.length > 0) {
-                    const amounts = distributeEvenly(yearlyTotal, dates.length)
+                    const amounts = distributeExcludingRemoved(yearlyTotal, dates, 'family', removedSet)
                     for (let i = 0; i < dates.length; i++) {
                         events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: 'Family/Friends', sublabel: dates[i].sublabel, editType: 'family' })
                     }
                 }
             } else {
                 // Per-payment amount (amountPeriod === freq, exact — no rounding needed)
-                const famNonTermAmt = formData.familyVariesByTerm ? parseFloat(String(formData.familyNonTermAmount || '0').replace(/,/g, '')) : famAmtRaw
+                const famNonTermAmt = formData.familyVariesByTerm ? parseFloat(String(formData.familyNonTermAmount || formData.familyAmount || '0').replace(/,/g, '')) : famAmtRaw
                 const getFamAmt = (ds) => formData.familyVariesByTerm ? (isInTerm(ds, terms) ? famAmtRaw : famNonTermAmt) : famAmtRaw
                 if (freq === 'weekly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.familyTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: famAmtRaw, type: 'income', label: 'Family/Friends', sublabel: `${term.name} support`, editType: 'family' }) }
@@ -265,22 +295,22 @@ function buildGraphEvents(formData) {
         const isYearlyWork = workAmtPeriod === 'yearly'
         const onlyTermTimeWork = isYearlyWork && formData.workVariesByTerm
         if (workAmt > 0 && freq) {
-            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+            const ayStart = AY_START, ayEnd = AY_END
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyWork = workAmt * (YM[workAmtPeriod] || 1)
             if (isYearlyWork) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly income' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly income' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.workTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} income` }) }
@@ -293,25 +323,25 @@ function buildGraphEvents(formData) {
                 }
                 const dates = onlyTermTimeWork ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (dates.length > 0) {
-                    const amounts = distributeEvenly(yearlyWork, dates.length)
+                    const amounts = distributeExcludingRemoved(yearlyWork, dates, 'work', removedSet)
                     for (let i = 0; i < dates.length; i++) {
                         events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: 'Work', sublabel: dates[i].sublabel, editType: 'work' })
                     }
                 }
             } else {
-                const workNonTermAmt = formData.workVariesByTerm ? parseFloat(String(formData.workNonTermAmount || '0').replace(/,/g, '')) : workAmt
+                const workNonTermAmt = formData.workVariesByTerm ? parseFloat(String(formData.workNonTermAmount || formData.workAmount || '0').replace(/,/g, '')) : workAmt
                 const getWorkAmt = (ds) => formData.workVariesByTerm ? (isInTerm(ds, terms) ? workAmt : workNonTermAmt) : workAmt
                 if (freq === 'weekly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income`, editType: 'work' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income`, editType: 'work' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.workTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: workAmt, type: 'income', label: 'Work', sublabel: `${term.name} income`, editType: 'work' }) }
@@ -326,71 +356,72 @@ function buildGraphEvents(formData) {
         }
     }
 
-    // Other income
-    if (formData.incomeSources?.includes('other_income')) {
-        const otherAmt = parseFloat(String(formData.otherIncomeAmount || '0').replace(/,/g, ''))
-        const freq = formData.otherIncomeFrequency
-        const lbl = formData.otherIncomeLabel || 'Other Income'
-        const otherAmtPeriod = formData.otherIncomeAmountPeriod || freq || 'monthly'
+    // Other income instances
+    for (const inst of (formData.otherIncomes || [])) {
+        if (!formData.incomeSources?.includes(inst.id)) continue
+        const otherAmt = parseFloat(String(inst.amount || '0').replace(/,/g, ''))
+        const freq = inst.frequency || 'monthly'
+        const lbl = inst.label || 'Other Income'
+        const otherAmtPeriod = inst.amountPeriod || freq || 'monthly'
         const isYearlyOther = otherAmtPeriod === 'yearly'
-        const onlyTermTimeOther = isYearlyOther && formData.otherIncomeVariesByTerm
+        const onlyTermTimeOther = isYearlyOther && inst.variesByTerm
         if (otherAmt > 0 && freq) {
-            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+            const ayStart = AY_START, ayEnd = AY_END
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyOther = otherAmt * (YM[otherAmtPeriod] || 1)
             if (isYearlyOther) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
-                    const overrides = formData.otherIncomeTermDates || {}
+                    const overrides = inst.termDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name}` }) }
                 } else if (freq === 'quarterly') {
-                    const qDates = formData.otherIncomeQuarterlyDates || {}
+                    const qDates = inst.quarterlyDates || {}
                     const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
                     for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1}` })
                 } else if (freq === 'yearly') {
-                    allDates.push({ date: formData.otherIncomeNextDate || '2025-09-01', sublabel: 'Yearly income' })
+                    allDates.push({ date: inst.nextDate || '2025-09-01', sublabel: 'Yearly income' })
                 }
                 const dates = onlyTermTimeOther ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (dates.length > 0) {
-                    const amounts = distributeEvenly(yearlyOther, dates.length)
+                    const amounts = distributeExcludingRemoved(yearlyOther, dates, inst.id, removedSet)
                     for (let i = 0; i < dates.length; i++) {
-                        events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: lbl, sublabel: dates[i].sublabel, editType: 'otherIncome' })
+                        events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: lbl, sublabel: dates[i].sublabel, editType: inst.id })
                     }
                 }
             } else {
-                const otherNonTermAmt = formData.otherIncomeVariesByTerm ? parseFloat(String(formData.otherIncomeNonTermAmount || '0').replace(/,/g, '')) : otherAmt
-                const getOtherAmt = (ds) => formData.otherIncomeVariesByTerm ? (isInTerm(ds, terms) ? otherAmt : otherNonTermAmt) : otherAmt
+                const otherNonTermAmt = inst.variesByTerm ? parseFloat(String(inst.nonTermAmount || inst.amount || '0').replace(/,/g, '')) : otherAmt
+                const getOtherAmt = (ds) => inst.variesByTerm ? (isInTerm(ds, terms) ? otherAmt : otherNonTermAmt) : otherAmt
                 if (freq === 'weekly') {
-                    let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: 'Weekly', editType: 'otherIncome' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}`, editType: 'otherIncome' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}`, editType: inst.id }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
-                    const overrides = formData.otherIncomeTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherAmt, type: 'income', label: lbl, sublabel: `${term.name}`, editType: 'otherIncome' }) }
+                    const overrides = inst.termDates || {}
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherAmt, type: 'income', label: lbl, sublabel: `${term.name}`, editType: inst.id }) }
                 } else if (freq === 'quarterly') {
-                    const qDates = formData.otherIncomeQuarterlyDates || {}
+                    const qDates = inst.quarterlyDates || {}
                     const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
-                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getOtherAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: lbl, sublabel: `Q${i + 1}`, editType: 'otherIncome' }) }
+                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getOtherAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: lbl, sublabel: `Q${i + 1}`, editType: inst.id }) }
                 } else if (freq === 'yearly') {
-                    if (otherAmt > 0) events.push({ date: formData.otherIncomeNextDate || '2025-09-01', amount: otherAmt, type: 'income', label: lbl, sublabel: 'Yearly income', editType: 'otherIncome' })
+                    if (otherAmt > 0) events.push({ date: inst.nextDate || '2025-09-01', amount: otherAmt, type: 'income', label: lbl, sublabel: 'Yearly income', editType: inst.id })
                 }
             }
         }
@@ -398,70 +429,107 @@ function buildGraphEvents(formData) {
 
     // Rent
     const rentAmt = parseFloat(String(formData.rentAmount || '0').replace(/,/g, ''))
-    if (formData.expenseSources?.includes('rent') && rentAmt > 0 && formData.rentFrequency) {
-        const rentDates = generateRentDates(formData.rentFrequency, formData.rentNextDate, formData)
+    if (formData.expenseSources?.includes('rent') && rentAmt > 0) {
+        const allRentDates = generateRentDates(formData.rentFrequency || 'monthly', formData.rentNextDate, formData)
+        const rentDates = allRentDates.filter(d => {
+            if (formData.rentStartDate && d < formData.rentStartDate) return false
+            if (formData.rentEndDate && d > formData.rentEndDate) return false
+            return true
+        })
         const rentAmtPeriod = formData.rentAmountPeriod || (formData.rentEntryMode === 'yearly' ? 'yearly' : (formData.rentFrequency || 'monthly'))
         const isYearlyRent = rentAmtPeriod === 'yearly'
+        const onlyTermTimeRent = isYearlyRent && formData.rentVariesByTerm
         const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
         const yearlyRent = rentAmt * (YM[rentAmtPeriod] || 1)
-        const rentAmounts = isYearlyRent ? distributeEvenly(yearlyRent, rentDates.length) : rentDates.map(() => rentAmt)
-        for (let ri = 0; ri < rentDates.length; ri++) {
-            const date = rentDates[ri]; const dt = new Date(date + 'T00:00:00')
-            events.push({ date, amount: rentAmounts[ri], type: 'expense', label: 'Rent', sublabel: `${dt.toLocaleDateString('en-GB', { month: 'long' })} rent`, editType: 'rent' })
+        if (isYearlyRent) {
+            const filteredDates = onlyTermTimeRent ? rentDates.filter(d => isInTerm(d, terms)) : rentDates
+            const rentDatesObj = filteredDates.map(d => ({ date: d }))
+            const rentAmounts = distributeExcludingRemoved(yearlyRent, rentDatesObj, 'rent', removedSet)
+            for (let ri = 0; ri < filteredDates.length; ri++) {
+                const date = filteredDates[ri]; const dt = new Date(date + 'T00:00:00')
+                events.push({ date, amount: rentAmounts[ri], type: 'expense', label: 'Rent', sublabel: `${dt.toLocaleDateString('en-GB', { month: 'long' })} rent`, editType: 'rent' })
+            }
+        } else {
+            const rentNonTermAmt = formData.rentVariesByTerm ? parseFloat(String(formData.rentNonTermAmount || formData.rentAmount || '0').replace(/,/g, '')) : rentAmt
+            const getRentAmt = (ds) => formData.rentVariesByTerm ? (isInTerm(ds, terms) ? rentAmt : rentNonTermAmt) : rentAmt
+            for (let ri = 0; ri < rentDates.length; ri++) {
+                const date = rentDates[ri]; const a = getRentAmt(date)
+                if (a > 0) {
+                    const dt = new Date(date + 'T00:00:00')
+                    events.push({ date, amount: a, type: 'expense', label: 'Rent', sublabel: `${dt.toLocaleDateString('en-GB', { month: 'long' })} rent`, editType: 'rent' })
+                }
+            }
         }
     }
 
     // Bills
     const billsAmt = parseFloat(String(formData.billsAmount || '0').replace(/,/g, ''))
-    if (formData.expenseSources?.includes('bills') && billsAmt > 0 && formData.billsFrequency) {
-        const freq = formData.billsFrequency
+    if (formData.expenseSources?.includes('bills') && billsAmt > 0) {
+        const freq = formData.billsFrequency || 'monthly'
         const billsAmtPeriod = formData.billsAmountPeriod || (formData.billsEntryMode === 'yearly' ? 'yearly' : freq)
         const isYearlyBills = billsAmtPeriod === 'yearly'
-        const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+        const onlyTermTimeBills = isYearlyBills && formData.billsVariesByTerm
+        const ayStart = AY_START, ayEnd = AY_END
+        const billsInRange = (ds) => {
+            if (formData.billsStartDate && ds < formData.billsStartDate) return false
+            if (formData.billsEndDate && ds > formData.billsEndDate) return false
+            return true
+        }
         const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
         const yearlyBills = billsAmt * (YM[billsAmtPeriod] || 1)
         if (isYearlyBills) {
             const allDates = []
             if (freq === 'weekly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
                 while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                 while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly bills' }); d = new Date(d.getTime() + 7 * 86400000) }
+                while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly bills' }); d = new Date(d.getTime() + 7 * 86400000) }
             } else if (freq === 'monthly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
                 const dom = d.getDate()
-                while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
             } else if (freq === 'termly') {
                 const overrides = formData.billsTermDates || {}
                 for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} bills` }) }
+            } else if (freq === 'quarterly') {
+                const qDates = formData.billsQuarterlyDates || {}
+                const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} bills` })
             } else if (freq === 'yearly') {
                 allDates.push({ date: formData.billsNextDate || '2025-09-01', sublabel: 'Yearly bills' })
             }
-            if (allDates.length > 0) {
-                const amounts = distributeEvenly(yearlyBills, allDates.length)
-                for (let i = 0; i < allDates.length; i++) {
-                    events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: 'Bills', sublabel: allDates[i].sublabel, editType: 'bills' })
+            const filteredBillsDates = (onlyTermTimeBills ? allDates.filter(d => isInTerm(d.date, terms)) : allDates).filter(d => billsInRange(d.date))
+            if (filteredBillsDates.length > 0) {
+                const amounts = distributeExcludingRemoved(yearlyBills, filteredBillsDates, 'bills', removedSet)
+                for (let i = 0; i < filteredBillsDates.length; i++) {
+                    events.push({ date: filteredBillsDates[i].date, amount: amounts[i], type: 'expense', label: 'Bills', sublabel: filteredBillsDates[i].sublabel, editType: 'bills' })
                 }
             }
         } else {
+            const billsNonTermAmt = formData.billsVariesByTerm ? parseFloat(String(formData.billsNonTermAmount || formData.billsAmount || '0').replace(/,/g, '')) : billsAmt
+            const getBillsAmt = (ds) => formData.billsVariesByTerm ? (isInTerm(ds, terms) ? billsAmt : billsNonTermAmt) : billsAmt
             if (freq === 'weekly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
                 while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                 while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: billsAmt, type: 'expense', label: 'Bills', sublabel: 'Weekly bills', editType: 'bills' }); d = new Date(d.getTime() + 7 * 86400000) }
+                while (d <= ayEnd) { const dateString = toLocalDate(d); if (billsInRange(dateString)) { const a = getBillsAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Bills', sublabel: 'Weekly bills', editType: 'bills' }) }; d = new Date(d.getTime() + 7 * 86400000) }
             } else if (freq === 'monthly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
                 const dom = d.getDate()
-                while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: billsAmt, type: 'expense', label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`, editType: 'bills' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                while (d <= ayEnd) { const dateString = toLocalDate(d); if (billsInRange(dateString)) { const a = getBillsAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`, editType: 'bills' }) }; d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
             } else if (freq === 'termly') {
                 const overrides = formData.billsTermDates || {}
-                for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: billsAmt, type: 'expense', label: 'Bills', sublabel: `${term.name} bills`, editType: 'bills' }) }
+                for (const term of terms) { const date = overrides[term.id] || term.start; if (date && billsInRange(date)) { const a = getBillsAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Bills', sublabel: `${term.name} bills`, editType: 'bills' }) } }
+            } else if (freq === 'quarterly') {
+                const qDates = formData.billsQuarterlyDates || {}
+                const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; if (billsInRange(date)) { const a = getBillsAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Bills', sublabel: `Q${i + 1} bills`, editType: 'bills' }) } }
             } else if (freq === 'yearly') {
-                events.push({ date: formData.billsNextDate || '2025-09-01', amount: billsAmt, type: 'expense', label: 'Bills', sublabel: 'Yearly bills', editType: 'bills' })
+                const dateString = formData.billsNextDate || '2025-09-01'; if (billsInRange(dateString)) { const a = getBillsAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Bills', sublabel: 'Yearly bills', editType: 'bills' }) }
             }
         }
     }
@@ -470,47 +538,70 @@ function buildGraphEvents(formData) {
     if (formData.expenseSources?.includes('uni_fees')) {
         const uniAmt = parseFloat(String(formData.uniFeesAmount || '0').replace(/,/g, ''))
         if (uniAmt > 0) {
-            const uniFreq = formData.uniFeesFrequency || 'yearly'
             const uniAmtPeriod = formData.uniFeesAmountPeriod || 'yearly'
+            const uniFreq = uniAmtPeriod === 'yearly' ? (formData.uniFeesFrequency || 'monthly') : uniAmtPeriod
             const isYearlyUni = uniAmtPeriod === 'yearly'
-            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+            const onlyTermTimeUni = isYearlyUni && formData.uniFeesVariesByTerm
+            const ayStart = AY_START, ayEnd = AY_END
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyUni = uniAmt * (YM[uniAmtPeriod] || 1)
             if (isYearlyUni) {
                 const allDates = []
-                if (uniFreq === 'yearly') {
-                    allDates.push({ date: formData.uniFeesNextDate || '2025-10-27', sublabel: 'Yearly tuition' })
+                if (uniFreq === 'weekly') {
+                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly fees' }); d = new Date(d.getTime() + 7 * 86400000) }
+                } else if (uniFreq === 'yearly') {
+                    allDates.push({ date: formData.uniFeesNextDate || '2025-09-01', sublabel: 'Yearly tuition' })
                 } else if (uniFreq === 'monthly') {
-                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date('2025-10-27T00:00:00')
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (uniFreq === 'termly') {
                     const overrides = formData.uniFeesTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} fees` }) }
+                } else if (uniFreq === 'quarterly') {
+                    const qDates = formData.uniFeesQuarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} fees` })
                 }
-                if (allDates.length > 0) {
-                    const amounts = distributeEvenly(yearlyUni, allDates.length)
-                    for (let i = 0; i < allDates.length; i++) {
-                        events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: 'University Fees', sublabel: allDates[i].sublabel, editType: 'uniFees' })
+                const filteredUniDates = onlyTermTimeUni ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
+                if (filteredUniDates.length > 0) {
+                    const amounts = distributeExcludingRemoved(yearlyUni, filteredUniDates, 'uniFees', removedSet)
+                    for (let i = 0; i < filteredUniDates.length; i++) {
+                        events.push({ date: filteredUniDates[i].date, amount: amounts[i], type: 'expense', label: 'University Fees', sublabel: filteredUniDates[i].sublabel, editType: 'uniFees' })
                     }
                 }
             } else {
-                if (uniFreq === 'yearly') {
-                    events.push({ date: formData.uniFeesNextDate || '2025-10-27', amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
+                const uniNonTermAmt = formData.uniFeesVariesByTerm ? parseFloat(String(formData.uniFeesNonTermAmount || formData.uniFeesAmount || '0').replace(/,/g, '')) : uniAmt
+                const getUniAmt = (ds) => formData.uniFeesVariesByTerm ? (isInTerm(ds, terms) ? uniAmt : uniNonTermAmt) : uniAmt
+                if (uniFreq === 'weekly') {
+                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getUniAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'University Fees', sublabel: 'Weekly fees', editType: 'uniFees' }); d = new Date(d.getTime() + 7 * 86400000) }
+                } else if (uniFreq === 'yearly') {
+                    const dateString = formData.uniFeesNextDate || '2025-09-01'; const a = getUniAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
                 } else if (uniFreq === 'monthly') {
-                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date('2025-10-27T00:00:00')
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     const dom = d.getDate()
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
                     while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' })
+                        const dateString = toLocalDate(d); const a = getUniAmt(dateString)
+                        if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' })
                         d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
                     }
                 } else if (uniFreq === 'termly') {
                     const overrides = formData.uniFeesTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' }) }
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) { const a = getUniAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' }) } }
+                } else if (uniFreq === 'quarterly') {
+                    const qDates = formData.uniFeesQuarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getUniAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'University Fees', sublabel: `Q${i + 1} fees`, editType: 'uniFees' }) }
                 }
             }
         }
@@ -519,26 +610,27 @@ function buildGraphEvents(formData) {
     // Savings & Investments
     if (formData.expenseSources?.includes('savings_investments')) {
         const savAmt = parseFloat(String(formData.savingsInvAmount || '0').replace(/,/g, ''))
-        if (savAmt > 0 && formData.savingsInvFrequency) {
-            const freq = formData.savingsInvFrequency
+        if (savAmt > 0) {
+            const freq = formData.savingsInvFrequency || 'monthly'
             const savAmtPeriod = formData.savingsInvAmountPeriod || (formData.savingsInvEntryMode === 'yearly' ? 'yearly' : freq)
             const isYearlySav = savAmtPeriod === 'yearly'
-            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+            const onlyTermTimeSav = isYearlySav && formData.savingsInvVariesByTerm
+            const ayStart = AY_START, ayEnd = AY_END
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlySav = savAmt * (YM[savAmtPeriod] || 1)
             if (isYearlySav) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly savings' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly savings' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Monthly savings' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Monthly savings' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.savingsInvTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} savings` }) }
@@ -549,91 +641,99 @@ function buildGraphEvents(formData) {
                 } else if (freq === 'yearly') {
                     allDates.push({ date: formData.savingsInvNextDate || '2025-09-01', sublabel: 'Yearly savings' })
                 }
-                if (allDates.length > 0) {
-                    const amounts = distributeEvenly(yearlySav, allDates.length)
-                    for (let i = 0; i < allDates.length; i++) {
-                        events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: 'Savings', sublabel: allDates[i].sublabel, editType: 'savingsInv' })
+                const filteredSavDates = onlyTermTimeSav ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
+                if (filteredSavDates.length > 0) {
+                    const amounts = distributeExcludingRemoved(yearlySav, filteredSavDates, 'savingsInv', removedSet)
+                    for (let i = 0; i < filteredSavDates.length; i++) {
+                        events.push({ date: filteredSavDates[i].date, amount: amounts[i], type: 'expense', label: 'Savings', sublabel: filteredSavDates[i].sublabel, editType: 'savingsInv' })
                     }
                 }
             } else {
+                const savNonTermAmt = formData.savingsInvVariesByTerm ? parseFloat(String(formData.savingsInvNonTermAmount || formData.savingsInvAmount || '0').replace(/,/g, '')) : savAmt
+                const getSavAmt = (ds) => formData.savingsInvVariesByTerm ? (isInTerm(ds, terms) ? savAmt : savNonTermAmt) : savAmt
                 if (freq === 'weekly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { const dateString = toLocalDate(d); const a = getSavAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Monthly savings', editType: 'savingsInv' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { const dateString = toLocalDate(d); const a = getSavAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Savings', sublabel: 'Monthly savings', editType: 'savingsInv' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.savingsInvTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: savAmt, type: 'expense', label: 'Savings', sublabel: `${term.name} savings`, editType: 'savingsInv' }) }
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) { const a = getSavAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Savings', sublabel: `${term.name} savings`, editType: 'savingsInv' }) } }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.savingsInvQuarterlyDates || {}
                     const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
-                    for (let i = 0; i < 4; i++) { events.push({ date: qDates[i] || QD[i], amount: savAmt, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' }) }
+                    for (let i = 0; i < 4; i++) { const dateString = qDates[i] || QD[i]; const a = getSavAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' }) }
                 } else if (freq === 'yearly') {
-                    events.push({ date: formData.savingsInvNextDate || '2025-09-01', amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Yearly savings', editType: 'savingsInv' })
+                    const dateString = formData.savingsInvNextDate || '2025-09-01'; const a = getSavAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Savings', sublabel: 'Yearly savings', editType: 'savingsInv' })
                 }
             }
         }
     }
 
-    // Other expense
-    if (formData.expenseSources?.includes('other_expense')) {
-        const otherExpAmt = parseFloat(String(formData.otherExpenseAmount || '0').replace(/,/g, ''))
-        const freq = formData.otherExpenseFrequency
-        const lbl = formData.otherExpenseLabel || 'Other Expense'
-        const otherExpAmtPeriod = formData.otherExpenseAmountPeriod || (formData.otherExpenseEntryMode === 'yearly' ? 'yearly' : (freq || 'monthly'))
+    // Other expense instances
+    for (const inst of (formData.otherExpenses || [])) {
+        if (!formData.expenseSources?.includes(inst.id)) continue
+        const otherExpAmt = parseFloat(String(inst.amount || '0').replace(/,/g, ''))
+        const freq = inst.frequency || 'monthly'
+        const lbl = inst.label || 'Other Expense'
+        const otherExpAmtPeriod = inst.amountPeriod || freq
         const isYearlyOtherExp = otherExpAmtPeriod === 'yearly'
-        if (otherExpAmt > 0 && freq) {
-            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+        const onlyTermTimeOtherExp = isYearlyOtherExp && inst.variesByTerm
+        if (otherExpAmt > 0) {
+            const ayStart = AY_START, ayEnd = AY_END
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyOtherExp = otherExpAmt * (YM[otherExpAmtPeriod] || 1)
             if (isYearlyOtherExp) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: d.toLocaleDateString('en-GB', { month: 'long' }) }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: d.toLocaleDateString('en-GB', { month: 'long' }) }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
-                    const overrides = formData.otherExpenseTermDates || {}
+                    const overrides = inst.termDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: term.name }) }
                 } else if (freq === 'yearly') {
-                    allDates.push({ date: formData.otherExpenseNextDate || '2025-09-01', sublabel: 'Yearly expense' })
+                    allDates.push({ date: inst.nextDate || '2025-09-01', sublabel: 'Yearly expense' })
                 }
-                if (allDates.length > 0) {
-                    const amounts = distributeEvenly(yearlyOtherExp, allDates.length)
-                    for (let i = 0; i < allDates.length; i++) {
-                        events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: lbl, sublabel: allDates[i].sublabel, editType: 'otherExpense' })
+                const filteredOtherExpDates = onlyTermTimeOtherExp ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
+                if (filteredOtherExpDates.length > 0) {
+                    const amounts = distributeExcludingRemoved(yearlyOtherExp, filteredOtherExpDates, inst.id, removedSet)
+                    for (let i = 0; i < filteredOtherExpDates.length; i++) {
+                        events.push({ date: filteredOtherExpDates[i].date, amount: amounts[i], type: 'expense', label: lbl, sublabel: filteredOtherExpDates[i].sublabel, editType: inst.id })
                     }
                 }
             } else {
+                const otherExpNonTermAmt = inst.variesByTerm ? parseFloat(String(inst.nonTermAmount || inst.amount || '0').replace(/,/g, '')) : otherExpAmt
+                const getOtherExpAmt = (ds) => inst.variesByTerm ? (isInTerm(ds, terms) ? otherExpAmt : otherExpNonTermAmt) : otherExpAmt
                 if (freq === 'weekly') {
-                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Weekly', editType: 'otherExpense' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { const dateString = toLocalDate(d); const a = getOtherExpAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: 'otherExpense' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { const dateString = toLocalDate(d); const a = getOtherExpAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: inst.id }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
-                    const overrides = formData.otherExpenseTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherExpAmt, type: 'expense', label: lbl, sublabel: term.name, editType: 'otherExpense' }) }
+                    const overrides = inst.termDates || {}
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) { const a = getOtherExpAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: lbl, sublabel: term.name, editType: inst.id }) } }
                 } else if (freq === 'yearly') {
-                    events.push({ date: formData.otherExpenseNextDate || '2025-09-01', amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: 'otherExpense' })
+                    const dateString = inst.nextDate || '2025-09-01'; const a = getOtherExpAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: inst.id })
                 }
             }
         }
@@ -643,11 +743,11 @@ function buildGraphEvents(formData) {
     const weeklyAmt = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, ''))
     const weeklyNonTermAmt = formData.weeklySpendVariesByTerm ? parseFloat(String(formData.weeklySpendNonTerm || '0').replace(/,/g, '')) : weeklyAmt
     if (weeklyAmt > 0 || weeklyNonTermAmt > 0) {
-        const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+        const ayStart = AY_START, ayEnd = AY_END
         let d = new Date(ayStart)
         while (d.getDay() !== 1) d = new Date(d.getTime() + 86400000)
         while (d <= ayEnd) {
-            const ds = d.toISOString().split('T')[0]
+            const ds = toLocalDate(d)
             const amt = formData.weeklySpendVariesByTerm ? (isInTerm(ds, terms) ? weeklyAmt : weeklyNonTermAmt) : weeklyAmt
             if (amt > 0) events.push({ date: ds, amount: amt, type: 'expense', label: 'Weekly Spend', sublabel: 'Average weekly spending', editType: 'weeklySpend', noDot: true })
             d = new Date(d.getTime() + 7 * 86400000)
@@ -657,11 +757,22 @@ function buildGraphEvents(formData) {
     // One-off items
     for (const item of (formData.oneOffItems || [])) {
         const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
-        if (amt > 0 && item.date) events.push({ date: item.date, amount: amt, type: (item.direction || 'out') === 'in' ? 'income' : 'expense', label: item.name || 'One-off', sublabel: (item.direction || 'out') === 'in' ? 'One-off income' : 'One-off expense', editType: 'oneOff' })
+        const isIn = (item.direction || 'out') === 'in'
+        if (amt > 0 && item.date) events.push({ date: item.date, amount: amt, type: isIn ? 'income' : 'expense', label: item.name || 'One-off', sublabel: isIn ? 'One-off income' : 'One-off expense', editType: isIn ? 'oneOffIncome' : 'oneOffExpense' })
     }
 
+    // Filter out events before graph start month (unless disabled for yearly totals)
+    const graphStartMonth = getGraphStart().slice(0, 7) + '-01'
+    const filtered = filterByGraphStart
+        ? events.filter(e => e.date >= graphStartMonth)
+        : events
+
     const removed = formData.removedEvents || []
-    return events.map(e => removed.includes(`${e.editType}:${e.date}`) ? { ...e, removed: true } : e)
+    return filtered.map(e => {
+        // One-off items are deleted from source array directly, not via removedEvents
+        if (e.editType === 'oneOffIncome' || e.editType === 'oneOffExpense') return e
+        return removed.includes(`${e.editType}:${e.date}`) ? { ...e, removed: true } : e
+    })
 }
 
 /* ---------- YEARLY TOTAL HELPER ---------- */
@@ -673,8 +784,9 @@ function calcYearlyTotal(events, type) {
 /* ---------- MONEY FORMAT ---------- */
 
 function fmtAmount(val) {
-    if (val >= 1000) return `£${(val / 1000).toFixed(val % 1000 === 0 ? 0 : 1)}k`
-    return `£${Math.round(val).toLocaleString()}`
+    const sym = getCurrencySymbol()
+    if (val >= 1000) { const k = val / 1000; const dec = Math.round(k * 10) % 10; return `${sym}${k.toFixed(dec === 0 ? 0 : 1)}k` }
+    return `${sym}${Math.round(val).toLocaleString()}`
 }
 
 function formatDisplay(raw) {
@@ -741,143 +853,381 @@ function ToggleSwitch({ on, onChange, size = 'normal', activeColor = '#147b75' }
     )
 }
 
-/* ---------- BALANCE EDITOR OVERLAY ---------- */
+/* ---------- BALANCE PILL (inline editor) ---------- */
 
-function BalanceEditor({ value, onSave, onCancel }) {
-    const [raw, setRaw] = useState(() => {
-        const n = parseFloat(String(value || '').replace(/,/g, ''))
-        return n ? String(n) : ''
-    })
-    const [isNegative, setIsNegative] = useState(() => {
-        const n = parseFloat(String(value || '').replace(/,/g, ''))
-        return n < 0
-    })
+function BalancePill({ value, onSave, scrollContainerRef }) {
+    const [expanded, setExpanded] = useState(false)
+    const [raw, setRaw] = useState('')
+    const [isNegative, setIsNegative] = useState(false)
     const inputRef = useRef(null)
+    const containerRef = useRef(null)
+    const sym = getCurrencySymbol()
+    const balanceNum = parseFloat(String(value || '0').replace(/,/g, '')) || 0
+    const hasBalance = value != null && value !== '' && value !== '0' && balanceNum !== 0
 
-    useEffect(() => {
-        setTimeout(() => inputRef.current?.focus(), 100)
-    }, [])
+    const [pillRect, setPillRect] = useState(null)
+    const handleOpen = () => {
+        const n = parseFloat(String(value || '').replace(/,/g, ''))
+        setIsNegative(n < 0)
+        setRaw(isNaN(n) ? '' : String(Math.abs(n)))
+        // Capture pill position before expanding so we can render fixed overlay
+        const rect = containerRef.current?.getBoundingClientRect()
+        if (rect) setPillRect({ top: rect.top, left: rect.left })
+        setExpanded(true)
+    }
+
+    const handleConfirm = () => {
+        const n = parseFloat(String(raw || '0').replace(/,/g, ''))
+        onSave(String(isNegative ? -Math.abs(n) : Math.abs(n)))
+        setExpanded(false)
+    }
 
     const handleChange = (e) => {
         let val = e.target.value.replace(/[^0-9.]/g, '')
         const parts = val.split('.')
         if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('')
-        if (parseFloat(val) > 500000) val = '500000'
-        setRaw(val)
+        if (parts.length === 2 && parts[1].length > 2) {
+            val = parts[0] + '.' + parts[1].slice(0, 2)
+        }
+        const [int, dec] = val.split('.')
+        const formattedInt = int
+            ? new Intl.NumberFormat('en-GB').format(Number(int))
+            : ''
+        setRaw(dec !== undefined ? `${formattedInt}.${dec}` : formattedInt)
     }
 
-    const handleSave = () => {
-        const num = parseFloat(raw || '0')
-        onSave(String(isNegative ? -Math.abs(num) : Math.abs(num)))
+    const handleStep = (dir) => {
+        const n = parseFloat(raw) || 0
+        setRaw(String(Math.max(0, Math.round((n + dir * 10) * 100) / 100)))
     }
+
+    useEffect(() => {
+        if (!expanded) return
+        const onPointerDown = (e) => {
+            if (containerRef.current && !containerRef.current.contains(e.target)) {
+                setExpanded(false)
+            }
+        }
+        document.addEventListener('pointerdown', onPointerDown)
+        return () => document.removeEventListener('pointerdown', onPointerDown)
+    }, [expanded])
+
+    const H = 39 // matches right column: 18 + 3 gap + 18
+    const W = 160
+    const ease = 'cubic-bezier(0.4, 0, 0.2, 1)'
+    const dur = '0.2s'
 
     return (
-        <div style={{
-            position: 'fixed', inset: 0, zIndex: 1000,
-            background: 'rgba(0,0,0,0.4)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 24,
-        }} onClick={onCancel}>
-            <div onClick={e => e.stopPropagation()} style={{
-                background: '#fff', borderRadius: 16, padding: 24,
-                width: '100%', maxWidth: 320,
-            }}>
-                <p style={{
-                    fontSize: 18, fontWeight: 700,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: '#000', margin: '0 0 6px',
-                }}>Update Balance</p>
-                <p style={{
-                    fontSize: 13, fontFamily: 'Nunito, sans-serif',
-                    color: '#5e5e5e', margin: '0 0 16px',
-                }}>Enter your current bank balance</p>
+        <div ref={containerRef} onTouchEnd={e => e.stopPropagation()} style={{ flexShrink: 0, height: H, position: 'relative', width: W }}>
+            {/* Default view pill */}
+            <button
+                onClick={!expanded ? handleOpen : undefined}
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: H,
+                    borderRadius: 14,
+                    border: 'none',
+                    background: 'linear-gradient(135deg,#EC8C17,#F5A64A)',
+                    padding: '0 14px 0 16px',
+                    cursor: 'pointer',
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-                    <button onClick={() => setIsNegative(!isNegative)} style={{
-                        width: 36, height: 36, borderRadius: 6,
-                        border: 'none', cursor: 'pointer',
-                        background: isNegative ? '#e06470' : '#147b75',
-                        color: '#fff', fontSize: 18, fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+
+                    whiteSpace: 'nowrap',
+                    lineHeight: 0,
+
+                    boxShadow: '0 3px 6px rgba(236,140,23,0.3)',
+
+                    opacity: expanded ? 0 : 1,
+                    transform: expanded ? 'scale(0.94)' : 'scale(1)',
+                    transition: `opacity ${dur} ${ease}, transform ${dur} ${ease}`,
+                    pointerEvents: expanded ? 'none' : 'auto',
+                }}
+            >
+                <span
+                    style={{
+                        fontSize: 14,
+                        fontWeight: 800,
+                        color: '#fff',
                         fontFamily: 'Nunito, sans-serif',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>{isNegative ? '−' : '+'}</button>
-                    <div style={{
-                        display: 'flex', alignItems: 'center', flex: 1,
-                        border: '1px solid #e8e8e8', borderRadius: 10,
-                        padding: '0 14px', height: 44, gap: 6,
-                    }}>
-                        <span style={{ fontSize: 18, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>£</span>
-                        <input
-                            ref={inputRef}
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0"
-                            value={formatDisplay(raw.replace('-', ''))}
-                            onChange={handleChange}
-                            style={{
-                                flex: 1, border: 'none', background: 'transparent',
-                                fontSize: 18, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
-                                color: '#000', outline: 'none', padding: 0,
-                            }}
-                        />
-                    </div>
-                </div>
+                        lineHeight: '14px',
+                        display: 'block'
+                    }}
+                >
+                    {balanceNum < 0 ? '\u2212' : ''}
+                    {sym}
+                    {Math.abs(balanceNum).toLocaleString('en-GB', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    })}
+                </span>
 
-                <div style={{ display: 'flex', gap: 10 }}>
-                    <button onClick={onCancel} style={{
-                        flex: 1, height: 40, borderRadius: 10,
-                        border: '1px solid #e0e0e0', background: '#fff',
-                        fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                        color: '#5e5e5e', cursor: 'pointer',
-                    }}>Cancel</button>
-                    <button onClick={handleSave} style={{
-                        flex: 1, height: 40, borderRadius: 10,
-                        border: 'none', background: '#147b75',
-                        fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                        color: '#fff', cursor: 'pointer',
-                    }}>Save</button>
-                </div>
-            </div>
+                <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#fff"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                        flexShrink: 0,
+                        display: 'block',
+                        transform: 'translateZ(0)'
+                    }}
+                >
+                    <path d="M23 4v5h-5" />
+                    <path d="M1 20v-5h5" />
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 9" />
+                    <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 15" />
+                    <line x1="12" y1="9" x2="12" y2="15" strokeWidth="2" />
+                    <line x1="9" y1="12" x2="15" y2="12" strokeWidth="2" />
+                </svg>
+            </button>
+            {/* Edit view — rendered as fixed overlay to avoid iOS scroll glitch */}
+            {expanded && pillRect && (
+                <>
+                    <div onClick={() => setExpanded(false)} style={{ position: 'fixed', inset: 0, zIndex: 1099 }} />
+                    <div style={{
+                        position: 'fixed',
+                        top: pillRect.top,
+                        left: pillRect.left,
+                        width: W, height: H,
+                        overflow: 'hidden', boxSizing: 'border-box',
+                        display: 'flex', alignItems: 'center',
+                        background: '#f0f0f0', borderRadius: 14,
+                        zIndex: 1100,
+                        boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 4px 0 6px' }}>
+                            <button
+                                onClick={() => setIsNegative(n => !n)}
+                                style={{
+                                    width: 20, height: 20, borderRadius: 5,
+                                    cursor: 'pointer', background: '#e2e2e2',
+                                    border: 'none', position: 'relative'
+                                }}
+                            >
+                                {isNegative ? (
+                                    <svg width="10" height="2" viewBox="0 0 10 2" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+                                        <rect width="10" height="2" rx="1" fill="#e06470" />
+                                    </svg>
+                                ) : (
+                                    <svg width="10" height="10" viewBox="0 0 10 10" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
+                                        <rect x="4" width="2" height="10" rx="1" fill="#147B75" />
+                                        <rect y="4" width="10" height="2" rx="1" fill="#147B75" />
+                                    </svg>
+                                )}
+                            </button>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#666', fontFamily: 'Nunito, sans-serif' }}>{sym}</span>
+                            <input
+                                ref={(el) => {
+                                    inputRef.current = el
+                                    if (el) {
+                                        const sc = scrollContainerRef?.current
+                                        const scrollBefore = sc ? sc.scrollTop : 0
+                                        el.focus({ preventScroll: true })
+                                        if (sc) {
+                                            const pin = () => { sc.scrollTop = scrollBefore }
+                                            pin()
+                                            requestAnimationFrame(pin)
+                                            setTimeout(pin, 50)
+                                            setTimeout(pin, 150)
+                                            setTimeout(pin, 300)
+                                        }
+                                    }
+                                }}
+                                type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                step="any"
+                                value={raw}
+                                onChange={handleChange}
+                                onKeyDown={e => e.key === 'Enter' && handleConfirm()}
+                                style={{
+                                    width: 55, border: 'none', background: 'transparent',
+                                    fontSize: 16, fontWeight: 700,
+                                    color: '#1a1a1a', fontFamily: 'Nunito, sans-serif', outline: 'none', padding: 0,
+                                    MozAppearance: 'textfield', WebkitAppearance: 'none',
+                                }}
+                            />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', paddingRight: 2 }}>
+                            <button onClick={() => handleStep(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, width: 24, height: 16, position: 'relative' }}>
+                                <ChevronUp size={12} strokeWidth={2} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', display: 'block' }} />
+                            </button>
+                            <button onClick={() => handleStep(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, width: 24, height: 16, position: 'relative' }}>
+                                <ChevronDown size={12} strokeWidth={2} style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', display: 'block' }} />
+                            </button>
+                        </div>
+                        <button
+                            onClick={handleConfirm}
+                            style={{
+                                background: '#EC8C17', border: 'none', cursor: 'pointer',
+                                borderRadius: 8, margin: '0 5px', width: 26, height: 26,
+                                flexShrink: 0, position: 'relative'
+                            }}
+                        >
+                            <Check size={14} strokeWidth={2.5} color="#fff" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', display: 'block' }} />
+                        </button>
+                    </div>
+                </>
+            )}
         </div>
     )
 }
 
 /* ---------- INCOME/EXPENSE ROW ---------- */
 
-function SourceRow({ source, active, yearlyAmount, expanded, onToggle, onExpandToggle, scrollContainerRef, formData, updateField, children }) {
+function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemoved, isExpense, expanded, onToggle, onExpandToggle, onDelete, scrollContainerRef, formData, updateField, children }) {
     const isInactive = !active
     const rowRef = useRef(null)
-    const contentHeight = expanded ? 600 : 0
-
+    const innerRef = useRef(null)
+    const [measuredHeight, setMeasuredHeight] = useState(0)
+    const [settled, setSettled] = useState(!!expanded)
+    const mountExpandedRef = useRef(!!expanded)
+    const [deleting, setDeleting] = useState(false)
+    const [amountFlash, setAmountFlash] = useState(false)
+    const prevAmountRef = useRef(yearlyAmount)
     useEffect(() => {
-        if (expanded && rowRef.current && scrollContainerRef?.current) {
-            // Wait for previous dropdown collapse animation (300ms) to finish
-            setTimeout(() => {
-                const container = scrollContainerRef.current
-                if (!container || !rowRef.current) return
-                const stickyHeader = container.querySelector('[data-sticky-header]')
-                const currentHeaderHeight = stickyHeader ? stickyHeader.offsetHeight : 0
-                const SHRINK_DIST = 92
-                const currentScroll = container.scrollTop
-                const remainingShrink = Math.max(0, SHRINK_DIST - currentScroll)
-                const collapsedHeaderHeight = currentHeaderHeight - remainingShrink
+        if (prevAmountRef.current !== yearlyAmount && prevAmountRef.current !== 0) {
+            setAmountFlash(true)
+            const t = setTimeout(() => setAmountFlash(false), 400)
+            prevAmountRef.current = yearlyAmount
+            return () => clearTimeout(t)
+        }
+        prevAmountRef.current = yearlyAmount
+    }, [yearlyAmount])
 
-                const rowRect = rowRef.current.getBoundingClientRect()
-                const containerRect = container.getBoundingClientRect()
-                const rowTopInContainer = rowRect.top - containerRect.top + currentScroll
-                const targetScroll = rowTopInContainer - collapsedHeaderHeight
-                container.scrollTo({ top: targetScroll, behavior: 'smooth' })
-            }, 320)
+    // Measure actual content height — useLayoutEffect to avoid flash
+    useLayoutEffect(() => {
+        if (expanded && innerRef.current) {
+            setMeasuredHeight(innerRef.current.scrollHeight)
+        }
+    }, [expanded, children])
+
+    // Mark as settled after expand animation completes, reset on collapse
+    // Skip animation if mounted already expanded (e.g. tab switch restore)
+    useLayoutEffect(() => {
+        if (expanded) {
+            if (mountExpandedRef.current) {
+                mountExpandedRef.current = false
+                setSettled(true)
+                return
+            }
+            const timer = setTimeout(() => setSettled(true), 750)
+            return () => clearTimeout(timer)
+        } else {
+            mountExpandedRef.current = false
+            setSettled(false)
         }
     }, [expanded])
 
+    // Keep measured height updated if content resizes while expanded
+    useEffect(() => {
+        if (!expanded || !innerRef.current) return
+        const ro = new ResizeObserver(() => {
+            if (innerRef.current) setMeasuredHeight(innerRef.current.scrollHeight)
+        })
+        ro.observe(innerRef.current)
+        return () => ro.disconnect()
+    }, [expanded])
+
+    // Smooth scroll restoration when keyboard dismisses (input blur)
+    useEffect(() => {
+        if (!expanded) return
+        const row = rowRef.current
+        if (!row) return
+        const onFocusOut = (e) => {
+            // Only handle when focus leaves to nothing (keyboard dismissing)
+            if (e.relatedTarget) return
+            const sc = scrollContainerRef?.current
+            if (!sc) return
+            const scrollBefore = sc.scrollTop
+            const prevOverflow = sc.style.overflow
+            sc.style.overflow = 'hidden'
+            const start = performance.now()
+            const pin = () => {
+                sc.scrollTop = scrollBefore
+                if (performance.now() - start < 400) {
+                    requestAnimationFrame(pin)
+                } else {
+                    sc.style.overflow = prevOverflow
+                }
+            }
+            requestAnimationFrame(pin)
+        }
+        row.addEventListener('focusout', onFocusOut)
+        return () => row.removeEventListener('focusout', onFocusOut)
+    }, [expanded, scrollContainerRef])
+
+    useEffect(() => {
+        if (!expanded || !rowRef.current || !scrollContainerRef?.current) return
+        const container = scrollContainerRef.current
+        const row = rowRef.current
+        const SHRINK_DIST = 92
+        const GAP = 10
+
+        const scrollRowToTop = () => {
+            const stickyHeader = container.querySelector('[data-sticky-header]')
+            const headerBottom = stickyHeader
+                ? stickyHeader.getBoundingClientRect().bottom
+                : container.getBoundingClientRect().top
+            const rowTop = row.getBoundingClientRect().top
+            const diff = rowTop - headerBottom - GAP
+            if (Math.abs(diff) > 2) {
+                container.scrollTo({
+                    top: container.scrollTop + diff,
+                    behavior: 'smooth',
+                })
+            }
+        }
+
+        // If graph isn't shrunk yet, shrink it first then scroll row
+        if (container.scrollTop < SHRINK_DIST) {
+            const DURATION = 400
+            let rafId = null
+            const startTime = performance.now()
+            const startScrollTop = container.scrollTop
+
+            const animate = () => {
+                const elapsed = performance.now() - startTime
+                const t = Math.min(1, elapsed / DURATION)
+                const eased = 1 - Math.pow(1 - t, 2)
+                container.scrollTop = startScrollTop + (SHRINK_DIST - startScrollTop) * eased
+                if (t < 1) {
+                    rafId = requestAnimationFrame(animate)
+                } else {
+                    setTimeout(scrollRowToTop, 400)
+                }
+            }
+            rafId = requestAnimationFrame(animate)
+            return () => { if (rafId) cancelAnimationFrame(rafId) }
+        }
+
+        // Already scrolled past shrink — scroll row to top
+        // Delay to wait for any collapsing row's animation (0.4s) to finish
+        const timer = setTimeout(scrollRowToTop, 450)
+        return () => clearTimeout(timer)
+    }, [expanded])
+
     return (
-        <div ref={rowRef} style={{
-            border: '1px solid #f3f3f3',
+        <div ref={rowRef} data-source-row data-source-id={source.id} style={{
+            border: deleting ? 'none' : '1px solid #f3f3f3',
             borderRadius: 10,
             background: isInactive ? '#f9f9f9' : '#fff',
             overflow: 'hidden',
-            transition: 'all 0.2s ease',
+            maxHeight: deleting ? 0 : 1000,
+            opacity: deleting ? 0 : 1,
+            marginBottom: deleting ? -10 : undefined,
+            transition: deleting ? 'max-height 0.35s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.2s ease, margin-bottom 0.35s ease' : undefined,
         }}>
             {/* Tappable row */}
             <div
@@ -909,11 +1259,28 @@ function SourceRow({ source, active, yearlyAmount, expanded, onToggle, onExpandT
                     <p style={{
                         fontSize: 11, fontWeight: 600,
                         fontFamily: 'Nunito, sans-serif',
-                        color: isInactive ? '#bbb' : 'rgba(20,123,117,0.7)',
+                        color: isInactive ? '#bbb' : isExpense ? 'rgba(224,100,112,0.8)' : 'rgba(20,123,117,0.7)',
                         margin: 0,
                     }}>
-                        {yearlyAmount > 0 ? `£${yearlyAmount.toLocaleString()}/yr` : '—'}
+                        {active ? `${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr` : '—'}
                     </p>
+                    {removedCount > 0 && expanded && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 4,
+                                background: 'none', border: 'none', padding: 0,
+                                cursor: 'pointer', marginTop: 2,
+                            }}
+                        >
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#e07b3c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.12-9.36L1 10" />
+                            </svg>
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e07b3c' }}>
+                                {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted — tap to restore
+                            </span>
+                        </button>
+                    )}
                 </div>
 
                 {/* Toggle + Chevron */}
@@ -927,7 +1294,7 @@ function SourceRow({ source, active, yearlyAmount, expanded, onToggle, onExpandT
                     style={{
                         flexShrink: 0,
                         transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s ease',
+                        transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)',
                     }}
                 >
                     <path d="M6 9l6 6 6-6" />
@@ -935,15 +1302,34 @@ function SourceRow({ source, active, yearlyAmount, expanded, onToggle, onExpandT
             </div>
 
             {/* Expanded section — animated height */}
-            <div style={{
-                maxHeight: contentHeight,
+            <div data-expand-content style={{
+                maxHeight: expanded ? (measuredHeight + 50) || 800 : 0,
+                opacity: settled ? 1 : expanded ? 1 : 0,
                 overflow: 'hidden',
-                transition: 'max-height 0.3s ease',
+                transition: settled ? 'none' : `max-height ${expanded ? '0.7s' : '0.4s'} cubic-bezier(0.22, 0.61, 0.36, 1), opacity ${expanded ? '0.3s' : '0.2s'} ease`,
             }}>
-                <div>
+                <div ref={innerRef}>
                     {children && (
                         <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 8, background: '#fafafa' }}>
                             {children}
+                        </div>
+                    )}
+                    {onDelete && (
+                        <div style={{ padding: '0 10px 4px', textAlign: 'center', background: '#fafafa' }}>
+                            <span
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    setDeleting(true)
+                                    setTimeout(() => onDelete(), 350)
+                                }}
+                                style={{
+                                    fontSize: 10, fontWeight: 600,
+                                    fontFamily: 'Nunito, sans-serif',
+                                    color: '#e06470', cursor: 'pointer',
+                                }}
+                            >
+                                Remove {source.label.toLowerCase()}
+                            </span>
                         </div>
                     )}
                 </div>
@@ -974,6 +1360,61 @@ function CompactMaintenanceLoan({ formData, updateField }) {
     )
 }
 
+/* ---------- MIGRATE LEGACY OTHER FIELDS TO ARRAYS ---------- */
+
+function migrateOtherFields(data) {
+    const d = { ...data }
+    // Migrate legacy flat other_income fields to otherIncomes array
+    if (!d.otherIncomes || d.otherIncomes.length === 0) {
+        if (d.otherIncomeAmount || (d.incomeSources || []).includes('other_income')) {
+            const inst = {
+                id: 'oi_legacy',
+                amount: d.otherIncomeAmount || '',
+                frequency: d.otherIncomeFrequency || 'monthly',
+                amountPeriod: d.otherIncomeAmountPeriod || d.otherIncomeFrequency || 'monthly',
+                label: d.otherIncomeLabel || '',
+                nextDate: d.otherIncomeNextDate || null,
+                termDates: d.otherIncomeTermDates || {},
+                quarterlyDates: d.otherIncomeQuarterlyDates || {},
+                variesByTerm: d.otherIncomeVariesByTerm || false,
+                nonTermAmount: d.otherIncomeNonTermAmount || '',
+            }
+            d.otherIncomes = [inst]
+            // Replace 'other_income' with instance id in sources
+            if (d.incomeSources?.includes('other_income')) {
+                d.incomeSources = d.incomeSources.map(s => s === 'other_income' ? inst.id : s)
+            }
+        } else {
+            d.otherIncomes = []
+        }
+    }
+    // Migrate legacy flat other_expense fields to otherExpenses array
+    if (!d.otherExpenses || d.otherExpenses.length === 0) {
+        if (d.otherExpenseAmount || (d.expenseSources || []).includes('other_expense')) {
+            const inst = {
+                id: 'oe_legacy',
+                amount: d.otherExpenseAmount || '',
+                frequency: d.otherExpenseFrequency || 'monthly',
+                amountPeriod: d.otherExpenseAmountPeriod || d.otherExpenseFrequency || 'monthly',
+                label: d.otherExpenseLabel || '',
+                nextDate: d.otherExpenseNextDate || null,
+                termDates: d.otherExpenseTermDates || {},
+                quarterlyDates: d.otherExpenseQuarterlyDates || {},
+                variesByTerm: d.otherExpenseVariesByTerm || false,
+                nonTermAmount: d.otherExpenseNonTermAmount || '',
+            }
+            d.otherExpenses = [inst]
+            // Replace 'other_expense' with instance id in sources
+            if (d.expenseSources?.includes('other_expense')) {
+                d.expenseSources = d.expenseSources.map(s => s === 'other_expense' ? inst.id : s)
+            }
+        } else {
+            d.otherExpenses = []
+        }
+    }
+    return d
+}
+
 /* ---------- MAIN DASHBOARD ---------- */
 
 export default function Dashboard() {
@@ -982,55 +1423,156 @@ export default function Dashboard() {
             const saved = localStorage.getItem(STORAGE_KEY)
             if (saved) {
                 const parsed = JSON.parse(saved)
-                return { ...INITIAL_FORM_DATA, ...parsed.formData }
+                return migrateOtherFields({ ...INITIAL_FORM_DATA, ...parsed.formData })
             }
         } catch { /* ignore */ }
-        return { ...INITIAL_FORM_DATA }
+        return migrateOtherFields({ ...INITIAL_FORM_DATA })
     })
 
-    const [showBalanceEditor, setShowBalanceEditor] = useState(false)
-    const [showBalanceHistory, setShowBalanceHistory] = useState(false)
-    const [showIncome, setShowIncome] = useState(false)
-    const [showExpenses, setShowExpenses] = useState(true)
+    const [graphKey, setGraphKey] = useState(0)
+    const [showBalanceHistory, setShowBalanceHistory] = useState(() => localStorage.getItem('budgeup_show_balance_history') !== 'false')
+    const [showIncome, setShowIncome] = useState(() => localStorage.getItem('budgeup_show_income') === 'true')
+    const [showExpenses, setShowExpenses] = useState(() => localStorage.getItem('budgeup_show_expenses') === 'true')
+    const [showOverdraft, setShowOverdraft] = useState(() => localStorage.getItem('budgeup_show_overdraft') !== 'false')
     const [expandedSource, setExpandedSource] = useState(null)
-    const [activeTab, setActiveTab] = useState('fixed')
+    const [balanceToast, setBalanceToast] = useState(null)
+    const balanceToastTimer = useRef(null)
+    const pendingExpandRef = useRef(null)
+
+    // Switch expanded source immediately — scroll animation handles compensation
+    const handleExpandToggle = useCallback((sourceId) => {
+        if (pendingExpandRef.current) {
+            clearTimeout(pendingExpandRef.current)
+            pendingExpandRef.current = null
+        }
+
+        if (expandedSource === sourceId) {
+            setExpandedSource(null)
+        } else {
+            setExpandedSource(sourceId)
+        }
+    }, [expandedSource])
+    const [activeTab, setActiveTab] = useState('goals')
+    const [goalsShowMore, setGoalsShowMore] = useState(false)
+    const goalsMoreRef = useRef(null)
+    const goalsTransCardRef = useRef(null)
+    const tabScrollRef = useRef({})
+    const tabExpandedRef = useRef({})
+    const handleTabChange = (tab) => {
+        const el = scrollRef.current
+        if (!el) return
+        const wasScrolledPast = el.scrollTop >= SHRINK_DIST
+
+        // Tapping the already-active tab: toggle expanded/shrunk and close dropdowns
+        if (tab === activeTab) {
+            if (wasScrolledPast) el.style.overflowY = 'auto'
+            setExpandedSource(null)
+            tabExpandedRef.current[tab] = null
+            const target = wasScrolledPast ? 0 : SHRINK_DIST
+            animateScroll(el, target)
+            return
+        }
+
+        // Save current tab's scroll position and expanded dropdown
+        tabScrollRef.current[activeTab] = el.scrollTop
+        tabExpandedRef.current[activeTab] = expandedSource
+        el.style.overflowY = 'auto'
+        setActiveTab(tab)
+        setExpandedSource(tabExpandedRef.current[tab] || null)
+        setGoalsShowMore(false)
+
+        const savedScroll = tabScrollRef.current[tab]
+        if (savedScroll != null) {
+            el.scrollTop = savedScroll
+            applyScrollStyles(savedScroll)
+        } else if (wasScrolledPast) {
+            el.scrollTop = SHRINK_DIST
+            applyScrollStyles(SHRINK_DIST)
+        } else {
+            el.scrollTop = 0
+            applyScrollStyles(0)
+        }
+    }
     const [editingEvent, setEditingEvent] = useState(null)
     const [editAmount, setEditAmount] = useState('')
+    const [editingOverdraft, setEditingOverdraft] = useState(null)
+    const [editOverdraftAmount, setEditOverdraftAmount] = useState('')
+    const [balanceHistory, setBalanceHistory] = useState([])
     const [dbLoaded, setDbLoaded] = useState(false)
     const saveTimerRef = useRef(null)
     const userIdRef = useRef(null)
 
+    // Refresh graph start date on mount (picks up changes from Settings)
+    useEffect(() => {
+        refreshAY()
+    }, [])
+
+    // Re-sync formData from localStorage when navigating back (e.g. after editing in Settings)
+    useEffect(() => {
+        const sync = () => {
+            if (document.hidden) return
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY)
+                if (!saved) return
+                const parsed = JSON.parse(saved)
+                if (parsed.formData) {
+                    setFormData(prev => {
+                        const merged = migrateOtherFields({ ...prev, ...parsed.formData })
+                        if (JSON.stringify(prev) === JSON.stringify(merged)) return prev
+                        return merged
+                    })
+                }
+            } catch { /* ignore */ }
+        }
+        document.addEventListener('visibilitychange', sync)
+        window.addEventListener('focus', sync)
+        return () => {
+            document.removeEventListener('visibilitychange', sync)
+            window.removeEventListener('focus', sync)
+        }
+    }, [])
+
     // Load data from Supabase on mount
     useEffect(() => {
         let cancelled = false
-        ;(async () => {
-            try {
-                const { data: { user } } = await supabase.auth.getUser()
-                if (!user || cancelled) return
-                userIdRef.current = user.id
-                const result = await fetchUserData(user.id)
-                if (cancelled) return
-                if (result.formData) {
-                    setFormData(prev => ({ ...prev, ...result.formData }))
-                    // Also update localStorage
-                    try {
-                        const saved = localStorage.getItem(STORAGE_KEY)
-                        const parsed = saved ? JSON.parse(saved) : {}
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, formData: { ...INITIAL_FORM_DATA, ...result.formData } }))
-                    } catch { /* ignore */ }
+            ; (async () => {
+                try {
+                    const { data: { user } } = await supabase.auth.getUser()
+                    if (!user || cancelled) return
+                    userIdRef.current = user.id
+                    const result = await fetchUserData(user.id)
+                    if (cancelled) return
+                    if (result.formData) {
+                        // Merge Supabase data but prefer localStorage (which is always more up-to-date)
+                        let localFormData = null
+                        try {
+                            const saved = localStorage.getItem(STORAGE_KEY)
+                            if (saved) localFormData = JSON.parse(saved).formData
+                        } catch { /* ignore */ }
+                        const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData, ...localFormData })
+                        setFormData(merged)
+                        try {
+                            const saved = localStorage.getItem(STORAGE_KEY)
+                            const parsed = saved ? JSON.parse(saved) : {}
+                            localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, formData: merged }))
+                        } catch { /* ignore */ }
+                    }
+                    if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
+                    setDbLoaded(true)
+                } catch (err) {
+                    console.error('Failed to load from Supabase:', err)
+                    setDbLoaded(true) // still mark loaded so localStorage data is used
                 }
-                setDbLoaded(true)
-            } catch (err) {
-                console.error('Failed to load from Supabase:', err)
-                setDbLoaded(true) // still mark loaded so localStorage data is used
-            }
-        })()
+            })()
         return () => { cancelled = true }
     }, [])
 
     // Debounce save to Supabase when formData changes (after initial DB load)
     useEffect(() => {
         if (!dbLoaded || !userIdRef.current) return
+        // Don't save if one-off items have amount but no name
+        const invalidOneOff = (formData.oneOffItems || []).some(i => i.amount && !i.name?.trim())
+        if (invalidOneOff) return
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
         saveTimerRef.current = setTimeout(async () => {
             try {
@@ -1060,9 +1602,10 @@ export default function Dashboard() {
     const scrollRef = useRef(null)
     const graphContainerRef = useRef(null)
     const contentWrapRef = useRef(null)
+    const stickyHeaderRef = useRef(null)
     const rafRef = useRef(null)
-    const MAX_H = 200
-    const MIN_H = 108
+    const MAX_H = 206
+    const MIN_H = 122
     const SHRINK_DIST = MAX_H - MIN_H
 
     // Keep graphHeight in state for TermGraph prop (initial only matters)
@@ -1070,52 +1613,211 @@ export default function Dashboard() {
     const cardDetailsRef = useRef(null)
     const footerRef = useRef(null)
 
+    // Cache DOM node references to avoid querySelectorAll on every scroll frame
+    const cachedNodesRef = useRef(null)
+    const getCachedNodes = useCallback(() => {
+        if (cachedNodesRef.current) return cachedNodesRef.current
+        if (!cardDetailsRef.current) return null
+        cachedNodesRef.current = {
+            details: cardDetailsRef.current.querySelectorAll('[data-card-detail]'),
+            cards: cardDetailsRef.current.querySelectorAll('[data-card]'),
+            headers: cardDetailsRef.current.querySelectorAll('[data-card-header]'),
+        }
+        return cachedNodesRef.current
+    }, [])
+
+    // Invalidate cached nodes when tab changes (cards re-render)
+    useEffect(() => { cachedNodesRef.current = null }, [activeTab])
+
+    const snapTimerRef = useRef(null)
+    const isSnappingRef = useRef(false)
+    const animFrameRef = useRef(null)
+
+    const ease = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+    const easeOut = (t) => 1 - Math.pow(1 - t, 3)
+
+    const applyScrollStyles = useCallback((s) => {
+        const t = Math.min(1, s / SHRINK_DIST)
+        const ct = ease(t)
+        const h = MAX_H - ct * (MAX_H - MIN_H)
+        const offset = Math.min(s, SHRINK_DIST)
+
+        if (graphContainerRef.current) {
+            graphContainerRef.current.style.height = `${h}px`
+        }
+        // Use translate3d for GPU compositing — keeps content perfectly stable
+        if (contentWrapRef.current) {
+            contentWrapRef.current.style.transform = `translate3d(0,${offset}px,0)`
+        }
+        const nodes = getCachedNodes()
+        if (nodes) {
+            const detailScale = 1 - ct
+            const detailOpacity = `${detailScale}`
+            nodes.details.forEach(child => {
+                child.style.transform = `scaleY(${detailScale})`
+                child.style.opacity = detailOpacity
+                child.style.overflow = 'hidden'
+                child.style.transformOrigin = 'top'
+                child.style.maxHeight = `${detailScale * 60}px`
+            })
+            const pad = `${10 - ct * 4}px ${12 - ct * 2}px`
+            const borderR = `${10 - ct * 2}px`
+            nodes.cards.forEach(card => {
+                card.style.padding = pad
+                card.style.borderRadius = borderR
+            })
+            const mb = `${detailScale * 6}px`
+            nodes.headers.forEach(header => {
+                header.style.marginBottom = mb
+            })
+        }
+        if (footerRef.current) {
+            const ft = ease(Math.min(1, t / 0.35))
+            const footerScale = 1 - ft
+            footerRef.current.style.transform = `scaleY(${footerScale})`
+            footerRef.current.style.transformOrigin = 'top'
+            footerRef.current.style.maxHeight = `${footerScale * 60}px`
+            footerRef.current.style.opacity = `${footerScale}`
+            footerRef.current.style.overflow = 'hidden'
+        }
+        if (stickyHeaderRef.current) {
+            const shadowOpacity = Math.min(0.08, t * 0.08)
+            stickyHeaderRef.current.style.boxShadow = t > 0.05 ? `0 2px 8px rgba(0,0,0,${shadowOpacity})` : 'none'
+            stickyHeaderRef.current.style.paddingBottom = `${10 - ct * 6}px`
+        }
+        if (cardDetailsRef.current) {
+            cardDetailsRef.current.style.gap = `${10 - ct * 4}px`
+            cardDetailsRef.current.style.paddingTop = `${25 - ct * 15}px`
+        }
+    }, [getCachedNodes])
+
+    const animateScroll = useCallback((el, target, durationOverride) => {
+        if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
+        const start = el.scrollTop
+        const diff = target - start
+        const dist = Math.abs(diff)
+        if (dist < 1) { isAnimatingRef.current = false; return }
+        // Duration proportional to distance: 120-220ms
+        const duration = durationOverride ?? Math.max(120, Math.min(220, dist * 2.5))
+        isAnimatingRef.current = true
+        isSnappingRef.current = true
+        const startTime = performance.now()
+        const step = (now) => {
+            const t = Math.min(1, (now - startTime) / duration)
+            if (t >= 1) {
+                // Final frame: use exact integer target to avoid sub-pixel snap
+                el.scrollTop = target
+                applyScrollStyles(target)
+                animFrameRef.current = null
+                isAnimatingRef.current = false
+                isSnappingRef.current = false
+                return
+            }
+            const val = start + diff * easeOut(t)
+            el.scrollTop = val
+            applyScrollStyles(val)
+            animFrameRef.current = requestAnimationFrame(step)
+        }
+        animFrameRef.current = requestAnimationFrame(step)
+    }, [applyScrollStyles])
+
+    const isAnimatingRef = useRef(false)
+
+    const scrollRafRef = useRef(null)
     const handleScroll = useCallback(() => {
-        if (rafRef.current) return
-        rafRef.current = requestAnimationFrame(() => {
-            rafRef.current = null
+        if (isAnimatingRef.current) return
+        if (scrollRafRef.current) return // already queued for this frame
+        scrollRafRef.current = requestAnimationFrame(() => {
+            scrollRafRef.current = null
             const el = scrollRef.current
             if (!el) return
-            const s = el.scrollTop
-            // Single unified progress 0→1 for both graph + cards
-            const t = Math.min(1, s / SHRINK_DIST)
-            const h = MAX_H - t * (MAX_H - MIN_H)
-            const offset = Math.min(s, SHRINK_DIST)
-
-            // Direct DOM updates — no re-render
-            if (graphContainerRef.current) {
-                graphContainerRef.current.style.height = `${h}px`
-            }
-            if (contentWrapRef.current) {
-                contentWrapRef.current.style.transform = `translateY(${offset}px)`
-            }
-            // Cards collapse in sync — details fade from t=0.3 to t=1
-            if (cardDetailsRef.current) {
-                const ct = Math.max(0, Math.min(1, (t - 0.3) / 0.7))
-                const children = cardDetailsRef.current.querySelectorAll('[data-card-detail]')
-                children.forEach(child => {
-                    child.style.maxHeight = `${(1 - ct) * 60}px`
-                    child.style.opacity = `${1 - ct}`
-                })
-                const cards = cardDetailsRef.current.querySelectorAll('[data-card]')
-                cards.forEach(card => {
-                    const py = 10 - ct * 4
-                    card.style.padding = `${py}px 12px`
-                })
-                const headers = cardDetailsRef.current.querySelectorAll('[data-card-header]')
-                headers.forEach(header => {
-                    header.style.marginBottom = `${(1 - ct) * 6}px`
-                })
-            }
-            // Hide balance footer early in scroll so it doesn't get clipped
-            if (footerRef.current) {
-                const ft = Math.min(1, t / 0.35) // fully hidden by 35% of shrink
-                footerRef.current.style.maxHeight = `${(1 - ft) * 60}px`
-                footerRef.current.style.opacity = `${1 - ft}`
-                footerRef.current.style.overflow = 'hidden'
-            }
+            applyScrollStyles(el.scrollTop)
         })
+    }, [applyScrollStyles])
+
+    // Snap graph to expanded or collapsed when scroll stops in the shrink zone
+    useEffect(() => {
+        const el = scrollRef.current
+        if (!el) return
+        let isTouching = false
+        const snap = () => {
+            if (isTouching || isSnappingRef.current || isAnimatingRef.current) return
+            const s = el.scrollTop
+            if (s > 3 && s < SHRINK_DIST - 3) {
+                // Expand if dragged past 40% of shrink distance
+                const snapTo = s < SHRINK_DIST * 0.4 ? 0 : SHRINK_DIST
+                animateScroll(el, snapTo)
+            }
+        }
+        let wasAtShrink = false
+        const onTouchStart = () => {
+            isTouching = true
+            wasAtShrink = el.scrollTop >= SHRINK_DIST - 3
+            // Cancel any pending snap
+            if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null }
+            isAnimatingRef.current = false
+            isSnappingRef.current = false
+        }
+        let lastScrollTop = 0
+        let lastScrollTime = 0
+        const onTouchMove = () => {
+            lastScrollTop = el.scrollTop
+            lastScrollTime = performance.now()
+        }
+        const onTouchEnd = () => {
+            isTouching = false
+            const s = el.scrollTop
+            // If clearly stopped (no momentum), snap immediately
+            if (s > 3 && s < SHRINK_DIST - 3) {
+                // Check if there's likely momentum — if last scroll was very recent, wait for it
+                const timeSinceScroll = performance.now() - lastScrollTime
+                if (timeSinceScroll > 50) {
+                    // No momentum, snap now
+                    const snapTo = s < SHRINK_DIST * 0.4 ? 0 : SHRINK_DIST
+                    animateScroll(el, snapTo)
+                    return
+                }
+            }
+            // Wait for momentum to settle, then snap
+            if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
+            snapTimerRef.current = setTimeout(snap, 120)
+        }
+        const onScroll = () => {
+            if (isTouching || isSnappingRef.current || isAnimatingRef.current) return
+            // If momentum carries from shrunk into shrink zone, snap back
+            if (wasAtShrink && el.scrollTop < SHRINK_DIST && el.scrollTop > 10) {
+                animateScroll(el, SHRINK_DIST)
+                return
+            }
+            if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
+            snapTimerRef.current = setTimeout(snap, 100)
+        }
+        el.addEventListener('touchstart', onTouchStart, { passive: true })
+        el.addEventListener('touchmove', onTouchMove, { passive: true })
+        el.addEventListener('touchend', onTouchEnd, { passive: true })
+        el.addEventListener('scroll', onScroll, { passive: true })
+        return () => {
+            el.removeEventListener('touchstart', onTouchStart)
+            el.removeEventListener('touchmove', onTouchMove)
+            el.removeEventListener('touchend', onTouchEnd)
+            el.removeEventListener('scroll', onScroll)
+            if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
+        }
     }, [])
+
+    // Tap Home while already on Home → scroll to top to expand graph
+    useEffect(() => {
+        const handler = () => {
+            const el = scrollRef.current
+            if (!el) return
+            if (el.scrollTop > 0) {
+                animateScroll(el, 0, 300)
+            }
+        }
+        window.addEventListener('home-tap-again', handler)
+        return () => window.removeEventListener('home-tap-again', handler)
+    }, [animateScroll])
+
     const freqView = 'Yearly'
 
     // Persist formData changes back to localStorage
@@ -1134,10 +1836,40 @@ export default function Dashboard() {
     const terms = formData.termDates?.terms || []
     const balanceNum = parseFloat(String(formData.balance || '0').replace(/,/g, ''))
     const overdraftNum = formData.overdraft ? parseFloat(String(formData.overdraft || '0').replace(/,/g, '')) : undefined
+
+    // Projection balance: use the earliest balance_history entry (set during onboarding)
+    // so that subsequent balance edits don't shift the green projection line
+    const projectionBalance = (() => {
+        if (balanceHistory.length > 0) {
+            // balanceHistory is sorted desc by recorded_date, so last entry is the earliest
+            const earliest = balanceHistory[balanceHistory.length - 1]
+            return earliest.balance
+        }
+        return balanceNum
+    })()
+
+    // Build dynamic source lists from other instances
+    const otherIncomes = formData.otherIncomes || []
+    const otherExpenses = formData.otherExpenses || []
+    const INCOME_SOURCES = [
+        ...FIXED_INCOME_SOURCES,
+        ...otherIncomes.map(inst => ({
+            id: inst.id, label: inst.label || 'Other Regular Income', icon: iconOtherIncome,
+            panelId: 'otherIncome', isOtherIncome: true,
+        })),
+    ]
+    const EXPENSE_SOURCES = [
+        ...FIXED_EXPENSE_SOURCES,
+        ...otherExpenses.map(inst => ({
+            id: inst.id, label: inst.label || 'Other Regular Expense', icon: iconOtherExpense,
+            panelId: 'otherExpense', isOtherExpense: true,
+        })),
+    ]
+
     const events = buildGraphEvents(formData)
     // Build all events (ignoring source toggles) for computing yearly amounts when sources are off
-    const allSourceIds = [...INCOME_SOURCES.map(s => s.id), ...EXPENSE_SOURCES.map(s => s.id), 'other_expense']
-    const allEvents = buildGraphEvents({ ...formData, incomeSources: allSourceIds, expenseSources: allSourceIds })
+    const allSourceIds = [...INCOME_SOURCES.map(s => s.id), ...EXPENSE_SOURCES.map(s => s.id)]
+    const allEvents = buildGraphEvents({ ...formData, incomeSources: allSourceIds, expenseSources: allSourceIds }, { filterByGraphStart: false })
 
     // Calculate totals
     const yearlyIncome = calcYearlyTotal(events, 'income')
@@ -1154,9 +1886,185 @@ export default function Dashboard() {
     const displayNet = Math.round(fixedNet * freqMultiplier[freqView])
     const freqSuffix = { Weekly: '/wk', Monthly: '/mo', Termly: '/term', Yearly: '/yr' }
 
+    // On-track: compare actual balance vs green line at today
+    // Green line is anchored at projectionBalance at today (past events are walked backwards from it)
+    // So green line value at today = projectionBalance, actual = balanceNum
+    const projBal = parseFloat(String(projectionBalance || '0').replace(/,/g, '')) || 0
+    const goalsData = (() => {
+        const diff = balanceNum - projBal
+        return { diff: Math.round(diff), isAhead: diff > 0, isOnTrack: Math.abs(diff) < 10 }
+    })()
+
     // Calculate per-source yearly amounts
     const getSourceYearly = (editTypes) => {
         return allEvents.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot).reduce((s, e) => s + e.amount, 0)
+    }
+
+    const getSourceRemovedCount = (editTypes) => {
+        return allEvents.filter(e => editTypes.includes(e.editType) && e.removed && !e.noDot).length
+    }
+
+    const restoreSourceEvents = (editTypes) => {
+        const removed = formData.removedEvents || []
+        const keep = removed.filter(key => !editTypes.some(et => key.startsWith(et + ':')))
+        updateField('removedEvents', keep)
+    }
+
+    // Check if a source has any data configured
+    const sourceHasData = (sourceId) => {
+        // Check other income/expense instances
+        const otherInst = otherIncomes.find(i => i.id === sourceId) || otherExpenses.find(i => i.id === sourceId)
+        if (otherInst) {
+            return parseFloat(String(otherInst.amount || '0').replace(/,/g, '')) > 0
+        }
+        const amountFields = {
+            maintenance_loan: 'loanAmount',
+            bursary: 'bursaryAmount',
+            family_friends: 'familyAmount',
+            work: 'workAmount',
+            rent: 'rentAmount',
+            bills: 'billsAmount',
+            uni_fees: 'uniFeesAmount',
+            savings_investments: 'savingsInvAmount',
+        }
+        const field = amountFields[sourceId]
+        if (!field) return false
+        const val = parseFloat(String(formData[field] || '0').replace(/,/g, ''))
+        return val > 0
+    }
+
+    // Determine which sources should be visible (have data OR are in active list)
+    const isSourceVisible = (sourceId, sourcesList) => {
+        return (sourcesList || []).includes(sourceId)
+    }
+
+    // Helper to update a field within an other income/expense instance
+    const updateOtherInstance = (instId, field, value) => {
+        setFormData(prev => {
+            const isIncome = (prev.otherIncomes || []).some(i => i.id === instId)
+            const key = isIncome ? 'otherIncomes' : 'otherExpenses'
+            return {
+                ...prev,
+                [key]: (prev[key] || []).map(i => i.id === instId ? { ...i, [field]: value } : i),
+            }
+        })
+    }
+
+    const deleteSource = (sourceId, isExpense) => {
+        // Check if this is an other income/expense instance
+        const isOtherIncome = otherIncomes.some(i => i.id === sourceId)
+        const isOtherExpense = otherExpenses.some(i => i.id === sourceId)
+
+        // Remove from active list
+        if (isExpense) {
+            const sources = formData.expenseSources || []
+            updateField('expenseSources', sources.filter(s => s !== sourceId))
+        } else {
+            const sources = formData.incomeSources || []
+            updateField('incomeSources', sources.filter(s => s !== sourceId))
+        }
+
+        // For other instances, remove from the array
+        if (isOtherIncome) {
+            setFormData(prev => ({ ...prev, otherIncomes: (prev.otherIncomes || []).filter(i => i.id !== sourceId) }))
+        } else if (isOtherExpense) {
+            setFormData(prev => ({ ...prev, otherExpenses: (prev.otherExpenses || []).filter(i => i.id !== sourceId) }))
+        } else {
+            // Clear form data for fixed sources
+            const clearFields = {
+                maintenance_loan: { loanAmount: '', loanMonths: [...DEFAULT_LOAN_MONTHS], loanKnowDates: false, loanDates: {}, instalmentAmounts: {} },
+                bursary: { bursaryAmount: '', bursaryMonths: undefined, bursaryDates: [...INITIAL_FORM_DATA.bursaryDates], bursaryInstalmentAmounts: {} },
+                family_friends: { familyAmount: '', familyFrequency: 'monthly', familyNextDate: '', familyTermDates: {}, familyQuarterlyDates: {}, familyVariesByTerm: false, familyNonTermAmount: '', familyAmountPeriod: 'monthly' },
+                work: { workAmount: '', workFrequency: 'monthly', workNextDate: '', workTermDates: {}, workQuarterlyDates: {}, workVariesByTerm: false, workNonTermAmount: '', workAmountPeriod: 'monthly', workEntryMode: 'yearly' },
+                rent: { rentAmount: '', rentFrequency: 'monthly', rentNextDate: '', rentStartDate: '', rentEndDate: '', rentTermDates: {}, rentQuarterlyDates: {}, rentAmountPeriod: 'monthly', rentVariesByTerm: false, rentNonTermAmount: '', rentEntryMode: 'per_payment' },
+                bills: { billsAmount: '', billsFrequency: 'monthly', billsNextDate: '', billsStartDate: '', billsEndDate: '', billsTermDates: {}, billsQuarterlyDates: {}, billsAmountPeriod: 'monthly', billsVariesByTerm: false, billsNonTermAmount: '', billsEntryMode: 'yearly' },
+                uni_fees: { uniFeesAmount: '9250', uniFeesFrequency: 'yearly', uniFeesNextDate: '', uniFeesTermDates: {}, uniFeesQuarterlyDates: {}, uniFeesAmountPeriod: 'yearly', uniFeesVariesByTerm: false, uniFeesNonTermAmount: '', uniFeesEntryMode: 'yearly' },
+                savings_investments: { savingsInvAmount: '', savingsInvFrequency: 'monthly', savingsInvNextDate: '', savingsInvTermDates: {}, savingsInvQuarterlyDates: {}, savingsInvAmountPeriod: 'monthly', savingsInvVariesByTerm: false, savingsInvNonTermAmount: '', savingsInvEntryMode: 'per_payment' },
+            }
+            const fields = clearFields[sourceId]
+            if (fields) {
+                for (const [key, val] of Object.entries(fields)) {
+                    updateField(key, val)
+                }
+            }
+        }
+        if (expandedSource === sourceId) {
+            // Find the previous source row before DOM changes
+            const container = scrollRef.current
+            let prevSourceId = null
+            if (container) {
+                const rowsBefore = Array.from(container.querySelectorAll('[data-source-row]'))
+                const deletedIdx = rowsBefore.findIndex(r => r.dataset.sourceId === sourceId)
+                prevSourceId = deletedIdx > 0 ? rowsBefore[deletedIdx - 1].dataset.sourceId : null
+            }
+            setExpandedSource(null)
+            // Wait for collapse/layout to settle, then smoothly scroll to previous row
+            if (prevSourceId && container) {
+                setTimeout(() => {
+                    const prevRow = container.querySelector(`[data-source-id="${prevSourceId}"]`)
+                    if (prevRow) {
+                        const stickyHeader = container.querySelector('[data-sticky-header]')
+                        const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
+                        const containerTop = container.getBoundingClientRect().top + headerH
+                        const rowTop = prevRow.getBoundingClientRect().top
+                        container.scrollTo({
+                            top: container.scrollTop + (rowTop - containerTop) - 8,
+                            behavior: 'smooth',
+                        })
+                    }
+                }, 350)
+            }
+        }
+    }
+
+    const [addingSourceType, setAddingSourceType] = useState(null) // 'income' | 'expense' | null
+    const addPickerScrollPos = useRef(null)
+
+    const closeAddPicker = () => {
+        setAddingSourceType(null)
+        if (addPickerScrollPos.current != null && scrollRef.current) {
+            scrollRef.current.scrollTo({ top: addPickerScrollPos.current, behavior: 'smooth' })
+            addPickerScrollPos.current = null
+        }
+    }
+
+    const addSource = (sourceId, isExpense) => {
+        // "other_income" and "other_expense" create new instances
+        if (sourceId === 'other_income') {
+            const inst = makeOtherInstance('oi')
+            setFormData(prev => ({
+                ...prev,
+                otherIncomes: [...(prev.otherIncomes || []), inst],
+                incomeSources: [...(prev.incomeSources || []), inst.id],
+            }))
+            setAddingSourceType(null)
+            setExpandedSource(inst.id)
+            return
+        }
+        if (sourceId === 'other_expense') {
+            const inst = makeOtherInstance('oe')
+            setFormData(prev => ({
+                ...prev,
+                otherExpenses: [...(prev.otherExpenses || []), inst],
+                expenseSources: [...(prev.expenseSources || []), inst.id],
+            }))
+            setAddingSourceType(null)
+            setExpandedSource(inst.id)
+            return
+        }
+        if (isExpense) {
+            const sources = formData.expenseSources || []
+            if (!sources.includes(sourceId)) {
+                updateField('expenseSources', [...sources, sourceId])
+            }
+        } else {
+            const sources = formData.incomeSources || []
+            if (!sources.includes(sourceId)) {
+                updateField('incomeSources', [...sources, sourceId])
+            }
+        }
+        setAddingSourceType(null)
+        setExpandedSource(sourceId)
     }
 
     const toggleIncomeSource = (id) => {
@@ -1185,24 +2093,26 @@ export default function Dashboard() {
         }
     }
 
-    const handleBalanceSave = (val) => {
-        updateField('balance', val)
-        setShowBalanceEditor(false)
-    }
-
     // Map source ids to editTypes for yearly calc
     const incomeEditTypeMap = {
         maintenance_loan: ['loan'],
         bursary: ['bursary'],
         family_friends: ['family'],
         work: ['work'],
-        other_income: ['otherIncome'],
+    }
+    // Add dynamic other income entries (editType = instance id)
+    for (const inst of otherIncomes) {
+        incomeEditTypeMap[inst.id] = [inst.id]
     }
     const expenseEditTypeMap = {
         rent: ['rent'],
         bills: ['bills'],
         uni_fees: ['uniFees'],
         savings_investments: ['savingsInv'],
+    }
+    // Add dynamic other expense entries
+    for (const inst of otherExpenses) {
+        expenseEditTypeMap[inst.id] = [inst.id]
     }
 
     // Map expandedSource to currentEventType for dot highlighting
@@ -1213,9 +2123,14 @@ export default function Dashboard() {
 
     const handleEventClick = useCallback((evt, e) => {
         const rect = e.currentTarget.getBoundingClientRect()
-        setEditingEvent({ ...evt, clickX: rect.left + rect.width / 2, clickY: rect.top })
+        setEditingEvent({ ...evt, clickX: rect.left + rect.width / 2, clickY: rect.top + rect.height / 2 })
         setEditAmount(String(evt.amount))
     }, [])
+
+    const handleOverdraftClick = useCallback(({ clickX, clickY }) => {
+        setEditingOverdraft({ clickX, clickY })
+        setEditOverdraftAmount(String(overdraftNum || ''))
+    }, [overdraftNum])
 
     return (
         <div style={{
@@ -1228,482 +2143,1236 @@ export default function Dashboard() {
                 ref={scrollRef}
                 onScroll={handleScroll}
                 style={{
-                    flex: 1, overflowY: activeTab === 'goals' ? 'hidden' : 'auto', overflowX: 'hidden',
+                    flex: 1, overflowY: 'auto', overflowX: 'hidden',
                     WebkitOverflowScrolling: 'touch',
                     overscrollBehavior: 'none',
                     paddingBottom: 'calc(400px + env(safe-area-inset-bottom))',
                 }}
             >
                 {/* Graph + tabs — sticky, shrinks on scroll */}
-                <div data-sticky-header style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 16, paddingBottom: 12 }}>
+                <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 16, paddingBottom: 10 }}>
+                    <div style={{ position: 'relative' }}>
+                    {!dbLoaded && (
+                        <div style={{
+                            position: 'absolute', inset: 0, zIndex: 20,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: 'rgba(255,255,255,0.6)',
+                            borderRadius: 8,
+                        }}>
+                            <div style={{
+                                width: 20, height: 20, borderRadius: '50%',
+                                border: '2.5px solid #f0f0f0', borderTopColor: '#EC8C17',
+                                animation: 'spin 0.8s linear infinite',
+                            }} />
+                        </div>
+                    )}
                     <TermGraph
+                        key={graphKey}
                         graphHeight={graphHeight}
                         graphHeightRef={graphContainerRef}
                         marginTop={0}
                         terms={terms}
-                        balance={balanceNum || undefined}
-                        overdraft={overdraftNum}
-                        events={events}
-                        hiddenEventTypes={[
-                            ...(!showIncome ? ['loan', 'bursary', 'family', 'work', 'otherIncome'] : []),
-                            ...(!showExpenses ? ['rent', 'bills', 'uniFees', 'savingsInv', 'weeklySpend', 'oneOff'] : []),
-                        ].filter(t => t !== currentEventType)}
+                        balance={projectionBalance || undefined}
+                        actualBalance={balanceNum}
+                        overdraft={showOverdraft ? overdraftNum : undefined}
+                        onOverdraftClick={handleOverdraftClick}
+                        events={(activeTab === 'goals' && goalsShowMore) ? (() => {
+                            const now = new Date(); now.setHours(0, 0, 0, 0)
+                            const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() + 30)
+                            const nowStr = toLocalDate(now), cutoffStr = toLocalDate(cutoff)
+                            return events.filter(e => e.date > nowStr && e.date <= cutoffStr && e.editType !== 'weeklySpend')
+                        })() : events}
+                        hiddenEventTypes={(activeTab === 'goals' && goalsShowMore) ? [] : [
+                            ...(!showIncome ? ['loan', 'bursary', 'family', 'work', 'oneOffIncome', ...otherIncomes.map(i => i.id)] : []),
+                            ...(!showExpenses ? ['rent', 'bills', 'uniFees', 'savingsInv', 'weeklySpend', 'oneOffExpense', ...otherExpenses.map(i => i.id)] : []),
+                        ].filter(t => {
+                            if (t === currentEventType) return false
+                            if (activeTab === 'variable' && (t === 'oneOffIncome' || t === 'oneOffExpense')) return false
+                            return true
+                        })}
                         currentEventType={currentEventType}
                         onEventClick={handleEventClick}
-                        showIncome={showIncome}
-                        onToggleIncome={() => setShowIncome(prev => !prev)}
-                        showExpenses={showExpenses}
-                        onToggleExpenses={() => setShowExpenses(prev => !prev)}
+                        activeEventDot={editingEvent}
+                        balanceHistory={balanceHistory}
+                        showBalanceHistory={showBalanceHistory}
                         footer={
-                            <div ref={footerRef} style={{
-                                padding: '6px 0px 4px 10px',
-                                display: 'flex', alignItems: 'center',
-                                justifyContent: 'space-between',
-                            }}>
-                                <div>
-                                    <p style={{
-                                        fontSize: 8, fontWeight: 800,
-                                        color: '#838383', margin: 0,
-                                        letterSpacing: 0.5,
-                                        textTransform: 'uppercase',
-                                        fontFamily: 'Nunito, sans-serif',
-                                    }}>Current Balance</p>
-                                    <p style={{
-                                        fontSize: 16, fontWeight: 800,
-                                        color: '#000', margin: '2px 0 0',
-                                        fontFamily: 'Nunito, sans-serif',
-                                    }}>
-                                        £{Math.abs(balanceNum).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </p>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
-                                    <button
-                                        onClick={() => setShowBalanceEditor(true)}
-                                        style={{
-                                            display: 'flex', alignItems: 'center', gap: 4,
-                                            background: '#147b75', border: 'none',
-                                            borderRadius: 8, padding: '5px 10px',
-                                            cursor: 'pointer',
-                                            boxShadow: '0 4px 10px rgba(20,123,117,0.15)',
-                                        }}
-                                    >
-                                        <RefreshIcon size={9} />
-                                        <span style={{
-                                            fontSize: 9, fontWeight: 700,
-                                            color: '#fff', fontFamily: 'Nunito, sans-serif',
-                                        }}>Update Balance</span>
-                                    </button>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                        <span style={{
-                                            fontSize: 8, fontWeight: 700,
-                                            color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
-                                        }}>Balance History</span>
-                                        <ToggleSwitch
-                                            on={showBalanceHistory}
-                                            onChange={setShowBalanceHistory}
-                                            size="tiny"
-                                            activeColor="#EC8C17"
-                                        />
+                            <div ref={footerRef} style={{ padding: '2px 1px 6px' }}>
+                                {/* Row 1: Balance pill + toggle buttons */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginLeft: 10 }}>
+                                    <BalancePill value={formData.balance} onSave={val => {
+                                        const oldVal = parseFloat(String(formData.balance || '0').replace(/,/g, '')) || 0
+                                        const newVal = parseFloat(String(val || '0').replace(/,/g, '')) || 0
+                                        const today = toLocalDate(new Date())
+                                        const lastRecorded = localStorage.getItem('budgeup_balance_last_date')
+                                        const isUpdate = lastRecorded === today
+                                        updateField('balance', val)
+                                        localStorage.setItem('budgeup_balance_last_date', today)
+                                        if (oldVal !== newVal) {
+                                            if (balanceToastTimer.current) clearTimeout(balanceToastTimer.current)
+                                            setBalanceToast(isUpdate ? 'Updated today\u2019s balance' : 'Recorded balance for today')
+                                            balanceToastTimer.current = setTimeout(() => setBalanceToast(null), 2500)
+                                        }
+                                    }} scrollContainerRef={scrollRef} />
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignItems: 'flex-end' }}>
+                                        <div style={{ display: 'flex', gap: 6 }}>
+                                            <button
+                                                onClick={() => setShowExpenses(prev => {
+                                                    localStorage.setItem('budgeup_show_expenses', String(!prev))
+                                                    return !prev
+                                                })}
+                                                style={{
+                                                    flex: 1,
+                                                    background: showExpenses ? 'rgba(224,100,112,0.10)' : '#fafafa',
+                                                    border: showExpenses ? '1px solid #e06470' : '1px solid #e6e6e6',
+                                                    borderRadius: 16, cursor: 'pointer',
+                                                    padding: '4px 10px',
+                                                    display: 'flex', alignItems: 'center', gap: 6,
+                                                    height: 20, transition: 'all 0.18s ease',
+                                                    boxShadow: showExpenses ? '0 1px 3px rgba(224,100,112,0.15)' : 'none'
+                                                }}
+                                            >
+                                                <div style={{ width: 6, height: 6, borderRadius: '50%', background: showExpenses ? '#e06470' : '#cfcfcf' }} />
+                                                <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showExpenses ? '#e06470' : '#8f8f8f' }}>Expenses</span>
+                                            </button>
+                                            <button
+                                                onClick={() => setShowIncome(prev => {
+                                                    localStorage.setItem('budgeup_show_income', String(!prev))
+                                                    return !prev
+                                                })}
+                                                style={{
+                                                    flex: 1,
+                                                    background: showIncome ? 'rgba(20,123,117,0.10)' : '#fafafa',
+                                                    border: showIncome ? '1px solid #147b75' : '1px solid #e6e6e6',
+                                                    borderRadius: 16, cursor: 'pointer',
+                                                    padding: '4px 10px',
+                                                    display: 'flex', alignItems: 'center', gap: 6,
+                                                    height: 20, transition: 'all 0.18s ease',
+                                                    boxShadow: showIncome ? '0 1px 3px rgba(20,123,117,0.18)' : 'none'
+                                                }}
+                                            >
+                                                <div style={{ width: 6, height: 6, borderRadius: '50%', background: showIncome ? '#147b75' : '#cfcfcf' }} />
+                                                <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showIncome ? '#147b75' : '#8f8f8f' }}>Income</span>
+                                            </button>
+                                        </div>
+                                        <button
+                                            onClick={() => setShowBalanceHistory(prev => {
+                                                localStorage.setItem('budgeup_show_balance_history', String(!prev))
+                                                return !prev
+                                            })}
+                                            style={{
+                                                width: '100%',
+                                                background: showBalanceHistory ? 'rgba(236,140,23,0.10)' : '#fafafa',
+                                                border: showBalanceHistory ? '1px solid #EC8C17' : '1px solid #e6e6e6',
+                                                borderRadius: 16, cursor: 'pointer',
+                                                padding: '4px 10px',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                                height: 20, transition: 'all 0.18s ease',
+                                                boxShadow: showBalanceHistory ? '0 1px 3px rgba(236,140,23,0.18)' : 'none'
+                                            }}
+                                        >
+                                            <Clock size={10} strokeWidth={2.3} color={showBalanceHistory ? '#EC8C17' : '#b5b5b5'} />
+                                            <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: showBalanceHistory ? '#EC8C17' : '#8f8f8f' }}>Balance History</span>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
                         }
                     />
-
-                {/* Summary cards */}
-                <div ref={cardDetailsRef} style={{
-                    display: 'flex', gap: 10,
-                    padding: '16px 16px 0',
-                }}>
-                    {/* Fixed card */}
-                    <div data-card onClick={() => setActiveTab('fixed')} style={{
-                        flex: 1, borderRadius: 10,
-                        cursor: 'pointer',
-                        background: activeTab === 'fixed' ? '#fff' : '#f3f3f3',
-                        borderTop: activeTab === 'fixed' ? '2px solid #7eb6b3' : '0.25px solid #c6c6c6',
-                        borderLeft: activeTab === 'fixed' ? '0.25px solid #7eb6b3' : '0.25px solid #c6c6c6',
-                        borderRight: activeTab === 'fixed' ? '0.25px solid #7eb6b3' : '0.25px solid #c6c6c6',
-                        borderBottom: activeTab === 'fixed' ? '0.25px solid #7eb6b3' : '0.25px solid #c6c6c6',
-                        boxShadow: activeTab === 'fixed' ? '0 4px 10px rgba(20,123,117,0.1)' : 'none',
-                        padding: '10px 12px',
-                        overflow: 'hidden',
-                    }}>
-                        <div data-card-header style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                <rect x="3" y="4" width="18" height="18" rx="2" stroke={activeTab === 'fixed' ? '#000' : '#838383'} strokeWidth="2" />
-                                <path d="M16 2v4M8 2v4M3 10h18" stroke={activeTab === 'fixed' ? '#000' : '#838383'} strokeWidth="2" strokeLinecap="round" />
-                            </svg>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: activeTab === 'fixed' ? '#000' : '#838383' }}>Fixed</span>
-                        </div>
-                        <div data-card-detail style={{ overflow: 'hidden' }}>
-                            <p style={{
-                                fontSize: 18, fontWeight: 700,
-                                color: fixedNet >= 0 ? '#147b75' : '#e06470',
-                                margin: '0 0 2px',
-                            }}>
-                                {fixedNet >= 0 ? '+' : '-'}{fmtAmount(Math.abs(displayNet))}{freqSuffix[freqView]}
-                            </p>
-                            <p style={{
-                                fontSize: 9, fontWeight: 500, color: '#9f9c9c', margin: 0,
-                            }}>{activeIncomeCount} income &bull; {activeExpenseCount} expense</p>
-                        </div>
                     </div>
 
-                    {/* Variable card */}
-                    <div data-card onClick={() => setActiveTab('variable')} style={{
-                        flex: 1, borderRadius: 10,
-                        cursor: 'pointer',
-                        background: activeTab === 'variable' ? '#fff' : '#f3f3f3',
-                        borderTop: activeTab === 'variable' ? '2px solid #EC8C17' : '0.25px solid #c6c6c6',
-                        borderLeft: activeTab === 'variable' ? '0.25px solid #EC8C17' : '0.25px solid #c6c6c6',
-                        borderRight: activeTab === 'variable' ? '0.25px solid #EC8C17' : '0.25px solid #c6c6c6',
-                        borderBottom: activeTab === 'variable' ? '0.25px solid #EC8C17' : '0.25px solid #c6c6c6',
-                        boxShadow: activeTab === 'variable' ? '0 4px 10px rgba(236,140,23,0.1)' : 'none',
-                        padding: '10px 12px',
-                        overflow: 'hidden',
+                    {/* Summary cards */}
+                    <div ref={cardDetailsRef} style={{
+                        display: 'flex', gap: 10,
+                        padding: '25px 16px 0px',
                     }}>
-                        <div data-card-header style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-                            <svg width="14" height="12" viewBox="0 0 24 20" fill="none">
-                                <path d="M1 17L5 9L10 13L15 5L23 1" stroke={activeTab === 'variable' ? '#000' : '#838383'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: activeTab === 'variable' ? '#000' : '#838383' }}>Variable</span>
+                        {/* Fixed card */}
+                        <div data-card onClick={() => handleTabChange('fixed')} style={{
+                            flex: 1, borderRadius: 10,
+                            cursor: 'pointer',
+                            background: activeTab === 'fixed' ? '#fff' : '#f3f3f3',
+                            borderTop: activeTab === 'fixed' ? '2px solid #EC8C17' : '1px solid #e0e0e0',
+                            borderLeft: activeTab === 'fixed' ? '0.5px solid #EC8C17' : '1px solid #e0e0e0',
+                            borderRight: activeTab === 'fixed' ? '0.5px solid #EC8C17' : '1px solid #e0e0e0',
+                            borderBottom: activeTab === 'fixed' ? '0.5px solid #EC8C17' : '1px solid #e0e0e0',
+                            boxShadow: activeTab === 'fixed' ? '0 4px 10px rgba(236,140,23,0.1)' : 'none',
+                            padding: '10px 12px',
+                            overflow: 'hidden',
+                        }}>
+                            <div data-card-header style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" stroke={activeTab === 'fixed' ? '#000' : '#838383'} strokeWidth="2" />
+                                    <path d="M16 2v4M8 2v4M3 10h18" stroke={activeTab === 'fixed' ? '#000' : '#838383'} strokeWidth="2" strokeLinecap="round" />
+                                </svg>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: activeTab === 'fixed' ? '#000' : '#838383' }}>Fixed</span>
+                            </div>
+                            <div data-card-detail style={{ overflow: 'hidden' }}>
+                                <p style={{
+                                    fontSize: 18, fontWeight: 700,
+                                    color: fixedNet >= 0 ? '#147b75' : '#e06470',
+                                    margin: '0 0 2px',
+                                }}>
+                                    {fixedNet >= 0 ? '+' : '-'}{fmtAmount(Math.abs(displayNet))}{freqSuffix[freqView]}
+                                </p>
+                                <p style={{
+                                    fontSize: 9, fontWeight: 500, color: '#9f9c9c', margin: 0,
+                                }}>{activeIncomeCount}{' '}income{' '}&bull;{' '}{activeExpenseCount}{' '}expense</p>
+                            </div>
                         </div>
-                        <div data-card-detail style={{ overflow: 'hidden' }}>
-                            <p style={{
-                                fontSize: 18, fontWeight: 700, color: '#147b75', margin: '0 0 2px',
-                            }}>
-                                -£{Math.round(parseFloat(formData.weeklySpend || '0'))}/wk
-                            </p>
-                            <p style={{
-                                fontSize: 9, fontWeight: 500, color: '#9f9c9c', margin: 0,
-                            }}>
-                                {(() => {
-                                    const count = (formData.oneOffItems || []).filter(i => i.name || i.amount).length
-                                    return count > 0 ? `${count} one-off` : 'No one-offs'
-                                })()}
-                            </p>
-                        </div>
-                    </div>
 
-                    {/* Goals card */}
-                    <div data-card onClick={() => setActiveTab('goals')} style={{
-                        flex: 1, borderRadius: 10,
-                        cursor: 'pointer',
-                        background: activeTab === 'goals' ? '#fff' : '#f3f3f3',
-                        borderTop: activeTab === 'goals' ? '2px solid #838383' : '0.25px solid #c6c6c6',
-                        borderLeft: activeTab === 'goals' ? '0.25px solid #838383' : '0.25px solid #c6c6c6',
-                        borderRight: activeTab === 'goals' ? '0.25px solid #838383' : '0.25px solid #c6c6c6',
-                        borderBottom: activeTab === 'goals' ? '0.25px solid #838383' : '0.25px solid #c6c6c6',
-                        boxShadow: activeTab === 'goals' ? '0 4px 10px rgba(0,0,0,0.05)' : 'none',
-                        padding: '10px 12px',
-                        overflow: 'hidden',
-                    }}>
-                        <div data-card-header style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                <circle cx="12" cy="12" r="10" stroke={activeTab === 'goals' ? '#000' : '#838383'} strokeWidth="2" />
-                                <circle cx="12" cy="12" r="6" stroke={activeTab === 'goals' ? '#000' : '#838383'} strokeWidth="2" />
-                                <circle cx="12" cy="12" r="2" fill={activeTab === 'goals' ? '#000' : '#838383'} />
-                            </svg>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: activeTab === 'goals' ? '#000' : '#838383' }}>Goals</span>
+                        {/* Goals card (center) */}
+                        <div data-card onClick={() => handleTabChange('goals')} style={{
+                            flex: 1, borderRadius: 10,
+                            cursor: 'pointer',
+                            background: activeTab === 'goals' ? '#fff' : '#f3f3f3',
+                            borderTop: activeTab === 'goals' ? '2px solid #EC8C17' : '1px solid #e0e0e0',
+                            borderLeft: activeTab === 'goals' ? '0.5px solid #EC8C17' : '1px solid #e0e0e0',
+                            borderRight: activeTab === 'goals' ? '0.5px solid #EC8C17' : '1px solid #e0e0e0',
+                            borderBottom: activeTab === 'goals' ? '0.5px solid #EC8C17' : '1px solid #e0e0e0',
+                            boxShadow: activeTab === 'goals' ? '0 4px 10px rgba(236,140,23,0.1)' : 'none',
+                            padding: '10px 12px',
+                            overflow: 'hidden',
+                        }}>
+                            <div data-card-header style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                                    <circle cx="12" cy="12" r="10" stroke={activeTab === 'goals' ? '#000' : '#838383'} strokeWidth="2" />
+                                    <circle cx="12" cy="12" r="6" stroke={activeTab === 'goals' ? '#000' : '#838383'} strokeWidth="2" />
+                                    <circle cx="12" cy="12" r="2" fill={activeTab === 'goals' ? '#000' : '#838383'} />
+                                </svg>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: activeTab === 'goals' ? '#000' : '#838383' }}>Goals</span>
+                            </div>
+                            <div data-card-detail style={{ overflow: 'hidden' }}>
+                                <p style={{
+                                    fontSize: 18, fontWeight: 700,
+                                    color: goalsData.isOnTrack ? '#147b75' : goalsData.isAhead ? '#147b75' : '#e06470',
+                                    margin: '0 0 2px',
+                                }}>
+                                    {!dbLoaded ? '—' : goalsData.isOnTrack ? 'On Track' : `${getCurrencySymbol()}${Math.abs(Math.round(goalsData.diff)).toLocaleString()} ${goalsData.isAhead ? 'ahead' : 'behind'}`}
+                                </p>
+                                <p style={{
+                                    fontSize: 9, fontWeight: 500, color: '#9f9c9c', margin: 0,
+                                }}>vs projected balance</p>
+                            </div>
                         </div>
-                        <div data-card-detail style={{ overflow: 'hidden' }}>
-                            <p style={{
-                                fontSize: 14, fontWeight: 700, color: '#4b4a4a', margin: 0,
-                            }}>—</p>
+
+                        {/* Variable card */}
+                        <div data-card onClick={() => handleTabChange('variable')} style={{
+                            flex: 1, borderRadius: 10,
+                            cursor: 'pointer',
+                            background: activeTab === 'variable' ? '#fff' : '#f3f3f3',
+                            borderTop: activeTab === 'variable' ? '2px solid #EC8C17' : '1px solid #e0e0e0',
+                            borderLeft: activeTab === 'variable' ? '0.5px solid #EC8C17' : '1px solid #e0e0e0',
+                            borderRight: activeTab === 'variable' ? '0.5px solid #EC8C17' : '1px solid #e0e0e0',
+                            borderBottom: activeTab === 'variable' ? '0.5px solid #EC8C17' : '1px solid #e0e0e0',
+                            boxShadow: activeTab === 'variable' ? '0 4px 10px rgba(236,140,23,0.1)' : 'none',
+                            padding: '10px 12px',
+                            overflow: 'hidden',
+                        }}>
+                            <div data-card-header style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
+                                <svg width="14" height="12" viewBox="0 0 24 20" fill="none">
+                                    <path
+                                        d="M1 17L5 9L10 13L15 5L23 14"
+                                        stroke={activeTab === 'variable' ? '#000' : '#838383'}
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    />                                </svg>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: activeTab === 'variable' ? '#000' : '#838383' }}>Variable</span>
+                            </div>
+                            <div data-card-detail style={{ overflow: 'hidden' }}>
+                                <p style={{
+                                    fontSize: 18, fontWeight: 700, color: parseFloat(formData.weeklySpend || '0') > 0 ? '#e06470' : '#147b75', margin: '0 0 2px',
+                                }}>
+                                    {parseFloat(formData.weeklySpend || '0') > 0 ? '-' : ''}{getCurrencySymbol()}{Math.round(parseFloat(formData.weeklySpend || '0'))}/wk
+                                </p>
+                                <p style={{
+                                    fontSize: 9, fontWeight: 500, color: '#9f9c9c', margin: 0,
+                                }}>
+                                    {(() => {
+                                        const count = (formData.oneOffItems || []).filter(i => i.name || i.amount).length
+                                        return count > 0 ? `${count} one-off` : 'No one-offs'
+                                    })()}
+                                </p>
+                            </div>
                         </div>
                     </div>
-                </div>
                 </div>
 
                 {/* Content below — held in place during graph shrink */}
-                <div ref={contentWrapRef} style={{ willChange: 'transform' }}>
+                <div ref={contentWrapRef} style={{ willChange: 'transform', contain: 'layout style' }}>
+                    <div key={activeTab} style={{ animation: 'tabFadeIn 0.2s ease' }}>
 
-                {activeTab === 'fixed' && (<>
-                {/* Regular Income Section */}
-                <div style={{ padding: '20px 16px 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                        <ArrowUpCircle />
-                        <span style={{
-                            fontSize: 16, fontWeight: 700, color: '#000',
-                        }}>Regular Income</span>
-                    </div>
+                        {activeTab === 'fixed' && (<div style={{ marginBottom: -120 }}>
+                            {/* Regular Income Section */}
+                            <div style={{ padding: '12px 16px 0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                    <ArrowUpCircle />
+                                    <span style={{
+                                        fontSize: 16, fontWeight: 700, color: '#000',
+                                    }}>Regular Income</span>
+                                </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {INCOME_SOURCES.map(source => {
-                            const active = (formData.incomeSources || []).includes(source.id)
-                            const yearly = getSourceYearly(incomeEditTypeMap[source.id] || [])
-                            const isExpanded = expandedSource === source.id
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    {INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).map(source => {
+                                        const active = (formData.incomeSources || []).includes(source.id)
+                                        const editTypes = incomeEditTypeMap[source.id] || []
+                                        const yearly = getSourceYearly(editTypes)
+                                        const removedCount = getSourceRemovedCount(editTypes)
+                                        const isExpanded = expandedSource === source.id
+
+                                        return (
+                                            <SourceRow
+                                                key={source.id}
+                                                source={source}
+                                                active={active}
+                                                yearlyAmount={yearly}
+                                                removedCount={removedCount}
+                                                onRestoreRemoved={() => restoreSourceEvents(editTypes)}
+                                                expanded={isExpanded}
+                                                onToggle={() => toggleIncomeSource(source.id)}
+                                                onExpandToggle={() => handleExpandToggle(source.id)}
+                                                onDelete={() => deleteSource(source.id, false)}
+                                                scrollContainerRef={scrollRef}
+                                                formData={formData}
+                                                updateField={updateField}
+                                            >
+                                                {source.id === 'maintenance_loan' && (
+                                                    <CompactMaintenanceLoan formData={formData} updateField={updateField} />
+                                                )}
+                                                {source.id === 'bursary' && (
+                                                    <BursaryStep compact
+                                                        bursaryAmount={formData.bursaryAmount}
+                                                        updateBursaryAmount={(val) => updateField('bursaryAmount', val)}
+                                                        bursaryMonths={formData.bursaryMonths}
+                                                        updateBursaryMonths={(val) => updateField('bursaryMonths', val)}
+                                                        bursaryDates={formData.bursaryDates}
+                                                        updateBursaryDates={(val) => updateField('bursaryDates', val)}
+                                                        bursaryInstalmentAmounts={formData.bursaryInstalmentAmounts}
+                                                        updateBursaryInstalmentAmounts={(val) => updateField('bursaryInstalmentAmounts', val)}
+                                                    />
+                                                )}
+                                                {source.id === 'family_friends' && (
+                                                    <FamilyFriendsStep compact
+                                                        familyAmount={formData.familyAmount}
+                                                        updateFamilyAmount={(val) => updateField('familyAmount', val)}
+                                                        familyFrequency={formData.familyFrequency}
+                                                        updateFamilyFrequency={(val) => updateField('familyFrequency', val)}
+                                                        familyNextDate={formData.familyNextDate}
+                                                        updateFamilyNextDate={(val) => updateField('familyNextDate', val)}
+                                                        terms={formData.termDates?.terms || []}
+                                                        familyTermDates={formData.familyTermDates}
+                                                        updateFamilyTermDates={(val) => updateField('familyTermDates', val)}
+                                                        familyQuarterlyDates={formData.familyQuarterlyDates}
+                                                        updateFamilyQuarterlyDates={(val) => updateField('familyQuarterlyDates', val)}
+                                                        familyVariesByTerm={formData.familyVariesByTerm}
+                                                        updateFamilyVariesByTerm={(val) => updateField('familyVariesByTerm', val)}
+                                                        familyNonTermAmount={formData.familyNonTermAmount}
+                                                        updateFamilyNonTermAmount={(val) => updateField('familyNonTermAmount', val)}
+                                                        familyAmountPeriod={formData.familyAmountPeriod}
+                                                        updateFamilyAmountPeriod={(val) => updateField('familyAmountPeriod', val)}
+                                                    />
+                                                )}
+                                                {source.id === 'work' && (
+                                                    <WorkIncomeStep compact
+                                                        workAmount={formData.workAmount}
+                                                        updateWorkAmount={(val) => updateField('workAmount', val)}
+                                                        workFrequency={formData.workFrequency}
+                                                        updateWorkFrequency={(val) => updateField('workFrequency', val)}
+                                                        workVariesByTerm={formData.workVariesByTerm}
+                                                        updateWorkVariesByTerm={(val) => updateField('workVariesByTerm', val)}
+                                                        workNonTermAmount={formData.workNonTermAmount}
+                                                        updateWorkNonTermAmount={(val) => updateField('workNonTermAmount', val)}
+                                                        workEntryMode={formData.workEntryMode}
+                                                        updateWorkEntryMode={(val) => updateField('workEntryMode', val)}
+                                                        workNextDate={formData.workNextDate}
+                                                        updateWorkNextDate={(val) => updateField('workNextDate', val)}
+                                                        terms={formData.termDates?.terms || []}
+                                                        workTermDates={formData.workTermDates}
+                                                        updateWorkTermDates={(val) => updateField('workTermDates', val)}
+                                                        workQuarterlyDates={formData.workQuarterlyDates}
+                                                        updateWorkQuarterlyDates={(val) => updateField('workQuarterlyDates', val)}
+                                                        workAmountPeriod={formData.workAmountPeriod}
+                                                        updateWorkAmountPeriod={(val) => updateField('workAmountPeriod', val)}
+                                                    />
+                                                )}
+                                                {source.isOtherIncome && (() => {
+                                                    const inst = otherIncomes.find(i => i.id === source.id)
+                                                    if (!inst) return null
+                                                    return (
+                                                        <OtherIncomeStep compact
+                                                            otherIncomeAmount={inst.amount}
+                                                            updateOtherIncomeAmount={(val) => updateOtherInstance(inst.id, 'amount', val)}
+                                                            otherIncomeFrequency={inst.frequency}
+                                                            updateOtherIncomeFrequency={(val) => updateOtherInstance(inst.id, 'frequency', val)}
+                                                            otherIncomeLabel={inst.label}
+                                                            updateOtherIncomeLabel={(val) => {
+                                                                updateOtherInstance(inst.id, 'label', val)
+                                                            }}
+                                                            otherIncomeNextDate={inst.nextDate}
+                                                            updateOtherIncomeNextDate={(val) => updateOtherInstance(inst.id, 'nextDate', val)}
+                                                            terms={formData.termDates?.terms || []}
+                                                            otherIncomeTermDates={inst.termDates}
+                                                            updateOtherIncomeTermDates={(val) => updateOtherInstance(inst.id, 'termDates', val)}
+                                                            otherIncomeVariesByTerm={inst.variesByTerm}
+                                                            updateOtherIncomeVariesByTerm={(val) => updateOtherInstance(inst.id, 'variesByTerm', val)}
+                                                            otherIncomeNonTermAmount={inst.nonTermAmount}
+                                                            updateOtherIncomeNonTermAmount={(val) => updateOtherInstance(inst.id, 'nonTermAmount', val)}
+                                                            otherIncomeAmountPeriod={inst.amountPeriod}
+                                                            updateOtherIncomeAmountPeriod={(val) => updateOtherInstance(inst.id, 'amountPeriod', val)}
+                                                            otherIncomeQuarterlyDates={inst.quarterlyDates}
+                                                            updateOtherIncomeQuarterlyDates={(val) => updateOtherInstance(inst.id, 'quarterlyDates', val)}
+                                                        />
+                                                    )
+                                                })()}
+                                            </SourceRow>
+                                        )
+                                    })}
+
+                                    {/* Add income button + picker */}
+                                    {(() => {
+                                        const hiddenFixed = FIXED_INCOME_SOURCES.filter(s => !isSourceVisible(s.id, formData.incomeSources))
+                                        // Always allow adding "Other" (multiple instances)
+                                        const pickerOptions = [
+                                            ...hiddenFixed,
+                                            { id: 'other_income', label: 'Other Regular Income', icon: iconOtherIncome },
+                                        ]
+                                        return (
+                                            <div style={{ position: 'relative' }}>
+                                                <button
+                                                    onClick={(e) => {
+                                                        const opening = addingSourceType !== 'income'
+                                                        if (opening) {
+                                                            addPickerScrollPos.current = scrollRef.current?.scrollTop ?? null
+                                                            setAddingSourceType('income')
+                                                            const btn = e.currentTarget.parentElement
+                                                            const container = scrollRef.current
+                                                            if (btn && container) {
+                                                                requestAnimationFrame(() => {
+                                                                    const stickyHeader = container.querySelector('[data-sticky-header]')
+                                                                    const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
+                                                                    const containerTop = container.getBoundingClientRect().top + headerH
+                                                                    const btnTop = btn.getBoundingClientRect().top
+                                                                    container.scrollTo({
+                                                                        top: container.scrollTop + (btnTop - containerTop) - 8,
+                                                                        behavior: 'smooth',
+                                                                    })
+                                                                })
+                                                            }
+                                                        } else {
+                                                            closeAddPicker()
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        width: '100%', height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                                        border: '1px solid #e0e0e0', borderRadius: 10,
+                                                        background: 'none', cursor: 'pointer',
+                                                        fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75',
+                                                    }}
+                                                >
+                                                    <span style={{ fontSize: 20, lineHeight: 1, marginTop: -1 }}>+</span>
+                                                    Add regular income
+                                                </button>
+                                                {addingSourceType === 'income' && (<>
+                                                    <div onClick={closeAddPicker} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+                                                    <div style={{
+                                                        marginTop: 6, borderRadius: 10, border: '1px solid #f0f0f0',
+                                                        background: '#fff', overflow: 'hidden',
+                                                        boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                                                        position: 'relative', zIndex: 51,
+                                                    }}>
+                                                        {pickerOptions.map(source => (
+                                                            <button
+                                                                key={source.id}
+                                                                onClick={() => addSource(source.id, false)}
+                                                                style={{
+                                                                    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                                                                    padding: '11px 14px', border: 'none', borderBottom: '1px solid #f5f5f5',
+                                                                    background: 'none', cursor: 'pointer', textAlign: 'left',
+                                                                }}
+                                                            >
+                                                                <img src={source.icon} alt="" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.7 }} />
+                                                                <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                                    {source.label}
+                                                                </span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </>)}
+                                            </div>
+                                        )
+                                    })()}
+                                </div>
+                            </div>
+
+                            {/* Regular Expenses Section */}
+                            <div style={{ padding: '40px 16px 0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                                    <ArrowDownCircle />
+                                    <span style={{
+                                        fontSize: 16, fontWeight: 700, color: '#000',
+                                    }}>Regular Expenses</span>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    {EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).map(source => {
+                                        const active = (formData.expenseSources || []).includes(source.id)
+                                        const editTypes = expenseEditTypeMap[source.id] || []
+                                        const yearly = getSourceYearly(editTypes)
+                                        const removedCount = getSourceRemovedCount(editTypes)
+
+                                        return (
+                                            <SourceRow
+                                                key={source.id}
+                                                source={source}
+                                                active={active}
+                                                yearlyAmount={yearly}
+                                                removedCount={removedCount}
+                                                onRestoreRemoved={() => restoreSourceEvents(editTypes)}
+                                                isExpense
+                                                expanded={expandedSource === source.id}
+                                                onToggle={() => toggleExpenseSource(source.id)}
+                                                onExpandToggle={() => handleExpandToggle(source.id)}
+                                                onDelete={() => deleteSource(source.id, true)}
+                                                scrollContainerRef={scrollRef}
+                                                formData={formData}
+                                                updateField={updateField}
+                                            >
+                                                {source.id === 'rent' && (
+                                                    <RentStep compact
+                                                        rentAmount={formData.rentAmount}
+                                                        updateRentAmount={(val) => updateField('rentAmount', val)}
+                                                        rentFrequency={formData.rentFrequency}
+                                                        updateRentFrequency={(val) => updateField('rentFrequency', val)}
+                                                        rentNextDate={formData.rentNextDate}
+                                                        updateRentNextDate={(val) => updateField('rentNextDate', val)}
+                                                        rentEntryMode={formData.rentEntryMode}
+                                                        updateRentEntryMode={(val) => updateField('rentEntryMode', val)}
+                                                        terms={formData.termDates?.terms || []}
+                                                        rentTermDates={formData.rentTermDates}
+                                                        updateRentTermDates={(val) => updateField('rentTermDates', val)}
+                                                        rentQuarterlyDates={formData.rentQuarterlyDates}
+                                                        updateRentQuarterlyDates={(val) => updateField('rentQuarterlyDates', val)}
+                                                        rentAmountPeriod={formData.rentAmountPeriod}
+                                                        updateRentAmountPeriod={(val) => updateField('rentAmountPeriod', val)}
+                                                        rentVariesByTerm={formData.rentVariesByTerm}
+                                                        updateRentVariesByTerm={(val) => updateField('rentVariesByTerm', val)}
+                                                        rentNonTermAmount={formData.rentNonTermAmount}
+                                                        updateRentNonTermAmount={(val) => updateField('rentNonTermAmount', val)}
+                                                        rentStartDate={formData.rentStartDate}
+                                                        updateRentStartDate={(val) => updateField('rentStartDate', val)}
+                                                        rentEndDate={formData.rentEndDate}
+                                                        updateRentEndDate={(val) => updateField('rentEndDate', val)}
+                                                    />
+                                                )}
+                                                {source.id === 'bills' && (
+                                                    <BillsStep compact
+                                                        billsAmount={formData.billsAmount}
+                                                        updateBillsAmount={(val) => updateField('billsAmount', val)}
+                                                        billsFrequency={formData.billsFrequency}
+                                                        updateBillsFrequency={(val) => updateField('billsFrequency', val)}
+                                                        billsEntryMode={formData.billsEntryMode}
+                                                        updateBillsEntryMode={(val) => updateField('billsEntryMode', val)}
+                                                        billsNextDate={formData.billsNextDate}
+                                                        updateBillsNextDate={(val) => updateField('billsNextDate', val)}
+                                                        terms={formData.termDates?.terms || []}
+                                                        billsTermDates={formData.billsTermDates}
+                                                        updateBillsTermDates={(val) => updateField('billsTermDates', val)}
+                                                        billsAmountPeriod={formData.billsAmountPeriod}
+                                                        updateBillsAmountPeriod={(val) => updateField('billsAmountPeriod', val)}
+                                                        billsQuarterlyDates={formData.billsQuarterlyDates}
+                                                        updateBillsQuarterlyDates={(val) => updateField('billsQuarterlyDates', val)}
+                                                        billsVariesByTerm={formData.billsVariesByTerm}
+                                                        updateBillsVariesByTerm={(val) => updateField('billsVariesByTerm', val)}
+                                                        billsNonTermAmount={formData.billsNonTermAmount}
+                                                        updateBillsNonTermAmount={(val) => updateField('billsNonTermAmount', val)}
+                                                        billsStartDate={formData.billsStartDate}
+                                                        updateBillsStartDate={(val) => updateField('billsStartDate', val)}
+                                                        billsEndDate={formData.billsEndDate}
+                                                        updateBillsEndDate={(val) => updateField('billsEndDate', val)}
+                                                        rentStartDate={formData.rentStartDate}
+                                                        rentEndDate={formData.rentEndDate}
+                                                    />
+                                                )}
+                                                {source.id === 'uni_fees' && (
+                                                    <UniFeesStep compact
+                                                        uniFeesAmount={formData.uniFeesAmount}
+                                                        updateUniFeesAmount={(val) => updateField('uniFeesAmount', val)}
+                                                        uniFeesFrequency={formData.uniFeesFrequency}
+                                                        updateUniFeesFrequency={(val) => updateField('uniFeesFrequency', val)}
+                                                        uniFeesEntryMode={formData.uniFeesEntryMode}
+                                                        updateUniFeesEntryMode={(val) => updateField('uniFeesEntryMode', val)}
+                                                        uniFeesNextDate={formData.uniFeesNextDate}
+                                                        updateUniFeesNextDate={(val) => updateField('uniFeesNextDate', val)}
+                                                        terms={formData.termDates?.terms || []}
+                                                        uniFeesTermDates={formData.uniFeesTermDates || {}}
+                                                        updateUniFeesTermDates={(val) => updateField('uniFeesTermDates', val)}
+                                                        uniFeesAmountPeriod={formData.uniFeesAmountPeriod}
+                                                        updateUniFeesAmountPeriod={(val) => updateField('uniFeesAmountPeriod', val)}
+                                                        uniFeesQuarterlyDates={formData.uniFeesQuarterlyDates}
+                                                        updateUniFeesQuarterlyDates={(val) => updateField('uniFeesQuarterlyDates', val)}
+                                                        uniFeesVariesByTerm={formData.uniFeesVariesByTerm}
+                                                        updateUniFeesVariesByTerm={(val) => updateField('uniFeesVariesByTerm', val)}
+                                                        uniFeesNonTermAmount={formData.uniFeesNonTermAmount}
+                                                        updateUniFeesNonTermAmount={(val) => updateField('uniFeesNonTermAmount', val)}
+                                                    />
+                                                )}
+                                                {source.id === 'savings_investments' && (
+                                                    <SavingsInvestmentsStep compact
+                                                        savingsInvAmount={formData.savingsInvAmount}
+                                                        updateSavingsInvAmount={(val) => updateField('savingsInvAmount', val)}
+                                                        savingsInvFrequency={formData.savingsInvFrequency}
+                                                        updateSavingsInvFrequency={(val) => updateField('savingsInvFrequency', val)}
+                                                        savingsInvNextDate={formData.savingsInvNextDate}
+                                                        updateSavingsInvNextDate={(val) => updateField('savingsInvNextDate', val)}
+                                                        savingsInvEntryMode={formData.savingsInvEntryMode}
+                                                        updateSavingsInvEntryMode={(val) => updateField('savingsInvEntryMode', val)}
+                                                        terms={formData.termDates?.terms || []}
+                                                        savingsInvTermDates={formData.savingsInvTermDates || {}}
+                                                        updateSavingsInvTermDates={(val) => updateField('savingsInvTermDates', val)}
+                                                        savingsInvQuarterlyDates={formData.savingsInvQuarterlyDates || {}}
+                                                        updateSavingsInvQuarterlyDates={(val) => updateField('savingsInvQuarterlyDates', val)}
+                                                        savingsInvAmountPeriod={formData.savingsInvAmountPeriod}
+                                                        updateSavingsInvAmountPeriod={(val) => updateField('savingsInvAmountPeriod', val)}
+                                                        savingsInvVariesByTerm={formData.savingsInvVariesByTerm}
+                                                        updateSavingsInvVariesByTerm={(val) => updateField('savingsInvVariesByTerm', val)}
+                                                        savingsInvNonTermAmount={formData.savingsInvNonTermAmount}
+                                                        updateSavingsInvNonTermAmount={(val) => updateField('savingsInvNonTermAmount', val)}
+                                                    />
+                                                )}
+                                                {source.isOtherExpense && (() => {
+                                                    const inst = otherExpenses.find(i => i.id === source.id)
+                                                    if (!inst) return null
+                                                    return (
+                                                        <OtherExpenseStep compact
+                                                            otherExpenseAmount={inst.amount}
+                                                            updateOtherExpenseAmount={(val) => updateOtherInstance(inst.id, 'amount', val)}
+                                                            otherExpenseFrequency={inst.frequency}
+                                                            updateOtherExpenseFrequency={(val) => updateOtherInstance(inst.id, 'frequency', val)}
+                                                            otherExpenseLabel={inst.label}
+                                                            updateOtherExpenseLabel={(val) => updateOtherInstance(inst.id, 'label', val)}
+                                                            otherExpenseNextDate={inst.nextDate}
+                                                            updateOtherExpenseNextDate={(val) => updateOtherInstance(inst.id, 'nextDate', val)}
+                                                            terms={formData.termDates?.terms || []}
+                                                            otherExpenseTermDates={inst.termDates}
+                                                            updateOtherExpenseTermDates={(val) => updateOtherInstance(inst.id, 'termDates', val)}
+                                                            otherExpenseQuarterlyDates={inst.quarterlyDates}
+                                                            updateOtherExpenseQuarterlyDates={(val) => updateOtherInstance(inst.id, 'quarterlyDates', val)}
+                                                            otherExpenseVariesByTerm={inst.variesByTerm}
+                                                            updateOtherExpenseVariesByTerm={(val) => updateOtherInstance(inst.id, 'variesByTerm', val)}
+                                                            otherExpenseNonTermAmount={inst.nonTermAmount}
+                                                            updateOtherExpenseNonTermAmount={(val) => updateOtherInstance(inst.id, 'nonTermAmount', val)}
+                                                            otherExpenseAmountPeriod={inst.amountPeriod}
+                                                            updateOtherExpenseAmountPeriod={(val) => updateOtherInstance(inst.id, 'amountPeriod', val)}
+                                                        />
+                                                    )
+                                                })()}
+                                            </SourceRow>
+                                        )
+                                    })}
+
+                                    {/* Add expense button + picker */}
+                                    {(() => {
+                                        const hiddenFixed = FIXED_EXPENSE_SOURCES.filter(s => !isSourceVisible(s.id, formData.expenseSources))
+                                        const pickerOptions = [
+                                            ...hiddenFixed,
+                                            { id: 'other_expense', label: 'Other Regular Expense', icon: iconOtherExpense },
+                                        ]
+                                        return (
+                                            <div style={{ position: 'relative' }}>
+                                                <button
+                                                    onClick={(e) => {
+                                                        const opening = addingSourceType !== 'expense'
+                                                        if (opening) {
+                                                            addPickerScrollPos.current = scrollRef.current?.scrollTop ?? null
+                                                            setAddingSourceType('expense')
+                                                            const btn = e.currentTarget.parentElement
+                                                            const container = scrollRef.current
+                                                            if (btn && container) {
+                                                                requestAnimationFrame(() => {
+                                                                    const stickyHeader = container.querySelector('[data-sticky-header]')
+                                                                    const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
+                                                                    const containerTop = container.getBoundingClientRect().top + headerH
+                                                                    const btnTop = btn.getBoundingClientRect().top
+                                                                    container.scrollTo({
+                                                                        top: container.scrollTop + (btnTop - containerTop) - 8,
+                                                                        behavior: 'smooth',
+                                                                    })
+                                                                })
+                                                            }
+                                                        } else {
+                                                            closeAddPicker()
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        width: '100%', height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                                                        border: '1px solid #e0e0e0', borderRadius: 10,
+                                                        background: 'none', cursor: 'pointer',
+                                                        fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470',
+                                                    }}
+                                                >
+                                                    <span style={{ fontSize: 20, lineHeight: 1, marginTop: -1 }}>+</span>
+                                                    Add regular expense
+                                                </button>
+                                                {addingSourceType === 'expense' && (<>
+                                                    <div onClick={closeAddPicker} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+                                                    <div style={{
+                                                        marginTop: 6, borderRadius: 10, border: '1px solid #f0f0f0',
+                                                        background: '#fff', overflow: 'hidden',
+                                                        boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                                                        position: 'relative', zIndex: 51,
+                                                    }}>
+                                                        {pickerOptions.map(source => (
+                                                            <button
+                                                                key={source.id}
+                                                                onClick={() => addSource(source.id, true)}
+                                                                style={{
+                                                                    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                                                                    padding: '11px 14px', border: 'none', borderBottom: '1px solid #f5f5f5',
+                                                                    background: 'none', cursor: 'pointer', textAlign: 'left',
+                                                                }}
+                                                            >
+                                                                <img src={source.icon} alt="" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.7 }} />
+                                                                <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                                    {source.label}
+                                                                </span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </>)}
+                                            </div>
+                                        )
+                                    })()}
+                                </div>
+                            </div>
+                        </div>)}
+
+                        {activeTab === 'goals' && !dbLoaded && (
+                            <div style={{ display: 'flex', justifyContent: 'center', padding: '40px 0' }}>
+                                <div style={{
+                                    width: 24, height: 24, borderRadius: '50%',
+                                    border: '3px solid #f0f0f0', borderTopColor: '#EC8C17',
+                                    animation: 'spin 0.8s linear infinite',
+                                }} />
+                                <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+                            </div>
+                        )}
+                        {activeTab === 'goals' && dbLoaded && (() => {
+                            const sym = getCurrencySymbol()
+                            const today = new Date()
+                            today.setHours(0, 0, 0, 0)
+                            const todayStr = toLocalDate(today)
+
+                            const sortedEvents = [...events].filter(e => !e.removed).sort((a, b) => a.date.localeCompare(b.date))
+                            const futureEvts = sortedEvents.filter(e => e.date > todayStr)
+
+                            // End-of-year projected balance (from original balance through all events)
+                            let endOfYearBal = projectionBalance
+                            for (const evt of sortedEvents) {
+                                if (evt.editType === 'weeklySpend') endOfYearBal -= evt.amount
+                                else endOfYearBal += evt.type === 'income' ? evt.amount : -evt.amount
+                            }
+
+                            // End-of-term projected balance
+                            const currentTerm = terms.find(t => todayStr >= t.start && todayStr <= t.end)
+                            const nextTerm = terms.find(t => t.start > todayStr)
+                            const targetTerm = currentTerm || nextTerm
+                            let endOfTermBal = null
+                            if (targetTerm) {
+                                endOfTermBal = projectionBalance
+                                const termEndEvts = sortedEvents.filter(e => e.date <= targetTerm.end)
+                                for (const evt of termEndEvts) {
+                                    if (evt.editType === 'weeklySpend') endOfTermBal -= evt.amount
+                                    else endOfTermBal += evt.type === 'income' ? evt.amount : -evt.amount
+                                }
+                            }
+
+                            // Academic year progress based on term days (minus breaks)
+                            const countTermDays = (startStr, endStr) => {
+                                let total = 0
+                                for (const t of terms) {
+                                    const tStart = t.start > startStr ? t.start : startStr
+                                    const tEnd = t.end < endStr ? t.end : endStr
+                                    if (tStart > tEnd) continue
+                                    let termDays = daysBetween(tStart, tEnd) + 1
+                                    for (const brk of (t.breaks || [])) {
+                                        const bStart = brk.start > tStart ? brk.start : tStart
+                                        const bEnd = brk.end < tEnd ? brk.end : tEnd
+                                        if (bStart <= bEnd) termDays -= daysBetween(bStart, bEnd) + 1
+                                    }
+                                    total += Math.max(0, termDays)
+                                }
+                                return total
+                            }
+                            const lastTerm = terms.length > 0 ? terms[terms.length - 1] : null
+                            const firstTerm = terms.length > 0 ? terms[0] : null
+                            const ayStartStr = firstTerm ? firstTerm.start : toLocalDate(AY_START)
+                            const ayEndStr = lastTerm ? lastTerm.end : toLocalDate(AY_END)
+                            const totalTermDays = Math.max(1, countTermDays(ayStartStr, ayEndStr))
+                            const termDaysLeft = countTermDays(todayStr, ayEndStr)
+                            const termDaysElapsed = totalTermDays - termDaysLeft
+                            const yearProgress = Math.min(100, Math.max(0, Math.round((termDaysElapsed / totalTermDays) * 100)))
+
+                            // Upcoming events — always look ahead enough to find events
+                            const lookAheadDays = 90
+                            const inRange = new Date(today)
+                            inRange.setDate(inRange.getDate() + lookAheadDays)
+                            const inRangeStr = toLocalDate(inRange)
+                            const upcoming = sortedEvents.filter(e => e.date > todayStr && e.date <= inRangeStr && e.editType !== 'weeklySpend')
+                            const weeklySpendIn90 = sortedEvents.filter(e => e.date > todayStr && e.date <= inRangeStr && e.editType === 'weeklySpend').reduce((s, e) => s + e.amount, 0)
+                            const upcomingIncome = upcoming.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0)
+                            const upcomingExpense = upcoming.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0) + weeklySpendIn90
+
+                            // Upcoming payments and income (sorted by date)
+                            const upcomingPayments = upcoming.filter(e => e.type === 'expense').sort((a, b) => a.date.localeCompare(b.date))
+                            const upcomingIncomeList = upcoming.filter(e => e.type === 'income').sort((a, b) => a.date.localeCompare(b.date))
+
+                            // Income / expense split for donut
+                            const totalIn = yearlyIncome
+                            const totalOut = yearlyExpense + weeklySpendTotal
+                            const surplus = totalIn - totalOut
+
+                            const cardStyle = {
+                                background: '#fff', borderRadius: 14, padding: '16px 18px',
+                                marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                                border: '1px solid #f0f0f0',
+                            }
+                            const cardTitle = {
+                                fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+                                margin: '0 0 10px',
+                            }
+                            const bigNum = {
+                                fontSize: 28, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+                                margin: 0, lineHeight: 1.2,
+                            }
+                            const subText = {
+                                fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                color: '#888', margin: '4px 0 0',
+                            }
+
+                            const removeEvent = (evt) => {
+                                // One-off items: remove from source array directly (no removedEvents needed)
+                                if (evt.editType === 'oneOffIncome' || evt.editType === 'oneOffExpense') {
+                                    const dir = evt.editType === 'oneOffIncome' ? 'in' : 'out'
+                                    const updated = (formData.oneOffItems || []).filter(item => {
+                                        const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
+                                        return !(item.date === evt.date && (item.direction || 'out') === dir && amt === evt.amount)
+                                    })
+                                    updateField('oneOffItems', updated.length > 0 ? updated : [{ name: '', amount: '', date: '', direction: 'out' }])
+                                } else {
+                                    const key = `${evt.editType}:${evt.date}`
+                                    updateField('removedEvents', [...(formData.removedEvents || []), key])
+                                }
+                            }
+
+                            const renderEventRow = (evt, i, list, color) => (
+                                <div key={`${evt.editType}-${evt.date}-${i}`} style={{
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                    padding: '8px 0', borderBottom: i < list.length - 1 ? '1px solid #f5f5f5' : 'none',
+                                }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                            {evt.label}
+                                        </p>
+                                        <p style={{ margin: '2px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#aaa' }}>
+                                            {fmt(evt.date)}
+                                        </p>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <p style={{ margin: 0, fontSize: 16, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color }}>
+                                            {evt.type === 'income' ? '+' : '-'}{sym}{Math.round(evt.amount).toLocaleString()}
+                                        </p>
+                                        <button
+                                            onClick={() => removeEvent(evt)}
+                                            style={{
+                                                width: 24, height: 24, borderRadius: 6, border: 'none',
+                                                background: '#f5f5f5', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                padding: 0, flexShrink: 0,
+                                            }}
+                                        >
+                                            <Trash size={12} color="#999" />
+                                        </button>
+                                    </div>
+                                </div>
+                            )
 
                             return (
-                                <SourceRow
-                                    key={source.id}
-                                    source={source}
-                                    active={active}
-                                    yearlyAmount={yearly}
-                                    expanded={isExpanded}
-                                    onToggle={() => toggleIncomeSource(source.id)}
-                                    onExpandToggle={() => setExpandedSource(isExpanded ? null : source.id)}
-                                    scrollContainerRef={scrollRef}
-                                    formData={formData}
-                                    updateField={updateField}
-                                >
-                                    {source.id === 'maintenance_loan' && (
-                                        <CompactMaintenanceLoan formData={formData} updateField={updateField} />
+                                <div style={{ padding: '16px 16px 0', marginBottom: -120 }}>
+                                    {/* Next N Days */}
+                                    <div style={cardStyle}>
+                                        <p style={cardTitle}>Next {lookAheadDays} Days</p>
+                                        <div style={{ display: 'flex', gap: 12 }}>
+                                            <div style={{ flex: 1, background: '#f0faf9', borderRadius: 10, padding: '12px 14px' }}>
+                                                <p style={{ margin: 0, fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>Coming In</p>
+                                                <p style={{ margin: '4px 0 0', fontSize: 20, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>
+                                                    {sym}{Math.round(upcomingIncome).toLocaleString()}
+                                                </p>
+                                            </div>
+                                            <div style={{ flex: 1, background: '#fdf0f1', borderRadius: 10, padding: '12px 14px' }}>
+                                                <p style={{ margin: 0, fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Going Out</p>
+                                                <p style={{ margin: '4px 0 0', fontSize: 20, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                                    {sym}{Math.round(upcomingExpense).toLocaleString()}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <p style={{ ...subText, marginTop: 10 }}>
+                                            Net: <span style={{ color: upcomingIncome - upcomingExpense >= 0 ? '#147b75' : '#e06470', fontWeight: 700 }}>
+                                                {upcomingIncome - upcomingExpense >= 0 ? '+' : '-'}{sym}{Math.abs(Math.round(upcomingIncome - upcomingExpense)).toLocaleString()}
+                                            </span>
+                                        </p>
+                                    </div>
+
+                                    {/* Upcoming Transactions */}
+                                    {(upcomingPayments.length > 0 || upcomingIncomeList.length > 0) && (
+                                        <div ref={goalsTransCardRef} style={cardStyle}>
+                                            <p style={cardTitle}>Upcoming Transactions</p>
+                                            {(() => {
+                                                const combined = [...upcomingPayments, ...upcomingIncomeList].sort((a, b) => a.date.localeCompare(b.date))
+                                                const first3 = combined.slice(0, 3)
+                                                const extra = combined.slice(3, 10)
+                                                const measuredH = goalsMoreRef.current?.scrollHeight || 0
+                                                return (
+                                                    <>
+                                                        {first3.map((evt, i) => renderEventRow(evt, i, goalsShowMore ? combined.slice(0, 10) : first3, evt.type === 'income' ? '#147b75' : '#e06470'))}
+                                                        {extra.length > 0 && (
+                                                            <div
+                                                                ref={goalsMoreRef}
+                                                                style={{
+                                                                    maxHeight: goalsShowMore ? measuredH || 600 : 0,
+                                                                    opacity: goalsShowMore ? 1 : 0,
+                                                                    overflow: 'hidden',
+                                                                    transition: 'max-height 0.45s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease',
+                                                                }}
+                                                            >
+                                                                {extra.map((evt, i) => renderEventRow(evt, i + 3, combined.slice(0, 10), evt.type === 'income' ? '#147b75' : '#e06470'))}
+                                                            </div>
+                                                        )}
+                                                        {extra.length > 0 && (
+                                                            <button onClick={() => {
+                                                                if (goalsShowMore && goalsTransCardRef.current && scrollRef.current) {
+                                                                    const sc = scrollRef.current
+                                                                    const stickyHeader = sc.querySelector('[data-sticky-header]')
+                                                                    const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
+                                                                    const cardTop = goalsTransCardRef.current.getBoundingClientRect().top
+                                                                    const scTop = sc.getBoundingClientRect().top
+                                                                    const offset = cardTop - scTop - headerH + sc.scrollTop - 10
+                                                                    setTimeout(() => sc.scrollTo({ top: offset, behavior: 'smooth' }), 50)
+                                                                }
+                                                                setGoalsShowMore(!goalsShowMore)
+                                                            }} style={{
+                                                                width: '100%', border: 'none', background: 'none', cursor: 'pointer',
+                                                                padding: '10px 0 0', fontSize: 12, fontWeight: 700,
+                                                                fontFamily: 'Nunito, sans-serif', color: '#147b75',
+                                                            }}>
+                                                                {goalsShowMore ? 'Show less' : `Show more (${extra.length} more)`}
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                )
+                                            })()}
+                                        </div>
                                     )}
-                                    {source.id === 'bursary' && (
-                                        <BursaryStep compact
-                                            bursaryAmount={formData.bursaryAmount}
-                                            updateBursaryAmount={(val) => updateField('bursaryAmount', val)}
-                                            bursaryMonths={formData.bursaryMonths}
-                                            updateBursaryMonths={(val) => updateField('bursaryMonths', val)}
-                                            bursaryDates={formData.bursaryDates}
-                                            updateBursaryDates={(val) => updateField('bursaryDates', val)}
-                                            bursaryInstalmentAmounts={formData.bursaryInstalmentAmounts}
-                                            updateBursaryInstalmentAmounts={(val) => updateField('bursaryInstalmentAmounts', val)}
-                                        />
-                                    )}
-                                    {source.id === 'family_friends' && (
-                                        <FamilyFriendsStep compact
-                                            familyAmount={formData.familyAmount}
-                                            updateFamilyAmount={(val) => updateField('familyAmount', val)}
-                                            familyFrequency={formData.familyFrequency}
-                                            updateFamilyFrequency={(val) => updateField('familyFrequency', val)}
-                                            familyNextDate={formData.familyNextDate}
-                                            updateFamilyNextDate={(val) => updateField('familyNextDate', val)}
-                                            terms={formData.termDates?.terms || []}
-                                            familyTermDates={formData.familyTermDates}
-                                            updateFamilyTermDates={(val) => updateField('familyTermDates', val)}
-                                            familyQuarterlyDates={formData.familyQuarterlyDates}
-                                            updateFamilyQuarterlyDates={(val) => updateField('familyQuarterlyDates', val)}
-                                            familyVariesByTerm={formData.familyVariesByTerm}
-                                            updateFamilyVariesByTerm={(val) => updateField('familyVariesByTerm', val)}
-                                            familyNonTermAmount={formData.familyNonTermAmount}
-                                            updateFamilyNonTermAmount={(val) => updateField('familyNonTermAmount', val)}
-                                            familyAmountPeriod={formData.familyAmountPeriod}
-                                            updateFamilyAmountPeriod={(val) => updateField('familyAmountPeriod', val)}
-                                        />
-                                    )}
-                                    {source.id === 'work' && (
-                                        <WorkIncomeStep compact
-                                            workAmount={formData.workAmount}
-                                            updateWorkAmount={(val) => updateField('workAmount', val)}
-                                            workFrequency={formData.workFrequency}
-                                            updateWorkFrequency={(val) => updateField('workFrequency', val)}
-                                            workVariesByTerm={formData.workVariesByTerm}
-                                            updateWorkVariesByTerm={(val) => updateField('workVariesByTerm', val)}
-                                            workNonTermAmount={formData.workNonTermAmount}
-                                            updateWorkNonTermAmount={(val) => updateField('workNonTermAmount', val)}
-                                            workEntryMode={formData.workEntryMode}
-                                            updateWorkEntryMode={(val) => updateField('workEntryMode', val)}
-                                            workNextDate={formData.workNextDate}
-                                            updateWorkNextDate={(val) => updateField('workNextDate', val)}
-                                            terms={formData.termDates?.terms || []}
-                                            workTermDates={formData.workTermDates}
-                                            updateWorkTermDates={(val) => updateField('workTermDates', val)}
-                                            workQuarterlyDates={formData.workQuarterlyDates}
-                                            updateWorkQuarterlyDates={(val) => updateField('workQuarterlyDates', val)}
-                                            workAmountPeriod={formData.workAmountPeriod}
-                                            updateWorkAmountPeriod={(val) => updateField('workAmountPeriod', val)}
-                                        />
-                                    )}
-                                    {source.id === 'other_income' && (
-                                        <OtherIncomeStep compact
-                                            otherIncomeAmount={formData.otherIncomeAmount}
-                                            updateOtherIncomeAmount={(val) => updateField('otherIncomeAmount', val)}
-                                            otherIncomeFrequency={formData.otherIncomeFrequency}
-                                            updateOtherIncomeFrequency={(val) => updateField('otherIncomeFrequency', val)}
-                                            otherIncomeLabel={formData.otherIncomeLabel}
-                                            updateOtherIncomeLabel={(val) => updateField('otherIncomeLabel', val)}
-                                            otherIncomeNextDate={formData.otherIncomeNextDate}
-                                            updateOtherIncomeNextDate={(val) => updateField('otherIncomeNextDate', val)}
-                                            terms={formData.termDates?.terms || []}
-                                            otherIncomeTermDates={formData.otherIncomeTermDates}
-                                            updateOtherIncomeTermDates={(val) => updateField('otherIncomeTermDates', val)}
-                                            otherIncomeVariesByTerm={formData.otherIncomeVariesByTerm}
-                                            updateOtherIncomeVariesByTerm={(val) => updateField('otherIncomeVariesByTerm', val)}
-                                            otherIncomeNonTermAmount={formData.otherIncomeNonTermAmount}
-                                            updateOtherIncomeNonTermAmount={(val) => updateField('otherIncomeNonTermAmount', val)}
-                                            otherIncomeEntryMode={formData.otherIncomeEntryMode}
-                                            updateOtherIncomeEntryMode={(val) => updateField('otherIncomeEntryMode', val)}
-                                            otherIncomeAmountPeriod={formData.otherIncomeAmountPeriod}
-                                            updateOtherIncomeAmountPeriod={(val) => updateField('otherIncomeAmountPeriod', val)}
-                                            otherIncomeQuarterlyDates={formData.otherIncomeQuarterlyDates}
-                                            updateOtherIncomeQuarterlyDates={(val) => updateField('otherIncomeQuarterlyDates', val)}
-                                        />
-                                    )}
-                                </SourceRow>
+
+                                    {/* Income vs Expenses ring */}
+                                    <div style={cardStyle}>
+                                        <p style={cardTitle}>Yearly Income vs Expenses</p>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                                            <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
+                                                <svg viewBox="0 0 36 36" style={{ width: 80, height: 80, transform: 'rotate(-90deg)' }}>
+                                                    <circle cx="18" cy="18" r="14" fill="none" stroke="#f0f0f0" strokeWidth="4" />
+                                                    {totalIn + totalOut > 0 && (<>
+                                                        <circle cx="18" cy="18" r="14" fill="none" stroke="#147b75"
+                                                            strokeWidth="4" strokeLinecap="round"
+                                                            strokeDasharray={`${(totalIn / (totalIn + totalOut)) * 88} 88`}
+                                                        />
+                                                        <circle cx="18" cy="18" r="14" fill="none" stroke="#e06470"
+                                                            strokeWidth="4" strokeLinecap="round"
+                                                            strokeDasharray={`${(totalOut / (totalIn + totalOut)) * 88} 88`}
+                                                            strokeDashoffset={`-${(totalIn / (totalIn + totalOut)) * 88}`}
+                                                        />
+                                                    </>)}
+                                                </svg>
+                                                <div style={{
+                                                    position: 'absolute', inset: 0, display: 'flex',
+                                                    alignItems: 'center', justifyContent: 'center',
+                                                }}>
+                                                    <span style={{
+                                                        fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+                                                        color: surplus >= 0 ? '#147b75' : '#e06470',
+                                                    }}>
+                                                        {surplus >= 0 ? '+' : '-'}{sym}{Math.abs(Math.round(surplus)).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                                                    <div style={{ width: 10, height: 10, borderRadius: 3, background: '#147b75' }} />
+                                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
+                                                        Income: {sym}{Math.round(totalIn).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                    <div style={{ width: 10, height: 10, borderRadius: 3, background: '#e06470' }} />
+                                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
+                                                        Expenses: {sym}{Math.round(totalOut).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Balance Tracking — actual vs predicted */}
+                                    {balanceHistory.length > 1 && (() => {
+                                        // For each history entry, calculate what predicted balance was on that date
+                                        // predicted(date) = today's balance - sum of events between date and today
+                                        const sorted = [...balanceHistory]
+                                            .sort((a, b) => a.recorded_date.localeCompare(b.recorded_date))
+                                        // Dedupe by date
+                                        const byDate = new Map()
+                                        for (const bh of sorted) {
+                                            byDate.set(bh.recorded_date, bh)
+                                        }
+                                        const unique = [...byDate.values()]
+                                        // Include entries up to and including today
+                                        const pastEntries = unique.filter(bh => bh.recorded_date <= todayStr)
+                                        if (pastEntries.length === 0) return null
+
+                                        // Green line value at each history date
+                                        // Green line is anchored at projBal at today, rewind events to get past values
+                                        const allPastEvts = sortedEvents.filter(e => e.date <= todayStr)
+                                        const trackingData = pastEntries.map(bh => {
+                                            // Events between this date and today — undo them from projBal
+                                            const eventsBetween = allPastEvts.filter(e => e.date > bh.recorded_date)
+                                            let predicted = projBal
+                                            for (const evt of eventsBetween) {
+                                                // Reverse: undo income (subtract), undo expense (add)
+                                                if (evt.type === 'income') predicted -= evt.amount
+                                                else predicted += evt.amount
+                                            }
+                                            const actual = Number(bh.balance)
+                                            const diff = actual - predicted
+                                            return {
+                                                date: bh.recorded_date,
+                                                actual,
+                                                predicted: Math.round(predicted),
+                                                diff: Math.round(diff),
+                                            }
+                                        })
+
+                                        // Show last 5 entries
+                                        const recent = trackingData.slice(-5)
+                                        // Overall trend: compare most recent diff to earliest diff
+                                        const latestDiff = recent[recent.length - 1].diff
+                                        const earliestDiff = recent[0].diff
+                                        const trendImproving = latestDiff > earliestDiff
+
+                                        return (
+                                            <div style={cardStyle}>
+                                                <p style={cardTitle}>Balance Tracking</p>
+                                                <p style={{ ...subText, margin: '0 0 12px', fontSize: 12 }}>
+                                                    Actual balance vs predicted
+                                                </p>
+                                                {recent.map((entry, i) => {
+                                                    const dateObj = new Date(entry.date + 'T00:00:00')
+                                                    const dateLabel = `${dateObj.getDate()} ${dateObj.toLocaleDateString('en-GB', { month: 'short' })}`
+                                                    const isAhead = entry.diff >= 0
+                                                    return (
+                                                        <div key={entry.date} style={{
+                                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                            padding: '7px 0',
+                                                            borderBottom: i < recent.length - 1 ? '1px solid #f5f5f5' : 'none',
+                                                        }}>
+                                                            <div>
+                                                                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                                    {dateLabel}
+                                                                </p>
+                                                                <p style={{ margin: '1px 0 0', fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#aaa' }}>
+                                                                    Actual: {sym}{entry.actual.toLocaleString()} · Predicted: {sym}{entry.predicted.toLocaleString()}
+                                                                </p>
+                                                            </div>
+                                                            <span style={{
+                                                                fontSize: 13, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+                                                                color: isAhead ? '#147b75' : '#e06470',
+                                                                whiteSpace: 'nowrap',
+                                                            }}>
+                                                                {isAhead ? '+' : '-'}{sym}{Math.abs(entry.diff).toLocaleString()}
+                                                            </span>
+                                                        </div>
+                                                    )
+                                                })}
+                                                <div style={{
+                                                    marginTop: 10, padding: '8px 12px', borderRadius: 8,
+                                                    background: latestDiff >= 0 ? '#f0faf9' : '#fdf0f1',
+                                                }}>
+                                                    <p style={{
+                                                        margin: 0, fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                                        color: latestDiff >= 0 ? '#147b75' : '#e06470',
+                                                        textAlign: 'center',
+                                                    }}>
+                                                        Currently {sym}{Math.abs(latestDiff).toLocaleString()} {latestDiff >= 0 ? 'ahead of' : 'behind'} predicted
+                                                        {recent.length > 1 && (trendImproving ? ' · Improving' : ' · Declining')}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )
+                                    })()}
+
+                                    {/* Academic Year Progress */}
+                                    <div style={cardStyle}>
+                                        <p style={cardTitle}>Academic Year Progress</p>
+                                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                                            <p style={{ ...bigNum, fontSize: 32, color: '#333' }}>{yearProgress}%</p>
+                                            <p style={{ ...subText, margin: 0 }}>{termDaysLeft} term days left</p>
+                                        </div>
+                                        <div style={{
+                                            marginTop: 12, height: 8, borderRadius: 4,
+                                            background: '#f0f0f0', overflow: 'hidden',
+                                        }}>
+                                            <div style={{
+                                                height: '100%', borderRadius: 4,
+                                                width: `${yearProgress}%`,
+                                                background: 'linear-gradient(90deg, #147b75, #1ca69e)',
+                                                transition: 'width 0.6s ease',
+                                            }} />
+                                        </div>
+                                    </div>
+
+                                    {/* Projected Balances */}
+                                    <div style={{ display: 'flex', gap: 12 }}>
+                                        {endOfTermBal !== null && targetTerm && (
+                                            <div style={{ ...cardStyle, flex: 1 }}>
+                                                <p style={cardTitle}>End of {currentTerm ? 'Term' : 'Next Term'}</p>
+                                                <p style={{ ...bigNum, fontSize: 22, color: endOfTermBal >= 0 ? '#147b75' : '#e06470' }}>
+                                                    {endOfTermBal < 0 ? '-' : ''}{sym}{Math.abs(Math.round(endOfTermBal)).toLocaleString()}
+                                                </p>
+                                                <p style={{ ...subText, fontSize: 11 }}>
+                                                    {currentTerm ? `${daysBetween(todayStr, currentTerm.end)} days left` : fmt(targetTerm.end)}
+                                                </p>
+                                            </div>
+                                        )}
+                                        <div style={{ ...cardStyle, flex: 1 }}>
+                                            <p style={cardTitle}>End of Year</p>
+                                            <p style={{ ...bigNum, fontSize: 22, color: endOfYearBal >= 0 ? '#147b75' : '#e06470' }}>
+                                                {endOfYearBal < 0 ? '-' : ''}{sym}{Math.abs(Math.round(endOfYearBal)).toLocaleString()}
+                                            </p>
+                                            <p style={{ ...subText, fontSize: 11 }}>{termDaysLeft} term days left</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Zero balance & overdraft breach warnings */}
+                                    {(() => {
+                                        // Walk future events from projection balance (consistent with graph)
+                                        let bal = projectionBalance
+                                        let zeroDate = null
+                                        let overdraftDate = null
+                                        const od = overdraftNum || 0
+
+                                        for (const evt of futureEvts) {
+                                            if (evt.editType === 'weeklySpend') bal -= evt.amount
+                                            else bal += evt.type === 'income' ? evt.amount : -evt.amount
+                                            if (bal <= 0 && !zeroDate) zeroDate = evt.date
+                                            if (od > 0 && bal < -od && !overdraftDate) overdraftDate = evt.date
+                                        }
+
+                                        if (!zeroDate && !overdraftDate) return null
+
+                                        const daysUntil = (dateStr) => daysBetween(todayStr, dateStr)
+
+                                        return (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                                                {zeroDate && (
+                                                    <div style={{ ...cardStyle, background: '#fffaf0', border: '1px solid #f5e6cc' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                                            <div style={{
+                                                                width: 28, height: 28, borderRadius: 8,
+                                                                background: '#EC8C17', display: 'flex',
+                                                                alignItems: 'center', justifyContent: 'center',
+                                                            }}>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                                                    <line x1="12" y1="9" x2="12" y2="13" />
+                                                                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                                                                </svg>
+                                                            </div>
+                                                            <p style={{ ...cardTitle, margin: 0, color: '#EC8C17' }}>Zero Balance</p>
+                                                        </div>
+                                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                            Projected to hit {sym}0 on {fmt(zeroDate)}
+                                                        </p>
+                                                        <p style={{ ...subText, fontSize: 12, marginTop: 4 }}>
+                                                            {daysUntil(zeroDate)} days from now
+                                                        </p>
+                                                    </div>
+                                                )}
+                                                {overdraftDate && (
+                                                    <div style={{ ...cardStyle, background: '#fdf0f1', border: '1px solid #f5cccc' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                                            <div style={{
+                                                                width: 28, height: 28, borderRadius: 8,
+                                                                background: '#e06470', display: 'flex',
+                                                                alignItems: 'center', justifyContent: 'center',
+                                                            }}>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <circle cx="12" cy="12" r="10" />
+                                                                    <line x1="15" y1="9" x2="9" y2="15" />
+                                                                    <line x1="9" y1="9" x2="15" y2="15" />
+                                                                </svg>
+                                                            </div>
+                                                            <p style={{ ...cardTitle, margin: 0, color: '#e06470' }}>Overdraft Limit</p>
+                                                        </div>
+                                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                            Projected to exceed {sym}{Math.round(od).toLocaleString()} overdraft on {fmt(overdraftDate)}
+                                                        </p>
+                                                        <p style={{ ...subText, fontSize: 12, marginTop: 4 }}>
+                                                            {daysUntil(overdraftDate)} days from now
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })()}
+                                </div>
                             )
-                        })}
+                        })()}
+
+                        {activeTab === 'variable' && (
+                            <div style={{ padding: '12px 16px 0' }}>
+                                <WeeklySpendStep compact
+                                    weeklySpend={formData.weeklySpend}
+                                    updateWeeklySpend={(val) => updateField('weeklySpend', val)}
+                                    weeklySpendNonTerm={formData.weeklySpendNonTerm}
+                                    updateWeeklySpendNonTerm={(val) => updateField('weeklySpendNonTerm', val)}
+                                    weeklySpendVariesByTerm={formData.weeklySpendVariesByTerm}
+                                    updateWeeklySpendVariesByTerm={(val) => updateField('weeklySpendVariesByTerm', val)}
+                                />
+                                <div style={{ marginTop: 20 }}>
+                                    <p style={{
+                                        fontSize: 16, fontWeight: 700,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        color: '#000', margin: '0 0 12px',
+                                    }}>One-off Items</p>
+                                    <OneOffItemsStep compact
+                                        items={formData.oneOffItems || [{ name: '', amount: '', date: '', direction: 'out' }]}
+                                        updateItems={(val) => updateField('oneOffItems', val)}
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+
                     </div>
-                </div>
-
-                {/* Regular Expenses Section */}
-                <div style={{ padding: '20px 16px 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                        <ArrowDownCircle />
-                        <span style={{
-                            fontSize: 16, fontWeight: 700, color: '#000',
-                        }}>Regular Expenses</span>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {EXPENSE_SOURCES.map(source => {
-                            const active = (formData.expenseSources || []).includes(source.id)
-                            const yearly = getSourceYearly(expenseEditTypeMap[source.id] || [])
-
-                            return (
-                                <SourceRow
-                                    key={source.id}
-                                    source={source}
-                                    active={active}
-                                    yearlyAmount={yearly}
-                                    expanded={expandedSource === source.id}
-                                    onToggle={() => toggleExpenseSource(source.id)}
-                                    onExpandToggle={() => setExpandedSource(expandedSource === source.id ? null : source.id)}
-                                    scrollContainerRef={scrollRef}
-                                    formData={formData}
-                                    updateField={updateField}
-                                >
-                                    {source.id === 'rent' && (
-                                        <RentStep compact
-                                            rentAmount={formData.rentAmount}
-                                            updateRentAmount={(val) => updateField('rentAmount', val)}
-                                            rentFrequency={formData.rentFrequency}
-                                            updateRentFrequency={(val) => updateField('rentFrequency', val)}
-                                            rentNextDate={formData.rentNextDate}
-                                            updateRentNextDate={(val) => updateField('rentNextDate', val)}
-                                            rentEntryMode={formData.rentEntryMode}
-                                            updateRentEntryMode={(val) => updateField('rentEntryMode', val)}
-                                            terms={formData.termDates?.terms || []}
-                                            rentTermDates={formData.rentTermDates}
-                                            updateRentTermDates={(val) => updateField('rentTermDates', val)}
-                                            rentQuarterlyDates={formData.rentQuarterlyDates}
-                                            updateRentQuarterlyDates={(val) => updateField('rentQuarterlyDates', val)}
-                                            rentAmountPeriod={formData.rentAmountPeriod}
-                                            updateRentAmountPeriod={(val) => updateField('rentAmountPeriod', val)}
-                                        />
-                                    )}
-                                    {source.id === 'bills' && (
-                                        <BillsStep compact
-                                            billsAmount={formData.billsAmount}
-                                            updateBillsAmount={(val) => updateField('billsAmount', val)}
-                                            billsFrequency={formData.billsFrequency}
-                                            updateBillsFrequency={(val) => updateField('billsFrequency', val)}
-                                            billsEntryMode={formData.billsEntryMode}
-                                            updateBillsEntryMode={(val) => updateField('billsEntryMode', val)}
-                                            billsNextDate={formData.billsNextDate}
-                                            updateBillsNextDate={(val) => updateField('billsNextDate', val)}
-                                            terms={formData.termDates?.terms || []}
-                                            billsTermDates={formData.billsTermDates}
-                                            updateBillsTermDates={(val) => updateField('billsTermDates', val)}
-                                            billsAmountPeriod={formData.billsAmountPeriod}
-                                            updateBillsAmountPeriod={(val) => updateField('billsAmountPeriod', val)}
-                                            billsQuarterlyDates={formData.billsQuarterlyDates}
-                                            updateBillsQuarterlyDates={(val) => updateField('billsQuarterlyDates', val)}
-                                        />
-                                    )}
-                                    {source.id === 'uni_fees' && (
-                                        <UniFeesStep compact
-                                            uniFeesAmount={formData.uniFeesAmount}
-                                            updateUniFeesAmount={(val) => updateField('uniFeesAmount', val)}
-                                            uniFeesFrequency={formData.uniFeesFrequency}
-                                            updateUniFeesFrequency={(val) => updateField('uniFeesFrequency', val)}
-                                            uniFeesEntryMode={formData.uniFeesEntryMode}
-                                            updateUniFeesEntryMode={(val) => updateField('uniFeesEntryMode', val)}
-                                            uniFeesNextDate={formData.uniFeesNextDate}
-                                            updateUniFeesNextDate={(val) => updateField('uniFeesNextDate', val)}
-                                            terms={formData.termDates?.terms || []}
-                                            uniFeesTermDates={formData.uniFeesTermDates || {}}
-                                            updateUniFeesTermDates={(val) => updateField('uniFeesTermDates', val)}
-                                            uniFeesAmountPeriod={formData.uniFeesAmountPeriod}
-                                            updateUniFeesAmountPeriod={(val) => updateField('uniFeesAmountPeriod', val)}
-                                            uniFeesQuarterlyDates={formData.uniFeesQuarterlyDates}
-                                            updateUniFeesQuarterlyDates={(val) => updateField('uniFeesQuarterlyDates', val)}
-                                        />
-                                    )}
-                                    {source.id === 'savings_investments' && (
-                                        <SavingsInvestmentsStep compact
-                                            savingsInvAmount={formData.savingsInvAmount}
-                                            updateSavingsInvAmount={(val) => updateField('savingsInvAmount', val)}
-                                            savingsInvFrequency={formData.savingsInvFrequency}
-                                            updateSavingsInvFrequency={(val) => updateField('savingsInvFrequency', val)}
-                                            savingsInvNextDate={formData.savingsInvNextDate}
-                                            updateSavingsInvNextDate={(val) => updateField('savingsInvNextDate', val)}
-                                            savingsInvEntryMode={formData.savingsInvEntryMode}
-                                            updateSavingsInvEntryMode={(val) => updateField('savingsInvEntryMode', val)}
-                                            terms={formData.termDates?.terms || []}
-                                            savingsInvTermDates={formData.savingsInvTermDates || {}}
-                                            updateSavingsInvTermDates={(val) => updateField('savingsInvTermDates', val)}
-                                            savingsInvQuarterlyDates={formData.savingsInvQuarterlyDates || {}}
-                                            updateSavingsInvQuarterlyDates={(val) => updateField('savingsInvQuarterlyDates', val)}
-                                            savingsInvAmountPeriod={formData.savingsInvAmountPeriod}
-                                            updateSavingsInvAmountPeriod={(val) => updateField('savingsInvAmountPeriod', val)}
-                                        />
-                                    )}
-                                </SourceRow>
-                            )
-                        })}
-                    </div>
-                </div>
-                {/* Spacer so expanded dropdown can scroll to top */}
-                {expandedSource && <div style={{ height: '10vh' }} />}
-                </>)}
-
-                {activeTab === 'goals' && (
-                <div style={{ padding: '40px 16px', textAlign: 'center' }}>
-                    <p style={{
-                        fontSize: 15, fontWeight: 600,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#9f9c9c',
-                    }}>Goals coming soon</p>
-                </div>
-                )}
-
-                {activeTab === 'variable' && (
-                <div style={{ padding: '20px 16px 0' }}>
-                    <WeeklySpendStep compact
-                        weeklySpend={formData.weeklySpend}
-                        updateWeeklySpend={(val) => updateField('weeklySpend', val)}
-                        weeklySpendNonTerm={formData.weeklySpendNonTerm}
-                        updateWeeklySpendNonTerm={(val) => updateField('weeklySpendNonTerm', val)}
-                        weeklySpendVariesByTerm={formData.weeklySpendVariesByTerm}
-                        updateWeeklySpendVariesByTerm={(val) => updateField('weeklySpendVariesByTerm', val)}
-                    />
-                    <div style={{ marginTop: 20 }}>
-                        <p style={{
-                            fontSize: 16, fontWeight: 700,
-                            fontFamily: 'Nunito, sans-serif',
-                            color: '#000', margin: '0 0 12px',
-                        }}>One-off Items</p>
-                        <OneOffItemsStep compact
-                            items={formData.oneOffItems || [{ name: '', amount: '', date: '', direction: 'out' }]}
-                            updateItems={(val) => updateField('oneOffItems', val)}
-                        />
-                    </div>
-                </div>
-                )}
-
-
                 </div>
             </div>
-
-            {/* Balance editor modal */}
-            {showBalanceEditor && (
-                <BalanceEditor
-                    value={formData.balance}
-                    onSave={handleBalanceSave}
-                    onCancel={() => setShowBalanceEditor(false)}
-                />
-            )}
 
             {/* Event edit popup */}
             {editingEvent && (() => {
                 const isIncome = editingEvent.type === 'income'
                 const color = isIncome ? '#147b75' : '#e06470'
                 const w = 140
+                const h = editingEvent.removed ? 60 : 80
                 const left = Math.max(8, Math.min(editingEvent.clickX - w / 2, window.innerWidth - w - 8))
-                const top = editingEvent.clickY + 12
+                const showBelow = editingEvent.clickY < h + 20
+                const top = showBelow ? editingEvent.clickY + 14 : editingEvent.clickY - h - 5
                 return (
                     <>
                         <div
@@ -1728,7 +3397,7 @@ export default function Dashboard() {
                                 display: 'block',
                                 marginBottom: 1,
                             }}>
-                                {editingEvent.sublabel}{editingEvent.date ? ` · ${new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}
+                                {editingEvent.label}{editingEvent.sublabel ? ` · ${editingEvent.sublabel}` : ''}{editingEvent.date ? ` · ${new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}
                             </span>
                             {!editingEvent.removed && editingEvent.balanceAfter != null && (
                                 <span style={{
@@ -1739,7 +3408,7 @@ export default function Dashboard() {
                                     display: 'block',
                                     marginBottom: 3,
                                 }}>
-                                    New balance: £{Math.round(editingEvent.balanceAfter).toLocaleString()}
+                                    New projected balance: {getCurrencySymbol()}{Math.round(editingEvent.balanceAfter).toLocaleString()}
                                 </span>
                             )}
                             {editingEvent.removed ? (
@@ -1759,99 +3428,267 @@ export default function Dashboard() {
                                     <span style={{ fontSize: 9, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Restore</span>
                                 </button>
                             ) : (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                                    <div style={{
-                                        display: 'flex', alignItems: 'center', flex: 1,
-                                        background: '#f5f5f5', borderRadius: 5,
-                                        padding: '0 6px', height: 24, gap: 2,
-                                    }}>
-                                        <span style={{
-                                            fontSize: 11, fontWeight: 600,
-                                            color: '#aaa', fontFamily: 'Nunito, sans-serif',
-                                        }}>£</span>
-                                        <input
-                                            type="text"
-                                            inputMode="decimal"
-                                            value={formatDisplay(editAmount)}
-                                            onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                                            ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
-                                            style={{
-                                                flex: 1, border: 'none',
-                                                background: 'transparent',
-                                                fontSize: 11, fontWeight: 700,
-                                                fontFamily: 'Nunito, sans-serif',
-                                                color: '#000', outline: 'none', padding: 0,
-                                                width: 0, minWidth: 0,
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', flex: 1,
+                                            background: '#f5f5f5', borderRadius: 5,
+                                            padding: '0 6px', height: 24, gap: 2,
+                                        }}>
+                                            <span style={{
+                                                fontSize: 11, fontWeight: 600,
+                                                color: '#aaa', fontFamily: 'Nunito, sans-serif',
+                                            }}>{getCurrencySymbol()}</span>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={formatDisplay(editAmount)}
+                                                onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
+                                                style={{
+                                                    flex: 1, border: 'none',
+                                                    background: 'transparent',
+                                                    fontSize: 11, fontWeight: 700,
+                                                    fontFamily: 'Nunito, sans-serif',
+                                                    color: '#000', outline: 'none', padding: 0,
+                                                    width: 0, minWidth: 0,
+                                                }}
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                const val = editAmount.replace(/[^0-9.]/g, '')
+                                                if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
+                                                    updateField('instalmentAmounts', {
+                                                        ...(formData.instalmentAmounts || {}),
+                                                        [editingEvent.editMonth]: val,
+                                                    })
+                                                } else if (editingEvent.editType === 'bursary' && editingEvent.editMonth) {
+                                                    updateField('bursaryInstalmentAmounts', {
+                                                        ...(formData.bursaryInstalmentAmounts || {}),
+                                                        [editingEvent.editMonth]: val,
+                                                    })
+                                                } else if (editingEvent.editType === 'family') {
+                                                    updateField('familyAmount', val)
+                                                } else if (editingEvent.editType === 'otherIncome') {
+                                                    updateField('otherIncomeAmount', val)
+                                                } else if (editingEvent.editType === 'rent') {
+                                                    updateField('rentAmount', val)
+                                                } else if (editingEvent.editType === 'bills') {
+                                                    updateField('billsAmount', val)
+                                                } else if (editingEvent.editType === 'uniFees') {
+                                                    updateField('uniFeesAmount', val)
+                                                } else if (editingEvent.editType === 'savingsInv') {
+                                                    updateField('savingsInvAmount', val)
+                                                } else if (editingEvent.editType === 'work') {
+                                                    updateField('workAmount', val)
+                                                }
+                                                setEditingEvent(null)
                                             }}
-                                        />
+                                            style={{
+                                                width: 24, height: 24,
+                                                border: 'none', borderRadius: 5,
+                                                background: color,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                cursor: 'pointer', flexShrink: 0,
+                                            }}
+                                        >
+                                            <svg width="10" height="7" viewBox="0 0 14 10" fill="none">
+                                                <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </button>
                                     </div>
-                                    <button
-                                        onClick={() => {
-                                            const val = editAmount.replace(/[^0-9.]/g, '')
-                                            if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
-                                                updateField('instalmentAmounts', {
-                                                    ...(formData.instalmentAmounts || {}),
-                                                    [editingEvent.editMonth]: val,
-                                                })
-                                            } else if (editingEvent.editType === 'bursary' && editingEvent.editMonth) {
-                                                updateField('bursaryInstalmentAmounts', {
-                                                    ...(formData.bursaryInstalmentAmounts || {}),
-                                                    [editingEvent.editMonth]: val,
-                                                })
-                                            } else if (editingEvent.editType === 'family') {
-                                                updateField('familyAmount', val)
-                                            } else if (editingEvent.editType === 'otherIncome') {
-                                                updateField('otherIncomeAmount', val)
-                                            } else if (editingEvent.editType === 'rent') {
-                                                updateField('rentAmount', val)
-                                            } else if (editingEvent.editType === 'bills') {
-                                                updateField('billsAmount', val)
-                                            } else if (editingEvent.editType === 'uniFees') {
-                                                updateField('uniFeesAmount', val)
-                                            } else if (editingEvent.editType === 'savingsInv') {
-                                                updateField('savingsInvAmount', val)
-                                            } else if (editingEvent.editType === 'work') {
-                                                updateField('workAmount', val)
-                                            }
-                                            setEditingEvent(null)
-                                        }}
-                                        style={{
-                                            width: 24, height: 24,
-                                            border: 'none', borderRadius: 5,
-                                            background: color,
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            cursor: 'pointer', flexShrink: 0,
-                                        }}
-                                    >
-                                        <svg width="10" height="7" viewBox="0 0 14 10" fill="none">
-                                            <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                        </svg>
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            const key = `${editingEvent.editType}:${editingEvent.date}`
-                                            updateField('removedEvents', [...(formData.removedEvents || []), key])
-                                            setEditingEvent(null)
-                                        }}
-                                        style={{
-                                            width: 24, height: 24,
-                                            border: 'none', borderRadius: 5,
-                                            background: '#fee',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            cursor: 'pointer', flexShrink: 0,
-                                        }}
-                                    >
-                                        <svg width="11" height="12" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                            <polyline points="3 6 5 6 21 6" />
-                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                        </svg>
-                                    </button>
+                                    {(() => {
+                                        const isLoan = editingEvent.editType === 'loan' && editingEvent.editMonth
+                                        const isBursary = editingEvent.editType === 'bursary' && editingEvent.editMonth
+                                        if (isLoan || isBursary) {
+                                            const monthsKey = isLoan ? 'loanMonths' : 'bursaryMonths'
+                                            const defaultMonths = isLoan ? DEFAULT_LOAN_MONTHS : ['october', 'february', 'march']
+                                            const currentMonths = formData[monthsKey] || defaultMonths
+                                            if (currentMonths.length <= 0) return null
+                                            return (
+                                                <button
+                                                    onClick={() => {
+                                                        const month = editingEvent.editMonth
+                                                        const instKey = isLoan ? 'instalmentAmounts' : 'bursaryInstalmentAmounts'
+                                                        const datesKey = isLoan ? 'loanDates' : 'bursaryDates'
+                                                        setFormData(prev => {
+                                                            const newMonths = (prev[monthsKey] || defaultMonths).filter(m => m !== month)
+                                                            const newInst = { ...(prev[instKey] || {}) }; delete newInst[month]
+                                                            const newDates = { ...(prev[datesKey] || {}) }; delete newDates[month]
+                                                            return { ...prev, [monthsKey]: newMonths, [instKey]: newInst, [datesKey]: newDates }
+                                                        })
+                                                        setEditingEvent(null)
+                                                    }}
+                                                    style={{
+                                                        width: '100%', height: 18, border: 'none', borderRadius: 4,
+                                                        background: '#fee',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        cursor: 'pointer', gap: 4,
+                                                    }}
+                                                >
+                                                    <svg width="9" height="10" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <polyline points="3 6 5 6 21 6" />
+                                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                    </svg>
+                                                    <span style={{ fontSize: 8, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Remove instalment</span>
+                                                </button>
+                                            )
+                                        }
+                                        return (
+                                            <button
+                                                onClick={() => {
+                                                    if (editingEvent.editType === 'oneOffIncome' || editingEvent.editType === 'oneOffExpense') {
+                                                        const dir = editingEvent.editType === 'oneOffIncome' ? 'in' : 'out'
+                                                        const updated = (formData.oneOffItems || []).filter(item => {
+                                                            const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
+                                                            return !(item.date === editingEvent.date && (item.direction || 'out') === dir && amt === editingEvent.amount)
+                                                        })
+                                                        updateField('oneOffItems', updated.length > 0 ? updated : [{ name: '', amount: '', date: '', direction: 'out' }])
+                                                    } else {
+                                                        const key = `${editingEvent.editType}:${editingEvent.date}`
+                                                        updateField('removedEvents', [...(formData.removedEvents || []), key])
+                                                    }
+                                                    setEditingEvent(null)
+                                                }}
+                                                style={{
+                                                    width: '100%', height: 18, border: 'none', borderRadius: 4,
+                                                    background: '#fee',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    cursor: 'pointer', gap: 4,
+                                                }}
+                                            >
+                                                <svg width="9" height="10" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <polyline points="3 6 5 6 21 6" />
+                                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                </svg>
+                                                <span style={{ fontSize: 8, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Delete payment</span>
+                                            </button>
+                                        )
+                                    })()}
                                 </div>
                             )}
                         </div>
                     </>
                 )
             })()}
+
+            {/* Overdraft edit popup */}
+            {editingOverdraft && (() => {
+                const w = 140
+                const left = Math.max(8, Math.min(editingOverdraft.clickX - w / 2, window.innerWidth - w - 8))
+                const top = editingOverdraft.clickY + 8
+                return (
+                    <>
+                        <div
+                            onClick={() => setEditingOverdraft(null)}
+                            style={{ position: 'fixed', inset: 0, zIndex: 100 }}
+                        />
+                        <div style={{
+                            position: 'fixed',
+                            left, top,
+                            width: w,
+                            background: '#fff',
+                            borderRadius: 8,
+                            zIndex: 101,
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                            padding: '5px 4px 4px',
+                        }}>
+                            <span style={{
+                                fontSize: 8, fontWeight: 600,
+                                fontFamily: 'Nunito, sans-serif',
+                                color: '#999',
+                                padding: '0 3px',
+                                display: 'block',
+                                marginBottom: 3,
+                            }}>
+                                Overdraft limit
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <div style={{
+                                    display: 'flex', alignItems: 'center',
+                                    background: '#f5f5f5', borderRadius: 5,
+                                    padding: '0 6px', height: 24, gap: 2,
+                                    width: 76,
+                                }}>
+                                    <span style={{
+                                        fontSize: 11, fontWeight: 600,
+                                        color: '#aaa', fontFamily: 'Nunito, sans-serif',
+                                    }}>{getCurrencySymbol()}</span>
+                                    <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        value={formatDisplay(editOverdraftAmount)}
+                                        onChange={(e) => setEditOverdraftAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                                        ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
+                                        style={{
+                                            flex: 1, border: 'none',
+                                            background: 'transparent',
+                                            fontSize: 11, fontWeight: 700,
+                                            fontFamily: 'Nunito, sans-serif',
+                                            color: '#000', outline: 'none', padding: 0,
+                                            width: 0, minWidth: 0,
+                                        }}
+                                    />
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setShowOverdraft(prev => {
+                                            localStorage.setItem('budgeup_show_overdraft', String(!prev))
+                                            return !prev
+                                        })
+                                    }}
+                                    style={{
+                                        width: 24, height: 24,
+                                        border: 'none', borderRadius: 5,
+                                        background: showOverdraft ? '#fdf0f1' : '#f5f5f5',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer', flexShrink: 0,
+                                    }}
+                                >
+                                    {showOverdraft
+                                        ? <Eye size={12} color="#e06470" />
+                                        : <EyeOff size={12} color="#aaa" />
+                                    }
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const val = editOverdraftAmount.replace(/[^0-9.]/g, '')
+                                        updateField('overdraft', val)
+                                        setEditingOverdraft(null)
+                                    }}
+                                    style={{
+                                        width: 24, height: 24,
+                                        border: 'none', borderRadius: 5,
+                                        background: '#e06470',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer', flexShrink: 0,
+                                    }}
+                                >
+                                    <svg width="10" height="7" viewBox="0 0 14 10" fill="none">
+                                        <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </>
+                )
+            })()}
+
+            {/* Balance toast */}
+            {balanceToast && (
+                <div style={{
+                    position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)',
+                    background: '#1a1a1a', color: '#fff',
+                    padding: '10px 20px', borderRadius: 12,
+                    fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                    zIndex: 1100, whiteSpace: 'nowrap',
+                    animation: 'toastIn 0.25s ease',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                }}>
+                    {balanceToast}
+                </div>
+            )}
         </div>
     )
 }

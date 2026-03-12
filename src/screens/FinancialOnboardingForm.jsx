@@ -1,8 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { getCurrencySymbol } from '../lib/settings'
 import { Button, Input, Modal, Radio, Typography, message } from 'antd'
 import StepProgress from '../components/StepProgress'
 import NativeSelect from '../components/NativeSelect'
 import universityIllustration from '../assets/university-illustration.svg'
+import incomeLoan from '../assets/income-loan.svg'
+import incomeFamily from '../assets/income-friends.svg'
+import incomeWork from '../assets/income-work.svg'
+import iconOtherIncome from '../assets/icon-other-income.svg'
+import expenseRent from '../assets/expense-rent.svg'
+import expenseBills from '../assets/expense-bills.svg'
+import expenseUnifees from '../assets/expense-unifees.svg'
+import expenseSavings from '../assets/expense-savings.svg'
+import iconOtherExpense from '../assets/icon-other-expense.svg'
+import incomeBursary from '../assets/income-family.svg'
+import variableWeeklySpend from '../assets/variable-weekly-spend.svg'
+import variableOneOff from '../assets/variable-one-off.svg'
 import TermDatesStep from './TermDatesStep'
 import TermGraph from '../components/TermGraph'
 import BankBalanceStep from './BankBalanceStep'
@@ -51,6 +64,9 @@ const STORAGE_KEY = 'budgeup_onboarding_state'
 
 /* ---------- HELPERS ---------- */
 
+// Use local date to avoid UTC timezone shift (BST → dates shift back 1 day with toISOString)
+const toLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
 const formatMoney = raw => {
     const cleaned = raw.replace(/[^0-9.]/g, '')
     const parts = cleaned.split('.')
@@ -58,6 +74,13 @@ const formatMoney = raw => {
     const formatted = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
     return parts.length > 1 ? `${formatted}.${parts[1]}` : formatted
 }
+
+const makeOtherInstance = (prefix) => ({
+    id: `${prefix}_${Date.now()}`,
+    amount: '', frequency: 'monthly', amountPeriod: 'monthly', label: '',
+    nextDate: null, termDates: {}, quarterlyDates: {},
+    variesByTerm: false, nonTermAmount: '',
+})
 
 /* ---------- GRAPH EVENT HELPERS ---------- */
 
@@ -87,7 +110,7 @@ function generateRentDates(frequency, nextDate, formData = {}) {
         while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
         while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
         while (d <= ayEnd) {
-            dates.push(d.toISOString().split('T')[0])
+            dates.push(toLocalDate(d))
             d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
         }
         return dates
@@ -108,10 +131,12 @@ function generateRentDates(frequency, nextDate, formData = {}) {
         return dates
     }
 
-    // Quarterly: use exact dates if provided, otherwise generate
-    if (frequency === 'quarterly' && formData.rentQuarterlyDates) {
-        const qDates = formData.rentQuarterlyDates
-        for (const date of Object.values(qDates)) {
+    // Quarterly: use exact dates if provided, otherwise use default quarterly dates
+    if (frequency === 'quarterly') {
+        const qDates = formData.rentQuarterlyDates || {}
+        const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+        for (let i = 0; i < 4; i++) {
+            const date = qDates[i] || QD[i]
             if (!date) continue
             const d = new Date(date + 'T00:00:00')
             if (d >= ayStart && d <= ayEnd) {
@@ -122,22 +147,17 @@ function generateRentDates(frequency, nextDate, formData = {}) {
         return dates
     }
 
-    // Monthly / quarterly fallback — start from Sept 2025 or next date
+    // Monthly / quarterly — use nextDate only for day-of-month, generate across full academic year
     let current = nextDate ? new Date(nextDate + 'T00:00:00') : new Date(2025, 8, 1)
-    const maxEvents = 12
-    let count = 0
-    while (current <= ayEnd && count < maxEvents) {
-        if (current >= ayStart) {
-            dates.push(current.toISOString().split('T')[0])
-            count++
-        }
-        switch (frequency) {
-            case 'monthly':
-                current = new Date(current.getFullYear(), current.getMonth() + 1, current.getDate()); break
-            case 'quarterly':
-                current = new Date(current.getFullYear(), current.getMonth() + 3, current.getDate()); break
-            default: return dates
-        }
+    const dom = current.getDate()
+    const step = frequency === 'quarterly' ? 3 : 1
+    // Backtrack to before ayStart, preserving day-of-month
+    while (current > ayStart) current = new Date(current.getFullYear(), current.getMonth() - step, dom)
+    // Advance to first occurrence on or after ayStart
+    while (current < ayStart) current = new Date(current.getFullYear(), current.getMonth() + step, dom)
+    while (current <= ayEnd) {
+        dates.push(toLocalDate(current))
+        current = new Date(current.getFullYear(), current.getMonth() + step, dom)
     }
     return dates
 }
@@ -157,22 +177,33 @@ function isInTerm(dateStr, terms) {
 // Distribute total evenly across count instalments, ensuring they sum exactly to total
 function distributeEvenly(total, count) {
     if (count <= 0) return []
-    const per = Math.round(total / count)
+    const per = Math.round((total / count) * 100) / 100
     const amounts = Array(count).fill(per)
-    amounts[count - 1] = total - per * (count - 1)
+    amounts[count - 1] = Math.round((total - per * (count - 1)) * 100) / 100
     return amounts
+}
+
+// Distribute yearly total only among non-removed dates; removed dates keep original amount for display
+function distributeExcludingRemoved(total, dates, editType, removedSet) {
+    const activeDates = dates.filter(d => !removedSet.has(`${editType}:${d.date}`))
+    const activeAmounts = distributeEvenly(total, activeDates.length)
+    const originalAmounts = distributeEvenly(total, dates.length)
+    let ai = 0
+    return dates.map((d, i) => removedSet.has(`${editType}:${d.date}`) ? originalAmounts[i] : activeAmounts[ai++])
 }
 
 function buildGraphEvents(formData) {
     const events = []
     const terms = formData.termDates?.terms || []
+    const removedSet = new Set(formData.removedEvents || [])
 
     // Maintenance loan income events
     if (formData.incomeSources?.includes('maintenance_loan')) {
         const months = formData.loanMonths || DEFAULT_LOAN_MONTHS
         const totalAmount = parseFloat(String(formData.loanAmount || '0').replace(/,/g, ''))
 
-        const loanAmounts = distributeEvenly(totalAmount, months.length)
+        const loanDateObjs = months.map(m => ({ date: formData.loanDates?.[m] || MONTH_KEY_TO_DATE[m] }))
+        const loanAmounts = distributeExcludingRemoved(totalAmount, loanDateObjs, 'loan', removedSet)
         for (let mi = 0; mi < months.length; mi++) {
             const month = months[mi]
             const date = formData.loanDates?.[month] || MONTH_KEY_TO_DATE[month]
@@ -202,7 +233,8 @@ function buildGraphEvents(formData) {
         const months = formData.bursaryMonths || DEFAULT_BURSARY_MONTHS
         const totalAmount = parseFloat(String(formData.bursaryAmount || '0').replace(/,/g, ''))
 
-        const bursaryAmounts = distributeEvenly(totalAmount, months.length)
+        const bursaryDateObjs = months.map(m => ({ date: formData.bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m] || MONTH_KEY_TO_DATE[m] }))
+        const bursaryAmounts = distributeExcludingRemoved(totalAmount, bursaryDateObjs, 'bursary', removedSet)
         for (let mi = 0; mi < months.length; mi++) {
             const month = months[mi]
             const date = formData.bursaryDates?.[month] || DEFAULT_BURSARY_DATES[month] || MONTH_KEY_TO_DATE[month]
@@ -222,11 +254,11 @@ function buildGraphEvents(formData) {
     // Family/friends income events
     if (formData.incomeSources?.includes('family_friends')) {
         const famAmtRaw = parseFloat(String(formData.familyAmount || '0').replace(/,/g, ''))
-        const freq = formData.familyFrequency
+        const freq = formData.familyFrequency || 'monthly'
         const famAmtPeriod = formData.familyAmountPeriod || freq || 'monthly'
         const isYearlyInput = famAmtPeriod === 'yearly'
         const onlyTermTime = isYearlyInput && formData.familyVariesByTerm
-        if (famAmtRaw > 0 && freq) {
+        if (famAmtRaw > 0) {
             const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyTotal = famAmtRaw * (YM[famAmtPeriod] || 1)
@@ -236,13 +268,13 @@ function buildGraphEvents(formData) {
                     let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly support' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly support' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.familyTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} support` }) }
@@ -255,7 +287,7 @@ function buildGraphEvents(formData) {
                 }
                 const dates = onlyTermTime ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (dates.length > 0) {
-                    const amounts = distributeEvenly(yearlyTotal, dates.length)
+                    const amounts = distributeExcludingRemoved(yearlyTotal, dates, 'family', removedSet)
                     for (let i = 0; i < dates.length; i++) {
                         events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: 'Family/Friends', sublabel: dates[i].sublabel, editType: 'family' })
                     }
@@ -267,13 +299,13 @@ function buildGraphEvents(formData) {
                     let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.familyTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: famAmtRaw, type: 'income', label: 'Family/Friends', sublabel: `${term.name} support`, editType: 'family' }) }
@@ -306,13 +338,13 @@ function buildGraphEvents(formData) {
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly income' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly income' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.workTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} income` }) }
@@ -325,7 +357,7 @@ function buildGraphEvents(formData) {
                 }
                 const dates = onlyTermTimeWork ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (dates.length > 0) {
-                    const amounts = distributeEvenly(yearlyWork, dates.length)
+                    const amounts = distributeExcludingRemoved(yearlyWork, dates, 'work', removedSet)
                     for (let i = 0; i < dates.length; i++) {
                         events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: 'Work', sublabel: dates[i].sublabel, editType: 'work' })
                     }
@@ -337,13 +369,13 @@ function buildGraphEvents(formData) {
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income`, editType: 'work' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income`, editType: 'work' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.workTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: workAmt, type: 'income', label: 'Work', sublabel: `${term.name} income`, editType: 'work' }) }
@@ -360,16 +392,16 @@ function buildGraphEvents(formData) {
 
 
 
-    // Other income events
-    if (formData.incomeSources?.includes('other_income')) {
-        const otherAmt = parseFloat(String(formData.otherIncomeAmount || '0').replace(/,/g, ''))
-        const freq = formData.otherIncomeFrequency
-        const lbl = formData.otherIncomeLabel || 'Other Income'
-        const otherAmtPeriod = formData.otherIncomeAmountPeriod || freq || 'monthly'
+    // Other income events - loop over otherIncomes array
+    for (const inst of (formData.otherIncomes || [])) {
+        const otherAmt = parseFloat(String(inst.amount || '0').replace(/,/g, ''))
+        const freq = inst.frequency || 'monthly'
+        const lbl = inst.label || 'Other Income'
+        const otherAmtPeriod = inst.amountPeriod || freq || 'monthly'
         const isYearlyOther = otherAmtPeriod === 'yearly'
-        const onlyTermTimeOther = isYearlyOther && formData.otherIncomeVariesByTerm
+        const onlyTermTimeOther = isYearlyOther && inst.variesByTerm
 
-        if (otherAmt > 0 && freq) {
+        if (otherAmt > 0) {
             const ayStart = new Date(2025, 8, 1)
             const ayEnd = new Date(2026, 7, 31)
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
@@ -378,56 +410,56 @@ function buildGraphEvents(formData) {
             if (isYearlyOther) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
-                    const overrides = formData.otherIncomeTermDates || {}
+                    const overrides = inst.termDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name}` }) }
                 } else if (freq === 'quarterly') {
-                    const qDates = formData.otherIncomeQuarterlyDates || {}
+                    const qDates = inst.quarterlyDates || {}
                     const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
                     for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1}` })
                 } else if (freq === 'yearly') {
-                    allDates.push({ date: formData.otherIncomeNextDate || '2025-09-01', sublabel: 'Yearly income' })
+                    allDates.push({ date: inst.nextDate || '2025-09-01', sublabel: 'Yearly income' })
                 }
                 const dates = onlyTermTimeOther ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (dates.length > 0) {
-                    const amounts = distributeEvenly(yearlyOther, dates.length)
+                    const amounts = distributeExcludingRemoved(yearlyOther, dates, inst.id, removedSet)
                     for (let i = 0; i < dates.length; i++) {
-                        events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: lbl, sublabel: dates[i].sublabel, editType: 'otherIncome' })
+                        events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: lbl, sublabel: dates[i].sublabel, editType: inst.id })
                     }
                 }
             } else {
-                const otherNonTermAmt = formData.otherIncomeVariesByTerm ? parseFloat(String(formData.otherIncomeNonTermAmount || '0').replace(/,/g, '')) : otherAmt
-                const getOtherAmt = (ds) => formData.otherIncomeVariesByTerm ? (isInTerm(ds, terms) ? otherAmt : otherNonTermAmt) : otherAmt
+                const otherNonTermAmt = inst.variesByTerm ? parseFloat(String(inst.nonTermAmount || '0').replace(/,/g, '')) : otherAmt
+                const getOtherAmt = (ds) => inst.variesByTerm ? (isInTerm(ds, terms) ? otherAmt : otherNonTermAmt) : otherAmt
                 if (freq === 'weekly') {
-                    let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: 'Weekly', editType: 'otherIncome' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.otherIncomeNextDate ? new Date(formData.otherIncomeNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { const ds = d.toISOString().split('T')[0]; const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}`, editType: 'otherIncome' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}`, editType: inst.id }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
-                    const overrides = formData.otherIncomeTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherAmt, type: 'income', label: lbl, sublabel: `${term.name}`, editType: 'otherIncome' }) }
+                    const overrides = inst.termDates || {}
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherAmt, type: 'income', label: lbl, sublabel: `${term.name}`, editType: inst.id }) }
                 } else if (freq === 'quarterly') {
-                    const qDates = formData.otherIncomeQuarterlyDates || {}
+                    const qDates = inst.quarterlyDates || {}
                     const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
-                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getOtherAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: lbl, sublabel: `Q${i + 1}`, editType: 'otherIncome' }) }
+                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getOtherAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: lbl, sublabel: `Q${i + 1}`, editType: inst.id }) }
                 } else if (freq === 'yearly') {
-                    if (otherAmt > 0) events.push({ date: formData.otherIncomeNextDate || '2025-09-01', amount: otherAmt, type: 'income', label: lbl, sublabel: 'Yearly income', editType: 'otherIncome' })
+                    if (otherAmt > 0) events.push({ date: inst.nextDate || '2025-09-01', amount: otherAmt, type: 'income', label: lbl, sublabel: 'Yearly income', editType: inst.id })
                 }
             }
         }
@@ -435,37 +467,59 @@ function buildGraphEvents(formData) {
 
     // Rent expense events
     const rentAmt = parseFloat(String(formData.rentAmount || '0').replace(/,/g, ''))
-    if (rentAmt > 0 && formData.rentFrequency) {
-        const rentDates = generateRentDates(formData.rentFrequency, formData.rentNextDate, formData)
-        const rentAmtPeriod = formData.rentAmountPeriod || (formData.rentEntryMode === 'yearly' ? 'yearly' : (formData.rentFrequency || 'monthly'))
+    const rentFreq = formData.rentFrequency || 'monthly'
+    if (rentAmt > 0 && formData.expenseSources?.includes('rent')) {
+        const allRentDates = generateRentDates(rentFreq, formData.rentNextDate, formData)
+        const rentDates = allRentDates.filter(d => {
+            if (formData.rentStartDate && d < formData.rentStartDate) return false
+            if (formData.rentEndDate && d > formData.rentEndDate) return false
+            return true
+        })
+        const rentAmtPeriod = formData.rentAmountPeriod || (formData.rentEntryMode === 'yearly' ? 'yearly' : rentFreq)
         const isYearlyRent = rentAmtPeriod === 'yearly'
+        const onlyTermTimeRent = isYearlyRent && formData.rentVariesByTerm
         const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
         const yearlyRent = rentAmt * (YM[rentAmtPeriod] || 1)
-        const rentAmounts = isYearlyRent ? distributeEvenly(yearlyRent, rentDates.length) : rentDates.map(() => rentAmt)
 
-        for (let ri = 0; ri < rentDates.length; ri++) {
-            const date = rentDates[ri]
-            const dt = new Date(date + 'T00:00:00')
-            const monthName = dt.toLocaleDateString('en-GB', { month: 'long' })
-            events.push({
-                date,
-                amount: rentAmounts[ri],
-                type: 'expense',
-                label: 'Rent',
-                sublabel: `${monthName} rent`,
-                editType: 'rent',
-            })
+        if (isYearlyRent) {
+            const filteredDates = onlyTermTimeRent ? rentDates.filter(d => isInTerm(d, terms)) : rentDates
+            const rentDateObjs = filteredDates.map(d => ({ date: d }))
+            const rentAmounts = distributeExcludingRemoved(yearlyRent, rentDateObjs, 'rent', removedSet)
+            for (let ri = 0; ri < filteredDates.length; ri++) {
+                const date = filteredDates[ri]
+                const dt = new Date(date + 'T00:00:00')
+                const monthName = dt.toLocaleDateString('en-GB', { month: 'long' })
+                events.push({ date, amount: rentAmounts[ri], type: 'expense', label: 'Rent', sublabel: `${monthName} rent`, editType: 'rent' })
+            }
+        } else {
+            const rentNonTermAmt = formData.rentVariesByTerm ? parseFloat(String(formData.rentNonTermAmount || '0').replace(/,/g, '')) : rentAmt
+            const getRentAmt = (ds) => formData.rentVariesByTerm ? (isInTerm(ds, terms) ? rentAmt : rentNonTermAmt) : rentAmt
+            for (let ri = 0; ri < rentDates.length; ri++) {
+                const date = rentDates[ri]
+                const a = getRentAmt(date)
+                if (a > 0) {
+                    const dt = new Date(date + 'T00:00:00')
+                    const monthName = dt.toLocaleDateString('en-GB', { month: 'long' })
+                    events.push({ date, amount: a, type: 'expense', label: 'Rent', sublabel: `${monthName} rent`, editType: 'rent' })
+                }
+            }
         }
     }
 
     // Bills expense events
     const billsAmt = parseFloat(String(formData.billsAmount || '0').replace(/,/g, ''))
-    if (billsAmt > 0 && formData.billsFrequency) {
-        const freq = formData.billsFrequency
+    if (billsAmt > 0 && formData.expenseSources?.includes('bills')) {
+        const freq = formData.billsFrequency || 'monthly'
         const billsAmtPeriod = formData.billsAmountPeriod || (formData.billsEntryMode === 'yearly' ? 'yearly' : freq)
         const isYearlyBills = billsAmtPeriod === 'yearly'
+        const onlyTermTimeBills = isYearlyBills && formData.billsVariesByTerm
         const ayStart = new Date(2025, 8, 1)
         const ayEnd = new Date(2026, 7, 31)
+        const billsInRange = (ds) => {
+            if (formData.billsStartDate && ds < formData.billsStartDate) return false
+            if (formData.billsEndDate && ds > formData.billsEndDate) return false
+            return true
+        }
         const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
         const yearlyBills = billsAmt * (YM[billsAmtPeriod] || 1)
 
@@ -475,42 +529,53 @@ function buildGraphEvents(formData) {
                 let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                 while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                 while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly bills' }); d = new Date(d.getTime() + 7 * 86400000) }
+                while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly bills' }); d = new Date(d.getTime() + 7 * 86400000) }
             } else if (freq === 'monthly') {
                 let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                 const dom = d.getDate()
-                while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
             } else if (freq === 'termly') {
                 const overrides = formData.billsTermDates || {}
                 for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} bills` }) }
+            } else if (freq === 'quarterly') {
+                const qDates = formData.billsQuarterlyDates || {}
+                const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} bills` })
             } else if (freq === 'yearly') {
                 allDates.push({ date: formData.billsNextDate || '2025-09-01', sublabel: 'Yearly bills' })
             }
-            if (allDates.length > 0) {
-                const amounts = distributeEvenly(yearlyBills, allDates.length)
-                for (let i = 0; i < allDates.length; i++) {
-                    events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: 'Bills', sublabel: allDates[i].sublabel, editType: 'bills' })
+            const filteredDates = (onlyTermTimeBills ? allDates.filter(d => isInTerm(d.date, terms)) : allDates).filter(d => billsInRange(d.date))
+            if (filteredDates.length > 0) {
+                const amounts = distributeExcludingRemoved(yearlyBills, filteredDates, 'bills', removedSet)
+                for (let i = 0; i < filteredDates.length; i++) {
+                    events.push({ date: filteredDates[i].date, amount: amounts[i], type: 'expense', label: 'Bills', sublabel: filteredDates[i].sublabel, editType: 'bills' })
                 }
             }
         } else {
+            const billsNonTermAmt = formData.billsVariesByTerm ? parseFloat(String(formData.billsNonTermAmount || '0').replace(/,/g, '')) : billsAmt
+            const getBillsAmt = (ds) => formData.billsVariesByTerm ? (isInTerm(ds, terms) ? billsAmt : billsNonTermAmt) : billsAmt
             if (freq === 'weekly') {
                 let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                 while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                 while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: billsAmt, type: 'expense', label: 'Bills', sublabel: 'Weekly bills', editType: 'bills' }); d = new Date(d.getTime() + 7 * 86400000) }
+                while (d <= ayEnd) { const ds = toLocalDate(d); if (billsInRange(ds)) { const a = getBillsAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'Bills', sublabel: 'Weekly bills', editType: 'bills' }) }; d = new Date(d.getTime() + 7 * 86400000) }
             } else if (freq === 'monthly') {
                 let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                 const dom = d.getDate()
-                while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: billsAmt, type: 'expense', label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`, editType: 'bills' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                while (d <= ayEnd) { const ds = toLocalDate(d); if (billsInRange(ds)) { const a = getBillsAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`, editType: 'bills' }) }; d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
             } else if (freq === 'termly') {
                 const overrides = formData.billsTermDates || {}
-                for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: billsAmt, type: 'expense', label: 'Bills', sublabel: `${term.name} bills`, editType: 'bills' }) }
+                for (const term of terms) { const date = overrides[term.id] || term.start; if (date && billsInRange(date)) { const a = getBillsAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Bills', sublabel: `${term.name} bills`, editType: 'bills' }) } }
+            } else if (freq === 'quarterly') {
+                const qDates = formData.billsQuarterlyDates || {}
+                const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; if (billsInRange(date)) { const a = getBillsAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Bills', sublabel: `Q${i + 1} bills`, editType: 'bills' }) } }
             } else if (freq === 'yearly') {
-                events.push({ date: formData.billsNextDate || '2025-09-01', amount: billsAmt, type: 'expense', label: 'Bills', sublabel: 'Yearly bills', editType: 'bills' })
+                const dateString = formData.billsNextDate || '2025-09-01'; if (billsInRange(dateString)) { const a = getBillsAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Bills', sublabel: 'Yearly bills', editType: 'bills' }) }
             }
         }
     }
@@ -519,47 +584,62 @@ function buildGraphEvents(formData) {
     if (formData.expenseSources?.includes('uni_fees')) {
         const uniAmt = parseFloat(String(formData.uniFeesAmount || '0').replace(/,/g, ''))
         if (uniAmt > 0) {
-            const uniFreq = formData.uniFeesFrequency || 'yearly'
             const uniAmtPeriod = formData.uniFeesAmountPeriod || 'yearly'
+            const uniFreq = uniAmtPeriod === 'yearly' ? (formData.uniFeesFrequency || 'monthly') : uniAmtPeriod
             const isYearlyUni = uniAmtPeriod === 'yearly'
+            const onlyTermTimeUni = isYearlyUni && formData.uniFeesVariesByTerm
             const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyUni = uniAmt * (YM[uniAmtPeriod] || 1)
             if (isYearlyUni) {
                 const allDates = []
-                if (uniFreq === 'yearly') {
-                    allDates.push({ date: formData.uniFeesNextDate || '2025-10-27', sublabel: 'Yearly tuition' })
+                if (uniFreq === 'weekly') {
+                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly fees' }); d = new Date(d.getTime() + 7 * 86400000) }
+                } else if (uniFreq === 'yearly') {
+                    allDates.push({ date: formData.uniFeesNextDate || '2025-09-01', sublabel: 'Yearly tuition' })
                 } else if (uniFreq === 'monthly') {
-                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date('2025-10-27T00:00:00')
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                    const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    const dom = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00').getDate() : 1
+                    let d = new Date(2025, 8, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (uniFreq === 'termly') {
                     const overrides = formData.uniFeesTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} fees` }) }
+                } else if (uniFreq === 'quarterly') {
+                    const qDates = formData.uniFeesQuarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} fees` })
                 }
-                if (allDates.length > 0) {
-                    const amounts = distributeEvenly(yearlyUni, allDates.length)
-                    for (let i = 0; i < allDates.length; i++) {
-                        events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: 'University Fees', sublabel: allDates[i].sublabel, editType: 'uniFees' })
+                const filteredDates = onlyTermTimeUni ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
+                if (filteredDates.length > 0) {
+                    const amounts = distributeExcludingRemoved(yearlyUni, filteredDates, 'uniFees', removedSet)
+                    for (let i = 0; i < filteredDates.length; i++) {
+                        events.push({ date: filteredDates[i].date, amount: amounts[i], type: 'expense', label: 'University Fees', sublabel: filteredDates[i].sublabel, editType: 'uniFees' })
                     }
                 }
             } else {
-                if (uniFreq === 'yearly') {
-                    events.push({ date: formData.uniFeesNextDate || '2025-10-27', amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
+                const uniNonTermAmt = formData.uniFeesVariesByTerm ? parseFloat(String(formData.uniFeesNonTermAmount || '0').replace(/,/g, '')) : uniAmt
+                const getUniAmt = (ds) => formData.uniFeesVariesByTerm ? (isInTerm(ds, terms) ? uniAmt : uniNonTermAmt) : uniAmt
+                if (uniFreq === 'weekly') {
+                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getUniAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'University Fees', sublabel: 'Weekly fees', editType: 'uniFees' }); d = new Date(d.getTime() + 7 * 86400000) }
+                } else if (uniFreq === 'yearly') {
+                    events.push({ date: formData.uniFeesNextDate || '2025-09-01', amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
                 } else if (uniFreq === 'monthly') {
-                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date('2025-10-27T00:00:00')
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
-                    const dom = d.getDate()
-                    while (d <= ayEnd) {
-                        events.push({ date: d.toISOString().split('T')[0], amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' })
-                        d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
-                    }
+                    const dom = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00').getDate() : 1
+                    let d = new Date(2025, 8, dom)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getUniAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (uniFreq === 'termly') {
                     const overrides = formData.uniFeesTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' }) }
+                } else if (uniFreq === 'quarterly') {
+                    const qDates = formData.uniFeesQuarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getUniAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'University Fees', sublabel: `Q${i + 1} fees`, editType: 'uniFees' }) }
                 }
             }
         }
@@ -568,10 +648,11 @@ function buildGraphEvents(formData) {
     // Savings & Investments events
     if (formData.expenseSources?.includes('savings_investments')) {
         const savAmt = parseFloat(String(formData.savingsInvAmount || '0').replace(/,/g, ''))
-        if (savAmt > 0 && formData.savingsInvFrequency) {
-            const freq = formData.savingsInvFrequency
+        if (savAmt > 0) {
+            const freq = formData.savingsInvFrequency || 'monthly'
             const savAmtPeriod = formData.savingsInvAmountPeriod || (formData.savingsInvEntryMode === 'yearly' ? 'yearly' : freq)
             const isYearlySav = savAmtPeriod === 'yearly'
+            const onlyTermTimeSav = isYearlySav && formData.savingsInvVariesByTerm
             const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlySav = savAmt * (YM[savAmtPeriod] || 1)
@@ -581,13 +662,13 @@ function buildGraphEvents(formData) {
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly savings' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly savings' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} savings` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} savings` }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.savingsInvTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} savings` }) }
@@ -598,31 +679,34 @@ function buildGraphEvents(formData) {
                 } else if (freq === 'yearly') {
                     allDates.push({ date: formData.savingsInvNextDate || '2025-09-01', sublabel: 'Yearly savings' })
                 }
-                if (allDates.length > 0) {
-                    const amounts = distributeEvenly(yearlySav, allDates.length)
-                    for (let i = 0; i < allDates.length; i++) {
-                        events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: 'Savings', sublabel: allDates[i].sublabel, editType: 'savingsInv' })
+                const filteredDates = onlyTermTimeSav ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
+                if (filteredDates.length > 0) {
+                    const amounts = distributeExcludingRemoved(yearlySav, filteredDates, 'savingsInv', removedSet)
+                    for (let i = 0; i < filteredDates.length; i++) {
+                        events.push({ date: filteredDates[i].date, amount: amounts[i], type: 'expense', label: 'Savings', sublabel: filteredDates[i].sublabel, editType: 'savingsInv' })
                     }
                 }
             } else {
+                const savNonTermAmt = formData.savingsInvVariesByTerm ? parseFloat(String(formData.savingsInvNonTermAmount || '0').replace(/,/g, '')) : savAmt
+                const getSavAmt = (ds) => formData.savingsInvVariesByTerm ? (isInTerm(ds, terms) ? savAmt : savNonTermAmt) : savAmt
                 if (freq === 'weekly') {
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getSavAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
                     const dom = d.getDate()
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: savAmt, type: 'expense', label: 'Savings', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} savings`, editType: 'savingsInv' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getSavAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'Savings', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} savings`, editType: 'savingsInv' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
                     const overrides = formData.savingsInvTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: savAmt, type: 'expense', label: 'Savings', sublabel: `${term.name} savings`, editType: 'savingsInv' }) }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.savingsInvQuarterlyDates || {}
                     const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
-                    for (let i = 0; i < 4; i++) { events.push({ date: qDates[i] || QD[i], amount: savAmt, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' }) }
+                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getSavAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' }) }
                 } else if (freq === 'yearly') {
                     events.push({ date: formData.savingsInvNextDate || '2025-09-01', amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Yearly savings', editType: 'savingsInv' })
                 }
@@ -630,15 +714,16 @@ function buildGraphEvents(formData) {
         }
     }
 
-    // Other expense events
-    if (formData.expenseSources?.includes('other_expense')) {
-        const otherExpAmt = parseFloat(String(formData.otherExpenseAmount || '0').replace(/,/g, ''))
-        const freq = formData.otherExpenseFrequency
-        const lbl = formData.otherExpenseLabel || 'Other Expense'
-        const otherExpAmtPeriod = formData.otherExpenseAmountPeriod || (formData.otherExpenseEntryMode === 'yearly' ? 'yearly' : (freq || 'monthly'))
+    // Other expense events - loop over otherExpenses array
+    for (const inst of (formData.otherExpenses || [])) {
+        const otherExpAmt = parseFloat(String(inst.amount || '0').replace(/,/g, ''))
+        const freq = inst.frequency || 'monthly'
+        const lbl = inst.label || 'Other Expense'
+        const otherExpAmtPeriod = inst.amountPeriod || freq || 'monthly'
         const isYearlyOtherExp = otherExpAmtPeriod === 'yearly'
+        const onlyTermTimeOtherExp = isYearlyOtherExp && inst.variesByTerm
 
-        if (otherExpAmt > 0 && freq) {
+        if (otherExpAmt > 0) {
             const ayStart = new Date(2025, 8, 1)
             const ayEnd = new Date(2026, 7, 31)
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
@@ -647,45 +732,56 @@ function buildGraphEvents(formData) {
             if (isYearlyOtherExp) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { allDates.push({ date: d.toISOString().split('T')[0], sublabel: d.toLocaleDateString('en-GB', { month: 'long' }) }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: d.toLocaleDateString('en-GB', { month: 'long' }) }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
-                    const overrides = formData.otherExpenseTermDates || {}
+                    const overrides = inst.termDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: term.name }) }
+                } else if (freq === 'quarterly') {
+                    const qDates = inst.quarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1}` })
                 } else if (freq === 'yearly') {
-                    allDates.push({ date: formData.otherExpenseNextDate || '2025-09-01', sublabel: 'Yearly expense' })
+                    allDates.push({ date: inst.nextDate || '2025-09-01', sublabel: 'Yearly expense' })
                 }
-                if (allDates.length > 0) {
-                    const amounts = distributeEvenly(yearlyOtherExp, allDates.length)
-                    for (let i = 0; i < allDates.length; i++) {
-                        events.push({ date: allDates[i].date, amount: amounts[i], type: 'expense', label: lbl, sublabel: allDates[i].sublabel, editType: 'otherExpense' })
+                const filteredDates = onlyTermTimeOtherExp ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
+                if (filteredDates.length > 0) {
+                    const amounts = distributeExcludingRemoved(yearlyOtherExp, filteredDates, inst.id, removedSet)
+                    for (let i = 0; i < filteredDates.length; i++) {
+                        events.push({ date: filteredDates[i].date, amount: amounts[i], type: 'expense', label: lbl, sublabel: filteredDates[i].sublabel, editType: inst.id })
                     }
                 }
             } else {
+                const otherExpNonTermAmt = inst.variesByTerm ? parseFloat(String(inst.nonTermAmount || '0').replace(/,/g, '')) : otherExpAmt
+                const getOtherExpAmt = (ds) => inst.variesByTerm ? (isInTerm(ds, terms) ? otherExpAmt : otherExpNonTermAmt) : otherExpAmt
                 if (freq === 'weekly') {
-                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Weekly', editType: 'otherExpense' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherExpAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.otherExpenseNextDate ? new Date(formData.otherExpenseNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayEnd) d = new Date(d.getFullYear(), d.getMonth() - 1, d.getDate())
-                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, d.getDate())
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
                     const dom = d.getDate()
-                    while (d <= ayEnd) { events.push({ date: d.toISOString().split('T')[0], amount: otherExpAmt, type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: 'otherExpense' }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
+                    while (d > ayStart) d = new Date(d.getFullYear(), d.getMonth() - 1, dom)
+                    while (d < ayStart) d = new Date(d.getFullYear(), d.getMonth() + 1, dom)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherExpAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: inst.id }); d = new Date(d.getFullYear(), d.getMonth() + 1, dom) }
                 } else if (freq === 'termly') {
-                    const overrides = formData.otherExpenseTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherExpAmt, type: 'expense', label: lbl, sublabel: term.name, editType: 'otherExpense' }) }
+                    const overrides = inst.termDates || {}
+                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherExpAmt, type: 'expense', label: lbl, sublabel: term.name, editType: inst.id }) }
+                } else if (freq === 'quarterly') {
+                    const qDates = inst.quarterlyDates || {}
+                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getOtherExpAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: lbl, sublabel: `Q${i + 1}`, editType: inst.id }) }
                 } else if (freq === 'yearly') {
-                    events.push({ date: formData.otherExpenseNextDate || '2025-09-01', amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: 'otherExpense' })
+                    events.push({ date: inst.nextDate || '2025-09-01', amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: inst.id })
                 }
             }
         }
@@ -703,7 +799,7 @@ function buildGraphEvents(formData) {
         // Align to Mondays
         while (d.getDay() !== 1) d = new Date(d.getTime() + 24 * 60 * 60 * 1000)
         while (d <= ayEnd) {
-            const dateStr = d.toISOString().split('T')[0]
+            const dateStr = toLocalDate(d)
             const amt = formData.weeklySpendVariesByTerm
                 ? (isInTerm(dateStr, terms) ? weeklyAmt : weeklyNonTermAmt)
                 : weeklyAmt
@@ -1245,9 +1341,48 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const [graphAnimated, setGraphAnimated] = useState(() => {
         try {
             const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
-            return ['termDates', 'balance', 'overdraft', 'regularIncome', 'maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome', 'rent', 'regularExpenses', 'bills', 'uniFees', 'savingsInvestments', 'otherExpense', 'oneOffItems', 'weeklySpend'].includes(saved.currentStepId)
+            return ['termDates', 'balance', 'overdraft', 'regularIncome', 'maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome', 'rent', 'regularExpenses', 'bills', 'uniFees', 'savingsInvestments', 'otherExpense', 'oneOffItems', 'weeklySpend', 'summary'].includes(saved.currentStepId)
         } catch { return false }
     })
+    const getRemovedCount = (editTypes) => {
+        const removed = formData.removedEvents || []
+        const types = Array.isArray(editTypes) ? editTypes : [editTypes]
+        return removed.filter(k => types.some(t => k.startsWith(t + ':'))).length
+    }
+    const restoreRemoved = (editTypes) => {
+        const types = Array.isArray(editTypes) ? editTypes : [editTypes]
+        const removed = formData.removedEvents || []
+        updateField('removedEvents', removed.filter(k => !types.some(t => k.startsWith(t + ':'))))
+    }
+    const RestoreDeletedBar = ({ editTypes, color = '#e07b3c' }) => {
+        const count = getRemovedCount(editTypes)
+        if (count === 0) return null
+        return (
+            <div style={{ position: 'relative', flexShrink: 0, padding: '0 12px', marginBottom: -4 }}>
+                <button
+                    onClick={() => restoreRemoved(editTypes)}
+                    style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                        background: '#fff', border: 'none',
+                        padding: '8px 16px',
+                        borderRadius: 10,
+                        cursor: 'pointer',
+                        width: '100%',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+                        transform: 'translateY(-10px)',
+                    }}
+                >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="1 4 1 10 7 10" />
+                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                    </svg>
+                    <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color }}>
+                        {count} payment{count !== 1 ? 's' : ''} deleted — tap to restore
+                    </span>
+                </button>
+            </div>
+        )
+    }
     const buildPanelSteps = (sources, expSources) => {
         const panels = ['termDates', 'balance', 'overdraft', 'regularIncome']
         const s = sources || []
@@ -1265,6 +1400,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         if (e.includes('other_expense')) panels.push('otherExpense')
         panels.push('oneOffItems')
         panels.push('weeklySpend')
+        panels.push('summary')
         return panels
     }
     const [activePanel, setActivePanel] = useState(() => {
@@ -1277,20 +1413,48 @@ export default function FinancialOnboardingForm({ onComplete }) {
     })
     const [expandedTerm, setExpandedTerm] = useState('_init')
     const [showAllEvents, setShowAllEvents] = useState(false)
+    const returnToSummaryRef = useRef(false)
 
     /* --- State with localStorage restore --- */
 
     const [formData, setFormData] = useState(() => {
+        let data = { ...INITIAL_FORM_DATA }
         try {
             const saved = localStorage.getItem(STORAGE_KEY)
             if (saved) {
                 const parsed = JSON.parse(saved)
-                return { ...INITIAL_FORM_DATA, ...parsed.formData }
+                data = { ...INITIAL_FORM_DATA, ...parsed.formData }
             }
-        } catch {
-            /* ignore */
+        } catch { /* ignore */ }
+        // Migrate legacy flat other income fields to otherIncomes array
+        if ((!data.otherIncomes || data.otherIncomes.length === 0) && data.otherIncomeAmount) {
+            data.otherIncomes = [{
+                id: `oi_${Date.now()}`, amount: data.otherIncomeAmount,
+                frequency: data.otherIncomeFrequency || 'monthly',
+                amountPeriod: data.otherIncomeAmountPeriod || 'monthly',
+                label: data.otherIncomeLabel || '',
+                nextDate: data.otherIncomeNextDate || null,
+                termDates: data.otherIncomeTermDates || {},
+                quarterlyDates: data.otherIncomeQuarterlyDates || {},
+                variesByTerm: data.otherIncomeVariesByTerm || false,
+                nonTermAmount: data.otherIncomeNonTermAmount || '',
+            }]
         }
-        return { ...INITIAL_FORM_DATA }
+        // Migrate legacy flat other expense fields to otherExpenses array
+        if ((!data.otherExpenses || data.otherExpenses.length === 0) && data.otherExpenseAmount) {
+            data.otherExpenses = [{
+                id: `oe_${Date.now()}`, amount: data.otherExpenseAmount,
+                frequency: data.otherExpenseFrequency || 'monthly',
+                amountPeriod: data.otherExpenseAmountPeriod || 'monthly',
+                label: data.otherExpenseLabel || '',
+                nextDate: data.otherExpenseNextDate || null,
+                termDates: data.otherExpenseTermDates || {},
+                quarterlyDates: data.otherExpenseQuarterlyDates || {},
+                variesByTerm: data.otherExpenseVariesByTerm || false,
+                nonTermAmount: data.otherExpenseNonTermAmount || '',
+            }]
+        }
+        return data
     })
 
     const [currentStepId, setCurrentStepId] = useState(() => {
@@ -1442,18 +1606,27 @@ export default function FinancialOnboardingForm({ onComplete }) {
         setFormData(prev => ({ ...prev, [key]: value }))
     }
 
+    const updateOtherInst = (arrayKey, instId, field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            [arrayKey]: (prev[arrayKey] || []).map(inst =>
+                inst.id === instId ? { ...inst, [field]: value } : inst
+            )
+        }))
+    }
+
     const PANEL_RESET_FIELDS = {
         balance: { balance: '' },
         maintenanceLoan: { loanAmount: '', loanMonths: [...DEFAULT_LOAN_MONTHS], loanKnowDates: false, loanDates: {}, instalmentAmounts: {} },
         bursary: { bursaryAmount: '', bursaryDates: [...INITIAL_FORM_DATA.bursaryDates], bursaryMonths: undefined, bursaryInstalmentAmounts: {} },
         familyFriends: { familyAmount: '', familyFrequency: 'monthly', familyAmountPeriod: 'monthly', familyNextDate: '', familyTermDates: {}, familyQuarterlyDates: {}, familyVariesByTerm: false, familyNonTermAmount: '' },
         work: { workAmount: '', workFrequency: 'monthly', workEntryMode: 'yearly', workAmountPeriod: 'monthly', workVariesByTerm: false, workNonTermAmount: '', workNextDate: '', workTermDates: {}, workQuarterlyDates: {} },
-        otherIncome: { otherIncomeAmount: '', otherIncomeFrequency: 'monthly', otherIncomeEntryMode: 'yearly', otherIncomeAmountPeriod: 'monthly', otherIncomeLabel: '', otherIncomeNextDate: '', otherIncomeTermDates: {}, otherIncomeVariesByTerm: false, otherIncomeNonTermAmount: '' },
-        rent: { rentAmount: '', rentFrequency: 'monthly', rentNextDate: '', rentEntryMode: 'per_payment', rentAmountPeriod: 'monthly', rentTermDates: {}, rentQuarterlyDates: {} },
-        bills: { billsAmount: '', billsFrequency: 'monthly', billsEntryMode: 'yearly', billsAmountPeriod: 'monthly', billsNextDate: '', billsTermDates: {}, billsQuarterlyDates: {} },
-        uniFees: { uniFeesAmount: '9250', uniFeesFrequency: 'yearly', uniFeesEntryMode: 'yearly', uniFeesAmountPeriod: 'yearly', uniFeesNextDate: '2025-10-27', uniFeesTermDates: {}, uniFeesQuarterlyDates: {} },
-        savingsInvestments: { savingsInvAmount: '', savingsInvFrequency: 'monthly', savingsInvEntryMode: 'per_payment', savingsInvAmountPeriod: 'monthly', savingsInvNextDate: '', savingsInvTermDates: {}, savingsInvQuarterlyDates: {} },
-        otherExpense: { otherExpenseAmount: '', otherExpenseFrequency: 'monthly', otherExpenseEntryMode: 'yearly', otherExpenseAmountPeriod: 'monthly', otherExpenseLabel: '', otherExpenseNextDate: '', otherExpenseTermDates: {}, otherExpenseQuarterlyDates: {} },
+        otherIncome: { otherIncomes: [], otherIncomeAmount: '', otherIncomeFrequency: 'monthly', otherIncomeEntryMode: 'yearly', otherIncomeAmountPeriod: 'monthly', otherIncomeLabel: '', otherIncomeNextDate: '', otherIncomeTermDates: {}, otherIncomeVariesByTerm: false, otherIncomeNonTermAmount: '' },
+        rent: { rentAmount: '', rentFrequency: 'monthly', rentNextDate: '', rentEntryMode: 'per_payment', rentAmountPeriod: 'monthly', rentTermDates: {}, rentQuarterlyDates: {}, rentVariesByTerm: false, rentStartDate: '', rentEndDate: '' },
+        bills: { billsAmount: '', billsFrequency: 'monthly', billsEntryMode: 'yearly', billsAmountPeriod: 'monthly', billsNextDate: '', billsTermDates: {}, billsQuarterlyDates: {}, billsStartDate: '', billsEndDate: '' },
+        uniFees: { uniFeesAmount: '9250', uniFeesFrequency: 'yearly', uniFeesEntryMode: 'yearly', uniFeesAmountPeriod: 'yearly', uniFeesNextDate: '', uniFeesTermDates: {}, uniFeesQuarterlyDates: {}, uniFeesVariesByTerm: false, uniFeesNonTermAmount: '' },
+        savingsInvestments: { savingsInvAmount: '', savingsInvFrequency: 'monthly', savingsInvEntryMode: 'per_payment', savingsInvAmountPeriod: 'monthly', savingsInvNextDate: '', savingsInvTermDates: {}, savingsInvQuarterlyDates: {}, savingsInvVariesByTerm: false, savingsInvNonTermAmount: '' },
+        otherExpense: { otherExpenses: [], otherExpenseAmount: '', otherExpenseFrequency: 'monthly', otherExpenseEntryMode: 'yearly', otherExpenseAmountPeriod: 'monthly', otherExpenseLabel: '', otherExpenseNextDate: '', otherExpenseTermDates: {}, otherExpenseQuarterlyDates: {}, otherExpenseVariesByTerm: false, otherExpenseNonTermAmount: '' },
     }
 
     const resetPanel = (panelId) => {
@@ -1533,7 +1706,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             case 'work':
                 return !formData.workAmount
             case 'otherIncome':
-                return !formData.otherIncomeAmount
+                return !(formData.otherIncomes || []).some(i => i.amount)
             case 'regularExpenses':
                 return false
             case 'rent':
@@ -1545,7 +1718,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             case 'savingsInvestments':
                 return !formData.savingsInvAmount
             case 'otherExpense':
-                return !formData.otherExpenseAmount
+                return !(formData.otherExpenses || []).some(i => i.amount)
             case 'weeklySpend':
                 return !formData.weeklySpend
             default:
@@ -1623,29 +1796,20 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 if (!formData.familyAmount) {
                     return 'Please enter an amount'
                 }
-                if (!formData.familyFrequency) {
-                    return 'Please select a frequency'
-                }
                 break
 
             case 'work':
                 if (!formData.workAmount) {
                     return 'Please enter an amount'
                 }
-                if (!formData.workFrequency) {
-                    return 'Please select a frequency'
-                }
-                if (formData.workFrequency === 'yearly' && !formData.workNextDate) {
+                if ((formData.workFrequency || 'monthly') === 'yearly' && !formData.workNextDate) {
                     return 'Please select a payment date'
                 }
                 break
 
             case 'otherIncome':
-                if (!formData.otherIncomeAmount) {
+                if (!(formData.otherIncomes || []).some(i => i.amount)) {
                     return 'Please enter an amount'
-                }
-                if (!formData.otherIncomeFrequency) {
-                    return 'Please select a frequency'
                 }
                 break
 
@@ -1653,17 +1817,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 if (!formData.rentAmount) {
                     return 'Please enter an amount'
                 }
-                if (!formData.rentFrequency) {
-                    return 'Please select a frequency'
-                }
                 break
 
             case 'bills':
                 if (!formData.billsAmount) {
                     return 'Please enter an amount'
-                }
-                if (!formData.billsFrequency) {
-                    return 'Please select a frequency'
                 }
                 break
 
@@ -1677,19 +1835,23 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 if (!formData.savingsInvAmount) {
                     return 'Please enter an amount'
                 }
-                if (!formData.savingsInvFrequency) {
-                    return 'Please select a frequency'
-                }
                 break
 
             case 'otherExpense':
-                if (!formData.otherExpenseAmount) {
+                if (!(formData.otherExpenses || []).some(i => i.amount)) {
                     return 'Please enter an amount'
                 }
-                if (!formData.otherExpenseFrequency) {
-                    return 'Please select a frequency'
+                break
+
+            case 'oneOffItems': {
+                const filledItems = (formData.oneOffItems || []).filter(i => i.amount || i.name?.trim() || i.date)
+                for (const item of filledItems) {
+                    if (!item.name?.trim()) return 'Please enter a name for each one-off item'
+                    if (!item.amount) return 'Please enter an amount for each one-off item'
+                    if (!item.date) return 'Please enter a date for each one-off item'
                 }
                 break
+            }
 
         }
 
@@ -1769,6 +1931,16 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const handlePanelBack = () => {
         if (transitionRef.current) return
         const panels = buildPanelSteps(formData.incomeSources, formData.expenseSources)
+        if (returnToSummaryRef.current) {
+            returnToSummaryRef.current = false
+            const summaryIdx = panels.indexOf('summary')
+            if (summaryIdx >= 0) {
+                setActivePanel(summaryIdx)
+                setCurrentStepId('summary')
+                scrollAreaRef.current?.scrollTo({ top: 0 })
+                return
+            }
+        }
         let prev = activePanel - 1
         if (prev < 0) prev = 0
         const prevStepId = panels[prev]
@@ -1836,11 +2008,19 @@ export default function FinancialOnboardingForm({ onComplete }) {
         }
 
         if (mapping) {
-            // Remove source and reset panel fields
+            // Remove source and clear field data so it doesn't show on dashboard
+            const panelResetMap = {
+                maintenance_loan: 'maintenanceLoan', bursary: 'bursary',
+                family_friends: 'familyFriends', work: 'work',
+                other_income: 'otherIncome', rent: 'rent', bills: 'bills',
+                uni_fees: 'uniFees', savings_investments: 'savingsInvestments',
+                other_expense: 'otherExpense',
+            }
+            const resetFields = PANEL_RESET_FIELDS[panelResetMap[mapping.value]] || {}
             setFormData(prev => ({
                 ...prev,
+                ...resetFields,
                 [mapping.key]: (prev[mapping.key] || []).filter(s => s !== mapping.value),
-                ...(PANEL_RESET_FIELDS[panelId] || {}),
             }))
         }
         // Advance — panels list will be rebuilt without this panel
@@ -1871,6 +2051,16 @@ export default function FinancialOnboardingForm({ onComplete }) {
             return
         }
         const panels = buildPanelSteps(formData.incomeSources, formData.expenseSources)
+        if (returnToSummaryRef.current) {
+            returnToSummaryRef.current = false
+            const summaryIdx = panels.indexOf('summary')
+            if (summaryIdx >= 0) {
+                setActivePanel(summaryIdx)
+                setCurrentStepId('summary')
+                scrollAreaRef.current?.scrollTo({ top: 0 })
+                return
+            }
+        }
         const nextPanelIdx = activePanel + 1
         if (nextPanelIdx < panels.length) {
             // Still in panel group — advance to next panel step
@@ -1888,6 +2078,13 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     const submit = async () => {
         setSubmitting(true)
+
+        // Show loading screen immediately
+        if (onComplete) {
+            onComplete()
+        }
+
+        // Save data in the background
         try {
             const {
                 data: { user },
@@ -1895,19 +2092,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
             } = await supabase.auth.getUser()
 
             if (userError || !user) {
-                showToast('You must be logged in')
                 return
             }
 
-            await saveCashflowForecast(user.id, formData)
-
-            // Save term dates
-            await saveTermDates(user.id, formData.termDates)
-
-            // Save initial balance history
-            if (formData.balance) {
-                await saveBalanceHistory(user.id, formData.balance)
-            }
+            await Promise.all([
+                saveCashflowForecast(user.id, formData),
+                saveTermDates(user.id, formData.termDates),
+                formData.balance ? saveBalanceHistory(user.id, formData.balance) : Promise.resolve(),
+            ])
 
             // Get referral code from user metadata or localStorage
             const referredBy = user.user_metadata?.referred_by || localStorage.getItem('referral_code')
@@ -1933,10 +2125,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 })
             }
 
-            // Keep formData in localStorage for dashboard use
-
-            // Track onboarding completed
-
             analytics.track(ONBOARDING_EVENTS.COMPLETED, {
                 ...getUserProperties({
                     university: formData.university,
@@ -1952,11 +2140,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 has_one_off_items: (formData.oneOffItems || []).some(i => i.amount),
                 was_referred: !!referredBy
             })
-
-            // Call onComplete callback to trigger loading screen
-            if (onComplete) {
-                onComplete()
-            }
         } catch (err) {
             console.error(err)
 
@@ -1969,8 +2152,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
             })
 
             analytics.error(err, { context: 'onboarding_submission' })
-
-            showToast('Something went wrong saving your data')
         } finally {
             setSubmitting(false)
         }
@@ -2008,6 +2189,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         otherExpense: 'Confirm Other Expense',
         oneOffItems: 'Confirm One-off Items',
         weeklySpend: 'Confirm Weekly Spend',
+        summary: 'Build my budget',
     }
     const PANEL_LABELS = PANEL_STEPS.map(id => PANEL_LABEL_MAP[id])
     const inPanelGroup = currentStep.id === 'university' || PANEL_STEPS.includes(currentStep.id) || activePanel > 0
@@ -2063,27 +2245,52 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         events={activePanel >= 3 ? buildGraphEvents(formData) : []}
                         hiddenEventTypes={(() => {
                             const panelId = PANEL_STEPS[activePanel]
-                            const incomeEditTypes = ['loan', 'bursary', 'family', 'work', 'otherIncome']
-                            const expenseEditTypes = ['rent', 'bills', 'uniFees', 'savingsInv', 'otherExpense', 'weeklySpend']
+                            if (panelId === 'summary') return []
+                            const oiIds = (formData.otherIncomes || []).map(i => i.id)
+                            const oeIds = (formData.otherExpenses || []).map(i => i.id)
+                            const incomeEditTypes = ['loan', 'bursary', 'family', 'work', ...oiIds]
+                            const expenseEditTypes = ['rent', 'bills', 'uniFees', 'savingsInv', ...oeIds, 'weeklySpend']
                             const allTypes = [...incomeEditTypes, ...expenseEditTypes, 'oneOff']
-                            // On regularIncome: hide all expense types
-                            if (panelId === 'regularIncome') return expenseEditTypes
-                            // On regularExpenses: hide all income types
-                            if (panelId === 'regularExpenses') return incomeEditTypes
+                            // On regularIncome: hide all expense types + oneOff, and hide unchecked income types
+                            if (panelId === 'regularIncome') {
+                                const hidden = [...expenseEditTypes, 'oneOff']
+                                const srcMap = { maintenance_loan: 'loan', bursary: 'bursary', family_friends: 'family', work: 'work', other_income: oiIds }
+                                const selected = formData.incomeSources || []
+                                for (const [src, editType] of Object.entries(srcMap)) {
+                                    if (!selected.includes(src)) {
+                                        if (Array.isArray(editType)) hidden.push(...editType)
+                                        else hidden.push(editType)
+                                    }
+                                }
+                                return hidden
+                            }
+                            // On regularExpenses: hide all income types + oneOff + weeklySpend, and hide unchecked expense types
+                            if (panelId === 'regularExpenses') {
+                                const hidden = [...incomeEditTypes, 'oneOff', 'weeklySpend']
+                                const srcMap = { rent: 'rent', bills: 'bills', uni_fees: 'uniFees', savings_investments: 'savingsInv', other_expense: oeIds }
+                                const selected = formData.expenseSources || []
+                                for (const [src, editType] of Object.entries(srcMap)) {
+                                    if (!selected.includes(src)) {
+                                        if (Array.isArray(editType)) hidden.push(...editType)
+                                        else hidden.push(editType)
+                                    }
+                                }
+                                return hidden
+                            }
                             if (!showAllEvents && activePanel >= 4) {
                                 const typeMap = {
                                     maintenanceLoan: 'loan', bursary: 'bursary',
                                     familyFriends: 'family', work: 'work',
-                                    otherIncome: 'otherIncome',
                                     rent: 'rent', bills: 'bills', uniFees: 'uniFees',
                                     savingsInvestments: 'savingsInv',
-                                    otherExpense: 'otherExpense',
                                     oneOffItems: 'oneOff',
                                     weeklySpend: 'weeklySpend',
                                 }
-                                const currentType = typeMap[panelId]
-                                if (!currentType) return []
-                                return allTypes.filter(t => t !== currentType)
+                                let currentTypes = typeMap[panelId] ? [typeMap[panelId]] : []
+                                if (panelId === 'otherIncome') currentTypes = oiIds
+                                if (panelId === 'otherExpense') currentTypes = oeIds
+                                if (currentTypes.length === 0) return []
+                                return allTypes.filter(t => !currentTypes.includes(t))
                             }
                             return []
                         })()}
@@ -2092,12 +2299,13 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             const typeMap = {
                                 maintenanceLoan: 'loan', bursary: 'bursary',
                                 familyFriends: 'family', work: 'work',
-                                otherIncome: 'otherIncome',
                                 rent: 'rent', bills: 'bills', uniFees: 'uniFees',
                                 savingsInvestments: 'savingsInv',
                                 oneOffItems: 'oneOff',
                                 weeklySpend: 'weeklySpend',
                             }
+                            if (panelId === 'otherIncome') return (formData.otherIncomes || [])[0]?.id || null
+                            if (panelId === 'otherExpense') return (formData.otherExpenses || [])[0]?.id || null
                             return typeMap[panelId] || null
                         })() : null}
                         onEventClick={(evt, e) => {
@@ -2105,6 +2313,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             setEditingEvent({ ...evt, clickX: rect.left + rect.width / 2, clickY: rect.top })
                             setEditAmount(String(evt.amount))
                         }}
+                        hideDots={PANEL_STEPS[activePanel] === 'summary'}
+                        forceGreenDots={PANEL_STEPS[activePanel] === 'regularIncome'}
+                        forceDotColor={PANEL_STEPS[activePanel] === 'regularIncome' ? 'green' : PANEL_STEPS[activePanel] === 'regularExpenses' ? 'red' : null}
                         onTermClick={activePanel === 0 ? (termId) => setExpandedTerm(termId) : undefined}
                         onBalanceClick={activePanel >= 1 ? (e) => {
                             const rect = e.currentTarget.getBoundingClientRect()
@@ -2133,19 +2344,23 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         const incomeTypes = ['regularIncome', 'maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
                         const expenseTypes = ['rent', 'regularExpenses', 'bills', 'uniFees', 'savingsInvestments', 'otherExpense']
                         const otherTypes = ['oneOffItems', 'weeklySpend']
-                        const stripColor = incomeTypes.includes(panelId) ? '#147b75'
-                            : expenseTypes.includes(panelId) ? '#e06470'
-                                : otherTypes.includes(panelId) ? '#EC8C17'
-                                    : null
-                        return stripColor ? (
+                        const stripColor = panelId === 'summary' ? '#147b75'
+                            : panelId === 'regularIncome' ? '#147b75'
+                                : panelId === 'regularExpenses' ? '#e06470'
+                                    : incomeTypes.includes(panelId) ? 'rgba(20,123,117,0.35)'
+                                        : expenseTypes.includes(panelId) ? 'rgba(224,100,112,0.35)'
+                                            : otherTypes.includes(panelId) ? '#EC8C17'
+                                                : null
+                        return (
                             <div style={{
-                                height: 4,
-                                background: stripColor,
+                                height: stripColor ? 4 : 0,
+                                background: stripColor || 'transparent',
                                 borderRadius: '20px 20px 0 0',
                                 flexShrink: 0,
-                                transition: 'background 0.3s ease',
+                                transition: 'height 0.3s ease, background 0.3s ease',
+                                overflow: 'hidden',
                             }} />
-                        ) : null
+                        )
                     })()}
 
                     {/* Panel content area */}
@@ -2188,7 +2403,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateIncomeSources={(val) => updateField('incomeSources', val)}
                                     />
                                 )}
-                                {!['termDates', 'balance', 'overdraft', 'regularIncome', 'regularExpenses', 'savingsInvestments', 'otherExpense'].includes(panelId) && new Set(buildGraphEvents(formData).filter(e => !e.removed).map(e => e.editType)).size >= 2 && (() => {
+                                {!['termDates', 'balance', 'overdraft', 'regularIncome', 'regularExpenses', 'savingsInvestments', 'otherExpense', 'summary'].includes(panelId) && new Set(buildGraphEvents(formData).filter(e => !e.removed).map(e => e.editType)).size >= 2 && (() => {
                                     const incPanels = ['maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
                                     const expPanels = ['rent', 'bills', 'uniFees']
                                     const otherPanels = ['oneOffItems', 'weeklySpend']
@@ -2197,38 +2412,38 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             : otherPanels.includes(panelId) ? '#EC8C17'
                                                 : '#147b75'
                                     return (
-                                    <button
-                                        onClick={() => setShowAllEvents(s => !s)}
-                                        style={{
-                                            position: 'absolute', top: 22, right: 24, zIndex: 10,
-                                            background: showAllEvents ? btnColor : '#f3f3f3',
-                                            border: 'none', borderRadius: 20, cursor: 'pointer',
-                                            padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 5,
-                                            transition: 'background 0.2s ease',
-                                        }}
-                                    >
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={showAllEvents ? '#fff' : '#999'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                            {!showAllEvents ? (
-                                                <>
-                                                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                                                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                                                    <line x1="1" y1="1" x2="23" y2="23" />
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                                    <circle cx="12" cy="12" r="3" />
-                                                </>
-                                            )}
-                                        </svg>
-                                        <span style={{
-                                            fontSize: 11, fontWeight: 700,
-                                            fontFamily: 'Nunito, sans-serif',
-                                            color: showAllEvents ? '#fff' : '#999',
-                                        }}>
-                                            Show all
-                                        </span>
-                                    </button>
+                                        <button
+                                            onClick={() => setShowAllEvents(s => !s)}
+                                            style={{
+                                                position: 'absolute', top: 22, right: 24, zIndex: 10,
+                                                background: showAllEvents ? btnColor : '#f3f3f3',
+                                                border: 'none', borderRadius: 20, cursor: 'pointer',
+                                                padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 5,
+                                                transition: 'background 0.2s ease',
+                                            }}
+                                        >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={showAllEvents ? '#fff' : '#999'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                {!showAllEvents ? (
+                                                    <>
+                                                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                                                        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                                                        <line x1="1" y1="1" x2="23" y2="23" />
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                        <circle cx="12" cy="12" r="3" />
+                                                    </>
+                                                )}
+                                            </svg>
+                                            <span style={{
+                                                fontSize: 11, fontWeight: 700,
+                                                fontFamily: 'Nunito, sans-serif',
+                                                color: showAllEvents ? '#fff' : '#999',
+                                            }}>
+                                                Show all
+                                            </span>
+                                        </button>
                                     )
                                 })()}
                                 {panelId === 'maintenanceLoan' && (
@@ -2302,31 +2517,92 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateWorkQuarterlyDates={(val) => updateField('workQuarterlyDates', val)}
                                     />
                                 )}
-                                {panelId === 'otherIncome' && (
-                                    <OtherIncomeStep
-                                        otherIncomeAmount={formData.otherIncomeAmount}
-                                        updateOtherIncomeAmount={(val) => updateField('otherIncomeAmount', val)}
-                                        otherIncomeFrequency={formData.otherIncomeFrequency}
-                                        updateOtherIncomeFrequency={(val) => updateField('otherIncomeFrequency', val)}
-                                        otherIncomeAmountPeriod={formData.otherIncomeAmountPeriod}
-                                        updateOtherIncomeAmountPeriod={(val) => updateField('otherIncomeAmountPeriod', val)}
-                                        otherIncomeQuarterlyDates={formData.otherIncomeQuarterlyDates}
-                                        updateOtherIncomeQuarterlyDates={(val) => updateField('otherIncomeQuarterlyDates', val)}
-                                        otherIncomeLabel={formData.otherIncomeLabel}
-                                        updateOtherIncomeLabel={(val) => updateField('otherIncomeLabel', val)}
-                                        otherIncomeNextDate={formData.otherIncomeNextDate}
-                                        updateOtherIncomeNextDate={(val) => updateField('otherIncomeNextDate', val)}
-                                        terms={formData.termDates?.terms || []}
-                                        otherIncomeTermDates={formData.otherIncomeTermDates || {}}
-                                        updateOtherIncomeTermDates={(val) => updateField('otherIncomeTermDates', val)}
-                                        otherIncomeVariesByTerm={formData.otherIncomeVariesByTerm}
-                                        updateOtherIncomeVariesByTerm={(val) => updateField('otherIncomeVariesByTerm', val)}
-                                        otherIncomeNonTermAmount={formData.otherIncomeNonTermAmount}
-                                        updateOtherIncomeNonTermAmount={(val) => updateField('otherIncomeNonTermAmount', val)}
-                                        otherIncomeEntryMode={formData.otherIncomeEntryMode}
-                                        updateOtherIncomeEntryMode={(val) => updateField('otherIncomeEntryMode', val)}
-                                    />
-                                )}
+                                {panelId === 'otherIncome' && (() => {
+                                    const instances = formData.otherIncomes || []
+                                    // Auto-create first instance if none
+                                    if (instances.length === 0) {
+                                        const first = makeOtherInstance('oi')
+                                        setTimeout(() => updateField('otherIncomes', [first]), 0)
+                                        return null
+                                    }
+                                    return (
+                                        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                                            <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
+                                                <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>Other Income</h2>
+                                                <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>Any other regular income not covered above?</p>
+                                            </div>
+                                            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 0 16px' }}>
+                                                {instances.map((inst, idx) => (
+                                                    <div key={inst.id} data-inst-id={inst.id}>
+                                                        {instances.length > 1 && (
+                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px 8px' }}>
+                                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>
+                                                                    {inst.label || `Income ${idx + 1}`}
+                                                                </span>
+                                                                <button onClick={() => {
+                                                                    const prevId = idx > 0 ? instances[idx - 1].id : null
+                                                                    updateField('otherIncomes', instances.filter(i => i.id !== inst.id))
+                                                                    if (prevId) setTimeout(() => {
+                                                                        const el = document.querySelector(`[data-inst-id="${prevId}"]`)
+                                                                        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                                                    }, 50)
+                                                                }}
+                                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                                                    Remove
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        <OtherIncomeStep
+                                                            compact
+                                                            otherIncomeAmount={inst.amount}
+                                                            updateOtherIncomeAmount={(val) => updateOtherInst('otherIncomes', inst.id, 'amount', val)}
+                                                            otherIncomeFrequency={inst.frequency}
+                                                            updateOtherIncomeFrequency={(val) => updateOtherInst('otherIncomes', inst.id, 'frequency', val)}
+                                                            otherIncomeAmountPeriod={inst.amountPeriod}
+                                                            updateOtherIncomeAmountPeriod={(val) => updateOtherInst('otherIncomes', inst.id, 'amountPeriod', val)}
+                                                            otherIncomeQuarterlyDates={inst.quarterlyDates}
+                                                            updateOtherIncomeQuarterlyDates={(val) => updateOtherInst('otherIncomes', inst.id, 'quarterlyDates', val)}
+                                                            otherIncomeLabel={inst.label}
+                                                            updateOtherIncomeLabel={(val) => updateOtherInst('otherIncomes', inst.id, 'label', val)}
+                                                            otherIncomeNextDate={inst.nextDate}
+                                                            updateOtherIncomeNextDate={(val) => updateOtherInst('otherIncomes', inst.id, 'nextDate', val)}
+                                                            terms={formData.termDates?.terms || []}
+                                                            otherIncomeTermDates={inst.termDates || {}}
+                                                            updateOtherIncomeTermDates={(val) => updateOtherInst('otherIncomes', inst.id, 'termDates', val)}
+                                                            otherIncomeVariesByTerm={inst.variesByTerm}
+                                                            updateOtherIncomeVariesByTerm={(val) => updateOtherInst('otherIncomes', inst.id, 'variesByTerm', val)}
+                                                            otherIncomeNonTermAmount={inst.nonTermAmount}
+                                                            updateOtherIncomeNonTermAmount={(val) => updateOtherInst('otherIncomes', inst.id, 'nonTermAmount', val)}
+                                                            otherIncomeEntryMode={inst.entryMode}
+                                                        />
+                                                        {idx < instances.length - 1 && (
+                                                            <div style={{ height: 1, background: '#e8e8e8', margin: '12px 24px' }} />
+                                                        )}
+                                                    </div>
+                                                ))}
+                                                <div style={{ padding: '12px 24px 0' }}>
+                                                    <button
+                                                        onClick={() => {
+                                                            const newInst = makeOtherInstance('oi')
+                                                            updateField('otherIncomes', [...instances, newInst])
+                                                            setTimeout(() => {
+                                                                const el = document.querySelector(`[data-inst-id="${newInst.id}"]`)
+                                                                el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                                            }, 50)
+                                                        }}
+                                                        style={{
+                                                            width: '100%', padding: '10px 0', borderRadius: 10,
+                                                            border: '1.5px solid #147b75', background: 'transparent',
+                                                            cursor: 'pointer', fontSize: 14, fontWeight: 600,
+                                                            fontFamily: 'Nunito, sans-serif', color: '#147b75',
+                                                        }}>
+                                                        + Add another income
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })()}
                                 {panelId === 'rent' && (
                                     <RentStep
                                         rentAmount={formData.rentAmount}
@@ -2344,6 +2620,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateRentTermDates={(val) => updateField('rentTermDates', val)}
                                         rentQuarterlyDates={formData.rentQuarterlyDates || {}}
                                         updateRentQuarterlyDates={(val) => updateField('rentQuarterlyDates', val)}
+                                        rentStartDate={formData.rentStartDate}
+                                        updateRentStartDate={(val) => updateField('rentStartDate', val)}
+                                        rentEndDate={formData.rentEndDate}
+                                        updateRentEndDate={(val) => updateField('rentEndDate', val)}
                                     />
                                 )}
                                 {panelId === 'regularExpenses' && (
@@ -2369,6 +2649,12 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         terms={formData.termDates?.terms || []}
                                         billsTermDates={formData.billsTermDates || {}}
                                         updateBillsTermDates={(val) => updateField('billsTermDates', val)}
+                                        billsStartDate={formData.billsStartDate}
+                                        updateBillsStartDate={(val) => updateField('billsStartDate', val)}
+                                        billsEndDate={formData.billsEndDate}
+                                        updateBillsEndDate={(val) => updateField('billsEndDate', val)}
+                                        rentStartDate={formData.rentStartDate}
+                                        rentEndDate={formData.rentEndDate}
                                     />
                                 )}
                                 {panelId === 'uniFees' && (
@@ -2388,6 +2674,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         terms={formData.termDates?.terms || []}
                                         uniFeesTermDates={formData.uniFeesTermDates || {}}
                                         updateUniFeesTermDates={(val) => updateField('uniFeesTermDates', val)}
+                                        uniFeesVariesByTerm={formData.uniFeesVariesByTerm}
+                                        updateUniFeesVariesByTerm={(val) => updateField('uniFeesVariesByTerm', val)}
+                                        uniFeesNonTermAmount={formData.uniFeesNonTermAmount}
+                                        updateUniFeesNonTermAmount={(val) => updateField('uniFeesNonTermAmount', val)}
                                     />
                                 )}
                                 {panelId === 'savingsInvestments' && (
@@ -2407,29 +2697,96 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateSavingsInvTermDates={(val) => updateField('savingsInvTermDates', val)}
                                         savingsInvQuarterlyDates={formData.savingsInvQuarterlyDates || {}}
                                         updateSavingsInvQuarterlyDates={(val) => updateField('savingsInvQuarterlyDates', val)}
+                                        savingsInvVariesByTerm={formData.savingsInvVariesByTerm}
+                                        updateSavingsInvVariesByTerm={(val) => updateField('savingsInvVariesByTerm', val)}
+                                        savingsInvNonTermAmount={formData.savingsInvNonTermAmount}
+                                        updateSavingsInvNonTermAmount={(val) => updateField('savingsInvNonTermAmount', val)}
                                     />
                                 )}
-                                {panelId === 'otherExpense' && (
-                                    <OtherExpenseStep
-                                        otherExpenseAmount={formData.otherExpenseAmount}
-                                        updateOtherExpenseAmount={(val) => updateField('otherExpenseAmount', val)}
-                                        otherExpenseFrequency={formData.otherExpenseFrequency}
-                                        updateOtherExpenseFrequency={(val) => updateField('otherExpenseFrequency', val)}
-                                        otherExpenseAmountPeriod={formData.otherExpenseAmountPeriod}
-                                        updateOtherExpenseAmountPeriod={(val) => updateField('otherExpenseAmountPeriod', val)}
-                                        otherExpenseQuarterlyDates={formData.otherExpenseQuarterlyDates}
-                                        updateOtherExpenseQuarterlyDates={(val) => updateField('otherExpenseQuarterlyDates', val)}
-                                        otherExpenseLabel={formData.otherExpenseLabel}
-                                        updateOtherExpenseLabel={(val) => updateField('otherExpenseLabel', val)}
-                                        otherExpenseNextDate={formData.otherExpenseNextDate}
-                                        updateOtherExpenseNextDate={(val) => updateField('otherExpenseNextDate', val)}
-                                        otherExpenseEntryMode={formData.otherExpenseEntryMode}
-                                        updateOtherExpenseEntryMode={(val) => updateField('otherExpenseEntryMode', val)}
-                                        terms={formData.termDates?.terms || []}
-                                        otherExpenseTermDates={formData.otherExpenseTermDates || {}}
-                                        updateOtherExpenseTermDates={(val) => updateField('otherExpenseTermDates', val)}
-                                    />
-                                )}
+                                {panelId === 'otherExpense' && (() => {
+                                    const instances = formData.otherExpenses || []
+                                    if (instances.length === 0) {
+                                        const first = makeOtherInstance('oe')
+                                        setTimeout(() => updateField('otherExpenses', [first]), 0)
+                                        return null
+                                    }
+                                    return (
+                                        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                                            <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
+                                                <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>Other Expenses</h2>
+                                                <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>Any other regular expense not covered above?</p>
+                                            </div>
+                                            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 0 16px' }}>
+                                                {instances.map((inst, idx) => (
+                                                    <div key={inst.id} data-inst-id={inst.id}>
+                                                        {instances.length > 1 && (
+                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px 8px' }}>
+                                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                                                    {inst.label || `Expense ${idx + 1}`}
+                                                                </span>
+                                                                <button onClick={() => {
+                                                                    const prevId = idx > 0 ? instances[idx - 1].id : null
+                                                                    updateField('otherExpenses', instances.filter(i => i.id !== inst.id))
+                                                                    if (prevId) setTimeout(() => {
+                                                                        const el = document.querySelector(`[data-inst-id="${prevId}"]`)
+                                                                        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                                                    }, 50)
+                                                                }}
+                                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                                                    Remove
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        <OtherExpenseStep
+                                                            compact
+                                                            otherExpenseAmount={inst.amount}
+                                                            updateOtherExpenseAmount={(val) => updateOtherInst('otherExpenses', inst.id, 'amount', val)}
+                                                            otherExpenseFrequency={inst.frequency}
+                                                            updateOtherExpenseFrequency={(val) => updateOtherInst('otherExpenses', inst.id, 'frequency', val)}
+                                                            otherExpenseAmountPeriod={inst.amountPeriod}
+                                                            updateOtherExpenseAmountPeriod={(val) => updateOtherInst('otherExpenses', inst.id, 'amountPeriod', val)}
+                                                            otherExpenseQuarterlyDates={inst.quarterlyDates}
+                                                            updateOtherExpenseQuarterlyDates={(val) => updateOtherInst('otherExpenses', inst.id, 'quarterlyDates', val)}
+                                                            otherExpenseLabel={inst.label}
+                                                            updateOtherExpenseLabel={(val) => updateOtherInst('otherExpenses', inst.id, 'label', val)}
+                                                            otherExpenseNextDate={inst.nextDate}
+                                                            updateOtherExpenseNextDate={(val) => updateOtherInst('otherExpenses', inst.id, 'nextDate', val)}
+                                                            terms={formData.termDates?.terms || []}
+                                                            otherExpenseTermDates={inst.termDates || {}}
+                                                            updateOtherExpenseTermDates={(val) => updateOtherInst('otherExpenses', inst.id, 'termDates', val)}
+                                                            otherExpenseVariesByTerm={inst.variesByTerm}
+                                                            updateOtherExpenseVariesByTerm={(val) => updateOtherInst('otherExpenses', inst.id, 'variesByTerm', val)}
+                                                            otherExpenseNonTermAmount={inst.nonTermAmount}
+                                                            updateOtherExpenseNonTermAmount={(val) => updateOtherInst('otherExpenses', inst.id, 'nonTermAmount', val)}
+                                                        />
+                                                        {idx < instances.length - 1 && (
+                                                            <div style={{ height: 1, background: '#e8e8e8', margin: '12px 24px' }} />
+                                                        )}
+                                                    </div>
+                                                ))}
+                                                <div style={{ padding: '12px 24px 0' }}>
+                                                    <button
+                                                        onClick={() => {
+                                                            const newInst = makeOtherInstance('oe')
+                                                            updateField('otherExpenses', [...instances, newInst])
+                                                            setTimeout(() => {
+                                                                const el = document.querySelector(`[data-inst-id="${newInst.id}"]`)
+                                                                el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                                            }, 50)
+                                                        }}
+                                                        style={{
+                                                            width: '100%', padding: '10px 0', borderRadius: 10,
+                                                            border: '1.5px solid #e06470', background: 'transparent',
+                                                            cursor: 'pointer', fontSize: 14, fontWeight: 600,
+                                                            fontFamily: 'Nunito, sans-serif', color: '#e06470',
+                                                        }}>
+                                                        + Add another expense
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })()}
                                 {panelId === 'oneOffItems' && (
                                     <OneOffItemsStep
                                         items={formData.oneOffItems || [{ name: '', amount: '', date: '', direction: 'out' }]}
@@ -2446,9 +2803,184 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateWeeklySpendVariesByTerm={(val) => updateField('weeklySpendVariesByTerm', val)}
                                     />
                                 )}
+                                {panelId === 'summary' && (() => {
+                                    const allEvts = buildGraphEvents(formData)
+                                    const totalIncome = allEvts.filter(e => e.type === 'income' && !e.removed).reduce((s, e) => s + e.amount, 0)
+                                    const totalExpense = allEvts.filter(e => e.type === 'expense' && !e.removed).reduce((s, e) => s + e.amount, 0)
+                                    const net = totalIncome - totalExpense
+                                    const sym = getCurrencySymbol()
+                                    const fmtK = (v) => { if (v >= 1000) { const k = v / 1000; const dec = Math.round(k * 10) % 10; return `${sym}${k.toFixed(dec === 0 ? 0 : 1)}k` } return `${sym}${Math.round(v).toLocaleString()}` }
+
+                                    const INCOME_SOURCE_MAP = [
+                                        { id: 'maintenance_loan', label: 'Maintenance Loan', icon: incomeLoan, editType: 'loan', panelId: 'maintenanceLoan' },
+                                        { id: 'bursary', label: 'Bursary', icon: incomeBursary, editType: 'bursary', panelId: 'bursary' },
+                                        { id: 'family_friends', label: 'Family & Friends', icon: incomeFamily, editType: 'family', panelId: 'familyFriends' },
+                                        { id: 'work', label: 'Work', icon: incomeWork, editType: 'work', panelId: 'work' },
+                                    ]
+                                    const EXPENSE_SOURCE_MAP = [
+                                        { id: 'rent', label: 'Rent', icon: expenseRent, editType: 'rent', panelId: 'rent' },
+                                        { id: 'bills', label: 'Bills & Utilities', icon: expenseBills, editType: 'bills', panelId: 'bills' },
+                                        { id: 'uni_fees', label: 'University Fees', icon: expenseUnifees, editType: 'uniFees', panelId: 'uniFees' },
+                                        { id: 'savings_investments', label: 'Savings & Investments', icon: expenseSavings, editType: 'savingsInv', panelId: 'savingsInvestments' },
+                                    ]
+
+                                    const getYearly = (editTypes, includeNoDot = false) => allEvts.filter(e => editTypes.includes(e.editType) && !e.removed && (includeNoDot || !e.noDot)).reduce((s, e) => s + e.amount, 0)
+
+                                    const incomeSources = INCOME_SOURCE_MAP.filter(s => (formData.incomeSources || []).includes(s.id))
+                                    const otherIncSources = (formData.incomeSources || []).includes('other_income') ? (formData.otherIncomes || []).filter(inst => inst.amount) : []
+                                    const expenseSources = EXPENSE_SOURCE_MAP.filter(s => (formData.expenseSources || []).includes(s.id))
+                                    const otherExpSources = (formData.expenseSources || []).includes('other_expense') ? (formData.otherExpenses || []).filter(inst => inst.amount) : []
+                                    const weeklySpendAmt = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, ''))
+                                    const oneOffFiltered = (formData.oneOffItems || []).filter(it => it.name || it.amount)
+                                    const oneOffCount = oneOffFiltered.length
+                                    const oneOffTotal = oneOffFiltered.reduce((s, it) => {
+                                        const amt = parseFloat(String(it.amount || '0').replace(/,/g, '')) || 0
+                                        return s + (it.direction === 'in' ? amt : -amt)
+                                    }, 0)
+
+                                    const goToPanel = (panelId) => {
+                                        const idx = PANEL_STEPS.indexOf(panelId)
+                                        if (idx >= 0) {
+                                            returnToSummaryRef.current = true
+                                            setActivePanel(idx)
+                                            setCurrentStepId(panelId)
+                                            scrollAreaRef.current?.scrollTo({ top: 0 })
+                                        }
+                                    }
+
+                                    const chevron = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 18l6-6-6-6" /></svg>
+
+                                    const SummaryRow = ({ icon, label, amount, color, onTap }) => (
+                                        <div onClick={onTap} style={{ display: 'flex', alignItems: 'center', padding: '7px 0', gap: 10, cursor: onTap ? 'pointer' : 'default' }}>
+                                            <img src={icon} alt="" style={{ width: 22, height: 22, objectFit: 'contain', opacity: 0.7, flexShrink: 0 }} />
+                                            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>{label}</span>
+                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color }}>{fmtK(amount)}/yr</span>
+                                            {onTap && chevron}
+                                        </div>
+                                    )
+
+                                    return (
+                                        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                                            <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
+                                                <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 4px', lineHeight: 1.3 }}>Your Budget</h2>
+                                                <p style={{ fontSize: 14, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>Here's a summary of your finances for the year.</p>
+                                            </div>
+                                            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 24px 16px' }}>
+                                                {/* Bank balance & overdraft */}
+                                                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                                                    <div onClick={() => goToPanel('balance')} style={{
+                                                        flex: 1, background: '#f5f7f7', borderRadius: 10, padding: '10px 12px',
+                                                        display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                                                    }}>
+                                                        <div style={{ flex: 1 }}>
+                                                            <p style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: 0.3 }}>Balance</p>
+                                                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#333', margin: '2px 0 0' }}>{sym}{Math.round(parseFloat(String(formData.balance || '0').replace(/,/g, ''))).toLocaleString()}</p>
+                                                        </div>
+                                                        {chevron}
+                                                    </div>
+                                                    <div onClick={() => goToPanel('overdraft')} style={{
+                                                        flex: 1, background: '#f5f7f7', borderRadius: 10, padding: '10px 12px',
+                                                        display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                                                    }}>
+                                                        <div style={{ flex: 1 }}>
+                                                            <p style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: 0.3 }}>Overdraft</p>
+                                                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#333', margin: '2px 0 0' }}>{formData.overdraft ? `${sym}${Math.round(parseFloat(String(formData.overdraft).replace(/,/g, ''))).toLocaleString()}` : 'None'}</p>
+                                                        </div>
+                                                        {chevron}
+                                                    </div>
+                                                </div>
+
+                                                {/* Net summary */}
+                                                <div style={{
+                                                    background: net >= 0 ? 'rgba(20,123,117,0.08)' : 'rgba(224,100,112,0.08)',
+                                                    borderRadius: 12, padding: '14px 16px', marginBottom: 16, textAlign: 'center',
+                                                }}>
+                                                    <p style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#666', margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: 0.5 }}>Year net</p>
+                                                    <p style={{ fontSize: 28, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: net >= 0 ? '#147b75' : '#e06470', margin: 0 }}>
+                                                        {net >= 0 ? '+' : '\u2212'}{sym}{Math.abs(Math.round(net)).toLocaleString()}
+                                                    </p>
+                                                    <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 8 }}>
+                                                        <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>+{fmtK(totalIncome)} in</span>
+                                                        <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>{'\u2212'}{fmtK(totalExpense)} out</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Income section */}
+                                                {(incomeSources.length > 0 || otherIncSources.length > 0) && (
+                                                    <>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#147b75" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16V8M8 12l4-4 4 4" /></svg>
+                                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Income</span>
+                                                        </div>
+                                                        {incomeSources.map(s => <SummaryRow key={s.id} icon={s.icon} label={s.label} amount={getYearly([s.editType])} color="rgba(20,123,117,0.8)" onTap={() => goToPanel(s.panelId)} />)}
+                                                        {otherIncSources.map(inst => <SummaryRow key={inst.id} icon={iconOtherIncome} label={inst.label || 'Other Income'} amount={getYearly([inst.id])} color="rgba(20,123,117,0.8)" onTap={() => goToPanel('otherIncome')} />)}
+                                                        <div style={{ height: 1, background: '#f0f0f0', margin: '8px 0' }} />
+                                                    </>
+                                                )}
+
+                                                {/* Expense section */}
+                                                {(expenseSources.length > 0 || otherExpSources.length > 0) && (
+                                                    <>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v8M16 12l-4 4-4-4" /></svg>
+                                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Expenses</span>
+                                                        </div>
+                                                        {expenseSources.map(s => <SummaryRow key={s.id} icon={s.icon} label={s.label} amount={getYearly([s.editType])} color="rgba(224,100,112,0.8)" onTap={() => goToPanel(s.panelId)} />)}
+                                                        {otherExpSources.map(inst => <SummaryRow key={inst.id} icon={iconOtherExpense} label={inst.label || 'Other Expense'} amount={getYearly([inst.id])} color="rgba(224,100,112,0.8)" onTap={() => goToPanel('otherExpense')} />)}
+                                                    </>
+                                                )}
+
+                                                {/* Variable section */}
+                                                {(weeklySpendAmt > 0 || oneOffCount > 0) && (
+                                                    <>
+                                                        {(expenseSources.length > 0 || otherExpSources.length > 0) && <div style={{ height: 1, background: '#f0f0f0', margin: '8px 0' }} />}
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                                            <svg width="14" height="14" viewBox="0 0 24 20" fill="none"><path d="M1 17L5 9L10 13L15 5L23 14" stroke="#EC8C17" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Variable</span>
+                                                        </div>
+                                                        {weeklySpendAmt > 0 && (
+                                                            <div onClick={() => goToPanel('weeklySpend')} style={{ display: 'flex', alignItems: 'center', padding: '7px 0', gap: 10, cursor: 'pointer' }}>
+                                                                <img src={variableWeeklySpend} alt="" style={{ width: 22, height: 22, objectFit: 'contain', objectPosition: 'center', flexShrink: 0 }} />
+                                                                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Weekly Spend</span>
+                                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: 'rgba(224,100,112,0.8)' }}>{fmtK(getYearly(['weeklySpend'], true))}/yr</span>
+                                                                {chevron}
+                                                            </div>
+                                                        )}
+                                                        {oneOffCount > 0 && (
+                                                            <div onClick={() => goToPanel('oneOffItems')} style={{ display: 'flex', alignItems: 'center', padding: '7px 0', gap: 10, cursor: 'pointer' }}>
+                                                                <img src={variableOneOff} alt="" style={{ width: 22, height: 22, objectFit: 'contain', objectPosition: 'center', flexShrink: 0 }} />
+                                                                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>{oneOffCount} One-Off Item{oneOffCount !== 1 ? 's' : ''}</span>
+                                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: oneOffTotal >= 0 ? 'rgba(20,123,117,0.8)' : 'rgba(224,100,112,0.8)' }}>
+                                                                    {oneOffTotal >= 0 ? '+' : ''}{sym}{Math.abs(Math.round(oneOffTotal)).toLocaleString()}
+                                                                </span>
+                                                                {chevron}
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )
+                                })()}
                             </div>
                         ))}
                     </div>
+
+                    {/* Restore deleted bar — pinned above bottom buttons */}
+                    {(() => {
+                        const panelId = PANEL_STEPS[activePanel]
+                        const editTypesMap = {
+                            maintenanceLoan: 'loan', bursary: 'bursary',
+                            familyFriends: 'family', work: 'work',
+                            rent: 'rent', bills: 'bills', uniFees: 'uniFees',
+                            savingsInvestments: 'savingsInv',
+                        }
+                        let editTypes = editTypesMap[panelId]
+                        if (panelId === 'otherIncome') editTypes = (formData.otherIncomes || []).map(i => i.id)
+                        if (panelId === 'otherExpense') editTypes = (formData.otherExpenses || []).map(i => i.id)
+                        if (!editTypes) return null
+                        return <RestoreDeletedBar editTypes={editTypes} color="#e07b3c" />
+                    })()}
 
                     {/* Bottom buttons — hidden during uni overlay transition to avoid double-render jitter */}
                     <div style={{
@@ -2486,14 +3018,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 cursor: 'pointer', letterSpacing: 0,
                             }}
                         >
-                            {PANEL_LABELS[activePanel]}
+                            {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[activePanel]}
                         </button>
                         <div style={{
                             overflow: 'hidden', flexShrink: 0,
-                            width: PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] ? 36 : 0,
-                            opacity: PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] ? 1 : 0,
-                            transition: 'width 0.3s ease, opacity 0.2s ease',
-                            marginLeft: PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] ? 0 : -12,
+                            width: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 36 : 0,
+                            opacity: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 1 : 0,
+                            transition: 'width 0.3s ease, opacity 0.2s ease, margin-left 0.3s ease',
+                            marginLeft: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 0 : -12,
                         }}>
                             <button
                                 onClick={handlePanelSkip}
@@ -2557,7 +3089,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         margin: '0 0 12px',
                                         lineHeight: 1.3,
                                     }}>
-                                        Where do you go to university?
+                                        Your University
                                     </h2>
                                     <p style={{
                                         fontSize: 15,
@@ -2592,8 +3124,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             maxWidth: 303,
                                             height: 'auto',
                                             objectFit: 'contain',
-                                            opacity: imgLoaded ? 1 : 0,
-                                            transition: 'opacity 0.35s ease'
+                                            opacity: (uniConfirming || uniSlideOut) ? 0 : 1,
+                                            transition: 'opacity 0.8s ease-in-out',
                                         }}
                                     />
                                 </div>
@@ -2693,7 +3225,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         display: 'block',
                                         marginBottom: 3,
                                     }}>
-                                        New balance: £{Math.round(editingEvent.balanceAfter).toLocaleString()}
+                                        New balance: {getCurrencySymbol()}{Math.round(editingEvent.balanceAfter).toLocaleString()}
                                     </span>
                                 )}
                                 {editingEvent.removed ? (
@@ -2713,95 +3245,139 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         <span style={{ fontSize: 9, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Restore</span>
                                     </button>
                                 ) : (
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                                        <div style={{
-                                            display: 'flex', alignItems: 'center', flex: 1,
-                                            background: '#f5f5f5', borderRadius: 5,
-                                            padding: '0 6px', height: 24, gap: 2,
-                                        }}>
-                                            <span style={{
-                                                fontSize: 11, fontWeight: 600,
-                                                color: '#aaa', fontFamily: 'Nunito, sans-serif',
-                                            }}>£</span>
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={formatMoney(editAmount)}
-                                                onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                                                ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
-                                                style={{
-                                                    flex: 1, border: 'none',
-                                                    background: 'transparent',
-                                                    fontSize: 11, fontWeight: 700,
-                                                    fontFamily: 'Nunito, sans-serif',
-                                                    color: '#000', outline: 'none', padding: 0,
-                                                    width: 0, minWidth: 0,
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                            <div style={{
+                                                display: 'flex', alignItems: 'center', flex: 1,
+                                                background: '#f5f5f5', borderRadius: 5,
+                                                padding: '0 6px', height: 24, gap: 2,
+                                            }}>
+                                                <span style={{
+                                                    fontSize: 11, fontWeight: 600,
+                                                    color: '#aaa', fontFamily: 'Nunito, sans-serif',
+                                                }}>{getCurrencySymbol()}</span>
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={formatMoney(editAmount)}
+                                                    onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                    ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
+                                                    style={{
+                                                        flex: 1, border: 'none',
+                                                        background: 'transparent',
+                                                        fontSize: 11, fontWeight: 700,
+                                                        fontFamily: 'Nunito, sans-serif',
+                                                        color: '#000', outline: 'none', padding: 0,
+                                                        width: 0, minWidth: 0,
+                                                    }}
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    const val = editAmount.replace(/[^0-9.]/g, '')
+                                                    if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
+                                                        updateField('instalmentAmounts', {
+                                                            ...(formData.instalmentAmounts || {}),
+                                                            [editingEvent.editMonth]: val,
+                                                        })
+                                                    } else if (editingEvent.editType === 'bursary' && editingEvent.editMonth) {
+                                                        updateField('bursaryInstalmentAmounts', {
+                                                            ...(formData.bursaryInstalmentAmounts || {}),
+                                                            [editingEvent.editMonth]: val,
+                                                        })
+                                                    } else if (editingEvent.editType === 'work' && editingEvent.editMonth) {
+                                                        updateField('workInstalmentAmounts', {
+                                                            ...(formData.workInstalmentAmounts || {}),
+                                                            [editingEvent.editMonth]: val,
+                                                        })
+                                                    } else if (editingEvent.editType === 'savings' && editingEvent.editMonth) {
+                                                        updateField('savingsInstalmentAmounts', {
+                                                            ...(formData.savingsInstalmentAmounts || {}),
+                                                            [editingEvent.editMonth]: val,
+                                                        })
+                                                    } else if (editingEvent.editType === 'family') {
+                                                        updateField('familyAmount', val)
+                                                    } else if (editingEvent.editType?.startsWith('oi_')) {
+                                                        updateOtherInst('otherIncomes', editingEvent.editType, 'amount', val)
+                                                    } else if (editingEvent.editType?.startsWith('oe_')) {
+                                                        updateOtherInst('otherExpenses', editingEvent.editType, 'amount', val)
+                                                    } else if (editingEvent.editType === 'rent') {
+                                                        updateField('rentAmount', val)
+                                                    }
+                                                    setEditingEvent(null)
                                                 }}
-                                            />
+                                                style={{
+                                                    width: 24, height: 24,
+                                                    border: 'none', borderRadius: 5,
+                                                    background: color,
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    cursor: 'pointer', flexShrink: 0,
+                                                }}
+                                            >
+                                                <svg width="10" height="7" viewBox="0 0 14 10" fill="none">
+                                                    <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                </svg>
+                                            </button>
                                         </div>
-                                        <button
-                                            onClick={() => {
-                                                const val = editAmount.replace(/[^0-9.]/g, '')
-                                                if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
-                                                    updateField('instalmentAmounts', {
-                                                        ...(formData.instalmentAmounts || {}),
-                                                        [editingEvent.editMonth]: val,
-                                                    })
-                                                } else if (editingEvent.editType === 'bursary' && editingEvent.editMonth) {
-                                                    updateField('bursaryInstalmentAmounts', {
-                                                        ...(formData.bursaryInstalmentAmounts || {}),
-                                                        [editingEvent.editMonth]: val,
-                                                    })
-                                                } else if (editingEvent.editType === 'work' && editingEvent.editMonth) {
-                                                    updateField('workInstalmentAmounts', {
-                                                        ...(formData.workInstalmentAmounts || {}),
-                                                        [editingEvent.editMonth]: val,
-                                                    })
-                                                } else if (editingEvent.editType === 'savings' && editingEvent.editMonth) {
-                                                    updateField('savingsInstalmentAmounts', {
-                                                        ...(formData.savingsInstalmentAmounts || {}),
-                                                        [editingEvent.editMonth]: val,
-                                                    })
-                                                } else if (editingEvent.editType === 'family') {
-                                                    updateField('familyAmount', val)
-                                                } else if (editingEvent.editType === 'otherIncome') {
-                                                    updateField('otherIncomeAmount', val)
-                                                } else if (editingEvent.editType === 'rent') {
-                                                    updateField('rentAmount', val)
-                                                }
-                                                setEditingEvent(null)
-                                            }}
-                                            style={{
-                                                width: 24, height: 24,
-                                                border: 'none', borderRadius: 5,
-                                                background: color,
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                cursor: 'pointer', flexShrink: 0,
-                                            }}
-                                        >
-                                            <svg width="10" height="7" viewBox="0 0 14 10" fill="none">
-                                                <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                const key = `${editingEvent.editType}:${editingEvent.date}`
-                                                updateField('removedEvents', [...(formData.removedEvents || []), key])
-                                                setEditingEvent(null)
-                                            }}
-                                            style={{
-                                                width: 24, height: 24,
-                                                border: 'none', borderRadius: 5,
-                                                background: '#fee',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                cursor: 'pointer', flexShrink: 0,
-                                            }}
-                                        >
-                                            <svg width="11" height="12" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                <polyline points="3 6 5 6 21 6" />
-                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                            </svg>
-                                        </button>
+                                        {(() => {
+                                            const isLoan = editingEvent.editType === 'loan' && editingEvent.editMonth
+                                            const isBursary = editingEvent.editType === 'bursary' && editingEvent.editMonth
+                                            if (isLoan || isBursary) {
+                                                const monthsKey = isLoan ? 'loanMonths' : 'bursaryMonths'
+                                                const defaultMonths = isLoan ? DEFAULT_LOAN_MONTHS : ['october', 'february', 'march']
+                                                const currentMonths = formData[monthsKey] || defaultMonths
+                                                if (currentMonths.length <= 1) return null
+                                                return (
+                                                    <button
+                                                        onClick={() => {
+                                                            const month = editingEvent.editMonth
+                                                            const instKey = isLoan ? 'instalmentAmounts' : 'bursaryInstalmentAmounts'
+                                                            const datesKey = isLoan ? 'loanDates' : 'bursaryDates'
+                                                            setFormData(prev => {
+                                                                const newMonths = (prev[monthsKey] || defaultMonths).filter(m => m !== month)
+                                                                const newInst = { ...(prev[instKey] || {}) }; delete newInst[month]
+                                                                const newDates = { ...(prev[datesKey] || {}) }; delete newDates[month]
+                                                                return { ...prev, [monthsKey]: newMonths, [instKey]: newInst, [datesKey]: newDates }
+                                                            })
+                                                            setEditingEvent(null)
+                                                        }}
+                                                        style={{
+                                                            width: '100%', height: 18, border: 'none', borderRadius: 4,
+                                                            background: '#fee',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            cursor: 'pointer', gap: 4,
+                                                        }}
+                                                    >
+                                                        <svg width="9" height="10" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                            <polyline points="3 6 5 6 21 6" />
+                                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                        </svg>
+                                                        <span style={{ fontSize: 8, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Remove instalment</span>
+                                                    </button>
+                                                )
+                                            }
+                                            return (
+                                                <button
+                                                    onClick={() => {
+                                                        const key = `${editingEvent.editType}:${editingEvent.date}`
+                                                        updateField('removedEvents', [...(formData.removedEvents || []), key])
+                                                        setEditingEvent(null)
+                                                    }}
+                                                    style={{
+                                                        width: '100%', height: 18, border: 'none', borderRadius: 4,
+                                                        background: '#fee',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        cursor: 'pointer', gap: 4,
+                                                    }}
+                                                >
+                                                    <svg width="9" height="10" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <polyline points="3 6 5 6 21 6" />
+                                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                    </svg>
+                                                    <span style={{ fontSize: 8, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Delete payment</span>
+                                                </button>
+                                            )
+                                        })()}
                                     </div>
                                 )}
                             </div>
@@ -2848,7 +3424,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         <span style={{
                                             fontSize: 11, fontWeight: 600,
                                             color: '#aaa', fontFamily: 'Nunito, sans-serif',
-                                        }}>£</span>
+                                        }}>{getCurrencySymbol()}</span>
                                         <input
                                             type="text"
                                             inputMode="decimal"
