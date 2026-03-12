@@ -25,6 +25,7 @@ export default function ForgotPasswordForm() {
     if (resetError) {
       setError(resetError.message)
     } else {
+      localStorage.setItem('password_reset_pending', 'true')
       setSent(true)
     }
   }

@@ -25,6 +25,7 @@ export default function ResetPasswordForm({ onComplete }) {
     if (updateError) {
       setError(updateError.message)
     } else {
+      localStorage.removeItem('password_reset_pending')
       onComplete()
     }
   }

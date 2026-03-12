@@ -10,7 +10,10 @@ const authCallbackPending =
     window.location.hash.includes('access_token') ||
     new URLSearchParams(window.location.search).has('code')
 const recoveryPending =
-    window.location.hash.includes('type=recovery')
+    window.location.hash.includes('type=recovery') ||
+    new URLSearchParams(window.location.search).get('type') === 'recovery' ||
+    window.location.href.includes('type=recovery') ||
+    (new URLSearchParams(window.location.search).has('code') && localStorage.getItem('password_reset_pending') === 'true')
 import { Spin } from 'antd'
 import { analytics, AUTH_EVENTS, SESSION_EVENTS, getSessionProperties } from './lib/analytics/index.js'
 
@@ -73,16 +76,20 @@ export default function App() {
             setLoading(false)
         })
 
+        // Track if we see PASSWORD_RECOVERY so we can skip SIGNED_IN processing
+        let sawRecovery = recoveryPending
+
         const { data: listener } = supabase.auth.onAuthStateChange(
             async (event, session) => {
                 if (event === 'PASSWORD_RECOVERY') {
+                    sawRecovery = true
                     setSession(session)
                     setPasswordRecovery(true)
                     return
                 }
 
                 // Skip normal sign-in flow during password recovery
-                if (recoveryPending && event === 'SIGNED_IN') {
+                if (sawRecovery && event === 'SIGNED_IN') {
                     setSession(session)
                     return
                 }
