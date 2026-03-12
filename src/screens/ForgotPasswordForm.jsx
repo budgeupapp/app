@@ -58,17 +58,19 @@ export default function ForgotPasswordForm() {
             Enter your email and we'll send you a link to reset your password.
           </p>
 
-          <div style={field}>
-            <span style={fieldLabel}>Email</span>
-            <input
-              type="email"
-              inputMode="email"
-              autoComplete="username email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setError(null) }}
-              style={inp}
-            />
+          <div>
+            <span style={lbl}>Email</span>
+            <div style={field}>
+              <input
+                type="email"
+                inputMode="email"
+                autoComplete="username email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(null) }}
+                style={inp}
+              />
+            </div>
           </div>
 
           <button type="submit" disabled={loading} style={btn}>
@@ -102,17 +104,20 @@ export default function ForgotPasswordForm() {
 
 /* ---- shared styles ---- */
 
+const lbl = {
+  fontSize: 13, fontWeight: 700,
+  fontFamily: 'Nunito, sans-serif',
+  color: '#5e5e5e', display: 'block', marginBottom: 6,
+}
+
 const field = {
   borderRadius: 14,
   border: '1px solid #e8e8e8',
-  padding: '10px 14px 8px',
+  padding: '0 14px',
+  height: 48,
   background: '#fff',
-}
-
-const fieldLabel = {
-  fontSize: 12, fontWeight: 700,
-  fontFamily: 'Nunito, sans-serif',
-  color: '#9f9c9c', display: 'block', marginBottom: 2,
+  display: 'flex',
+  alignItems: 'center',
 }
 
 const inp = {

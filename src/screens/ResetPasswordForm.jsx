@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import PasswordField from '../components/PasswordField'
 
 export default function ResetPasswordForm({ onComplete }) {
   const [password, setPassword] = useState('')
@@ -38,29 +39,27 @@ export default function ResetPasswordForm({ onComplete }) {
         Choose a new password for your account.
       </p>
 
-      <div style={field}>
-        <span style={fieldLabel}>New password</span>
-        <input
-          type="password"
-          autoComplete="new-password"
-          placeholder="At least 6 characters"
-          value={password}
-          onChange={(e) => { setPassword(e.target.value); setError(null) }}
-          style={inp}
-        />
-      </div>
+      <PasswordField
+        label="New password"
+        autoComplete="new-password"
+        placeholder="At least 6 characters"
+        value={password}
+        onChange={(e) => { setPassword(e.target.value); setError(null) }}
+        labelStyle={lbl}
+        fieldStyle={field}
+        inputStyle={inp}
+      />
 
-      <div style={field}>
-        <span style={fieldLabel}>Confirm password</span>
-        <input
-          type="password"
-          autoComplete="new-password"
-          placeholder="Re-enter your password"
-          value={confirm}
-          onChange={(e) => { setConfirm(e.target.value); setError(null) }}
-          style={inp}
-        />
-      </div>
+      <PasswordField
+        label="Confirm password"
+        autoComplete="new-password"
+        placeholder="Re-enter your password"
+        value={confirm}
+        onChange={(e) => { setConfirm(e.target.value); setError(null) }}
+        labelStyle={lbl}
+        fieldStyle={field}
+        inputStyle={inp}
+      />
 
       <button type="submit" disabled={loading} style={btn}>
         {loading ? 'Updating...' : 'Set new password'}
@@ -81,17 +80,20 @@ export default function ResetPasswordForm({ onComplete }) {
 
 /* ---- shared styles ---- */
 
+const lbl = {
+  fontSize: 13, fontWeight: 700,
+  fontFamily: 'Nunito, sans-serif',
+  color: '#5e5e5e', display: 'block', marginBottom: 6,
+}
+
 const field = {
   borderRadius: 14,
   border: '1px solid #e8e8e8',
-  padding: '10px 14px 8px',
+  padding: '0 14px',
+  height: 48,
   background: '#fff',
-}
-
-const fieldLabel = {
-  fontSize: 12, fontWeight: 700,
-  fontFamily: 'Nunito, sans-serif',
-  color: '#9f9c9c', display: 'block', marginBottom: 2,
+  display: 'flex',
+  alignItems: 'center',
 }
 
 const inp = {

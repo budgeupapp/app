@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { Link } from 'react-router-dom'
 import { analytics, AUTH_EVENTS, getEmailDomain } from '../lib/analytics/index.js'
+import PasswordField from '../components/PasswordField'
 
 export default function LoginForm() {
   const [email, setEmail] = useState('')
@@ -46,30 +47,31 @@ export default function LoginForm() {
 
   return (
     <form onSubmit={handleLogin} autoComplete="on" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={field}>
-        <span style={fieldLabel}>Email</span>
-        <input
-          type="email"
-          inputMode="email"
-          autoComplete="username email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => { setEmail(e.target.value); setError(null) }}
-          style={inp}
-        />
+      <div>
+        <span style={lbl}>Email</span>
+        <div style={field}>
+          <input
+            type="email"
+            inputMode="email"
+            autoComplete="username email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); setError(null) }}
+            style={inp}
+          />
+        </div>
       </div>
 
-      <div style={field}>
-        <span style={fieldLabel}>Password</span>
-        <input
-          type="password"
-          autoComplete="current-password"
-          placeholder="Your password"
-          value={password}
-          onChange={(e) => { setPassword(e.target.value); setError(null) }}
-          style={inp}
-        />
-      </div>
+      <PasswordField
+        label="Password"
+        autoComplete="current-password"
+        placeholder="Your password"
+        value={password}
+        onChange={(e) => { setPassword(e.target.value); setError(null) }}
+        labelStyle={lbl}
+        fieldStyle={field}
+        inputStyle={inp}
+      />
 
       <div style={{ textAlign: 'right', marginTop: -6 }}>
         <Link to="/forgot-password" style={{
@@ -111,17 +113,20 @@ export default function LoginForm() {
 
 /* ---- shared styles ---- */
 
+const lbl = {
+  fontSize: 13, fontWeight: 700,
+  fontFamily: 'Nunito, sans-serif',
+  color: '#5e5e5e', display: 'block', marginBottom: 6,
+}
+
 const field = {
   borderRadius: 14,
   border: '1px solid #e8e8e8',
-  padding: '10px 14px 8px',
+  padding: '0 14px',
+  height: 48,
   background: '#fff',
-}
-
-const fieldLabel = {
-  fontSize: 12, fontWeight: 700,
-  fontFamily: 'Nunito, sans-serif',
-  color: '#9f9c9c', display: 'block', marginBottom: 2,
+  display: 'flex',
+  alignItems: 'center',
 }
 
 const inp = {

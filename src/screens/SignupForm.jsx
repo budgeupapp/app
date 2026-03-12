@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabaseClient'
 import { Link, useSearchParams } from 'react-router-dom'
 import { POLICY_URLS } from '../lib/policyVersions'
 import { analytics, AUTH_EVENTS, getEmailDomain } from '../lib/analytics/index.js'
+import PasswordField from '../components/PasswordField'
 
 export default function SignupForm() {
   const [searchParams] = useSearchParams()
@@ -40,7 +41,7 @@ export default function SignupForm() {
 
     const referralCode = localStorage.getItem('referral_code')
 
-    const { error: authError } = await supabase.auth.signUp({
+    const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -51,17 +52,20 @@ export default function SignupForm() {
 
     setLoading(false)
 
-    if (authError) {
+    // Supabase returns empty identities when email already exists
+    const alreadyExists = data?.user?.identities?.length === 0
+
+    if (authError || alreadyExists) {
       localStorage.removeItem('signup_email')
       localStorage.removeItem('signup_timestamp')
 
       analytics.track(AUTH_EVENTS.SIGNUP_FAILED, {
-        error_message: authError.message,
+        error_message: alreadyExists ? 'already_registered' : authError?.message,
         email_domain: getEmailDomain(email)
       })
 
-      if (authError.message.toLowerCase().includes('already registered')) {
-        setError('An account with this email already exists. Try logging in instead.')
+      if (alreadyExists || authError?.message?.toLowerCase().includes('already registered')) {
+        setError(<>An account with this email already exists. </>)
       } else {
         setError(authError.message)
       }
@@ -74,30 +78,31 @@ export default function SignupForm() {
 
   return (
     <form onSubmit={handleSignup} autoComplete="on" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={field}>
-        <span style={fieldLabel}>Email</span>
-        <input
-          type="email"
-          inputMode="email"
-          autoComplete="username email"
-          placeholder="you@example.com"
-          value={email}
-          onChange={(e) => { setEmail(e.target.value); setError(null) }}
-          style={inp}
-        />
+      <div>
+        <span style={lbl}>Email</span>
+        <div style={field}>
+          <input
+            type="email"
+            inputMode="email"
+            autoComplete="username email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); setError(null) }}
+            style={inp}
+          />
+        </div>
       </div>
 
-      <div style={field}>
-        <span style={fieldLabel}>Password</span>
-        <input
-          type="password"
-          autoComplete="new-password"
-          placeholder="At least 6 characters"
-          value={password}
-          onChange={(e) => { setPassword(e.target.value); setError(null) }}
-          style={inp}
-        />
-      </div>
+      <PasswordField
+        label="Password"
+        autoComplete="new-password"
+        placeholder="At least 6 characters"
+        value={password}
+        onChange={(e) => { setPassword(e.target.value); setError(null) }}
+        labelStyle={lbl}
+        fieldStyle={field}
+        inputStyle={inp}
+      />
 
       {/* Consent checkbox */}
       <label style={{
@@ -165,17 +170,20 @@ export default function SignupForm() {
 
 /* ---- shared styles ---- */
 
+const lbl = {
+  fontSize: 13, fontWeight: 700,
+  fontFamily: 'Nunito, sans-serif',
+  color: '#5e5e5e', display: 'block', marginBottom: 6,
+}
+
 const field = {
   borderRadius: 14,
   border: '1px solid #e8e8e8',
-  padding: '10px 14px 8px',
+  padding: '0 14px',
+  height: 48,
   background: '#fff',
-}
-
-const fieldLabel = {
-  fontSize: 12, fontWeight: 700,
-  fontFamily: 'Nunito, sans-serif',
-  color: '#9f9c9c', display: 'block', marginBottom: 2,
+  display: 'flex',
+  alignItems: 'center',
 }
 
 const inp = {
