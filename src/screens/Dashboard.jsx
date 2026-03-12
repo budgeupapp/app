@@ -1674,11 +1674,20 @@ export default function Dashboard() {
         if (footerRef.current) {
             const ft = ease(Math.min(1, t / 0.35))
             const footerScale = 1 - ft
-            footerRef.current.style.transform = `scaleY(${footerScale})`
-            footerRef.current.style.transformOrigin = 'top'
-            footerRef.current.style.maxHeight = `${footerScale * 60}px`
-            footerRef.current.style.opacity = `${footerScale}`
-            footerRef.current.style.overflow = 'hidden'
+            if (footerScale >= 0.999) {
+                // Remove transform entirely so position:fixed children (BalancePill overlay) work correctly
+                footerRef.current.style.transform = ''
+                footerRef.current.style.transformOrigin = ''
+                footerRef.current.style.maxHeight = ''
+                footerRef.current.style.opacity = ''
+                footerRef.current.style.overflow = ''
+            } else {
+                footerRef.current.style.transform = `scaleY(${footerScale})`
+                footerRef.current.style.transformOrigin = 'top'
+                footerRef.current.style.maxHeight = `${footerScale * 60}px`
+                footerRef.current.style.opacity = `${footerScale}`
+                footerRef.current.style.overflow = 'hidden'
+            }
         }
         if (stickyHeaderRef.current) {
             const shadowOpacity = Math.min(0.08, t * 0.08)
