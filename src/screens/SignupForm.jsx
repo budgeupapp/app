@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabaseClient'
 import { Link, useSearchParams } from 'react-router-dom'
 import { POLICY_URLS } from '../lib/policyVersions'
 import { analytics, AUTH_EVENTS, getEmailDomain } from '../lib/analytics/index.js'
-import PasswordField from '../components/PasswordField'
 
 export default function SignupForm() {
   const [searchParams] = useSearchParams()
@@ -74,9 +73,9 @@ export default function SignupForm() {
   const msg = error || success
 
   return (
-    <form onSubmit={handleSignup} autoComplete="on" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div>
-        <label style={lbl}>Email</label>
+    <form onSubmit={handleSignup} autoComplete="on" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={field}>
+        <span style={fieldLabel}>Email</span>
         <input
           type="email"
           inputMode="email"
@@ -88,15 +87,17 @@ export default function SignupForm() {
         />
       </div>
 
-      <PasswordField
-        label="Password"
-        autoComplete="new-password"
-        placeholder="At least 6 characters"
-        value={password}
-        onChange={(e) => { setPassword(e.target.value); setError(null) }}
-        labelStyle={lbl}
-        inputStyle={inp}
-      />
+      <div style={field}>
+        <span style={fieldLabel}>Password</span>
+        <input
+          type="password"
+          autoComplete="new-password"
+          placeholder="At least 6 characters"
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); setError(null) }}
+          style={inp}
+        />
+      </div>
 
       {/* Consent checkbox */}
       <label style={{
@@ -164,24 +165,30 @@ export default function SignupForm() {
 
 /* ---- shared styles ---- */
 
-const lbl = {
-  fontSize: 13, fontWeight: 700,
+const field = {
+  borderRadius: 14,
+  border: '1px solid #e8e8e8',
+  padding: '10px 14px 8px',
+  background: '#fff',
+}
+
+const fieldLabel = {
+  fontSize: 12, fontWeight: 700,
   fontFamily: 'Nunito, sans-serif',
-  color: '#5e5e5e', marginBottom: 6, display: 'block',
+  color: '#9f9c9c', display: 'block', marginBottom: 2,
 }
 
 const inp = {
-  width: '100%', height: 50, borderRadius: 10,
-  border: '1px solid #e8e8e8', padding: '0 14px',
+  width: '100%', border: 'none', padding: 0,
   fontSize: 16, fontWeight: 500,
   fontFamily: 'Nunito, sans-serif', color: '#000',
-  background: '#fff', outline: 'none',
+  background: 'transparent', outline: 'none',
   boxSizing: 'border-box', WebkitAppearance: 'none',
 }
 
 const btn = {
-  width: '100%', height: 52, borderRadius: 10,
+  width: '100%', height: 52, borderRadius: 14,
   border: 'none', background: '#147b75',
   color: '#fff', fontSize: 16, fontWeight: 700,
-  fontFamily: 'Nunito, sans-serif',
+  fontFamily: 'Nunito, sans-serif', marginTop: 4,
 }
