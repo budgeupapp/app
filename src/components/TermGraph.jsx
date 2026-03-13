@@ -121,7 +121,7 @@ function calcYRange(bal, projMin, projMax) {
     for (const ns of niceSteps) {
         if (ns * mag10 >= rawStep) { niceStep = ns * mag10; break }
     }
-    const ticks = []
+    let ticks = []
     const tickStart = Math.ceil(yMin / niceStep) * niceStep
     for (let v = tickStart; v <= yMax + niceStep * 0.01; v += niceStep) {
         ticks.push(Math.round(v * 100) / 100)
@@ -130,6 +130,14 @@ function calcYRange(bal, projMin, projMax) {
     if (yMin <= 0 && yMax >= 0 && !ticks.includes(0)) {
         ticks.push(0)
         ticks.sort((a, b) => a - b)
+    }
+    // Cap at 7 ticks — keep evenly spaced subset if too many
+    if (ticks.length > 7) {
+        const keep = [ticks[0]]
+        const step = (ticks.length - 1) / 5
+        for (let i = 1; i < 5; i++) keep.push(ticks[Math.round(i * step)])
+        keep.push(ticks[ticks.length - 1])
+        ticks = keep
     }
 
     return { yMin, yMax, ticks }
@@ -1797,7 +1805,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     position: 'absolute', inset: 0,
                                     pointerEvents: showBalanceHistory ? 'auto' : 'none',
                                 }}>
-                                    {allHistPoints.length > 1 && (
+                                    {allHistPoints.length >= 1 && (
                                         <svg
                                             viewBox="0 0 100 100"
                                             preserveAspectRatio="none"

@@ -831,7 +831,7 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
     const handleOpen = () => {
         const n = parseFloat(String(value || '').replace(/,/g, ''))
         setIsNegative(n < 0)
-        setRaw(isNaN(n) ? '' : String(Math.abs(n)))
+        setRaw(isNaN(n) ? '' : new Intl.NumberFormat('en-GB').format(Math.abs(n)))
         // Capture pill position before expanding so we can render fixed overlay
         const rect = containerRef.current?.getBoundingClientRect()
         if (rect) setPillRect({ top: rect.top, left: rect.left })
@@ -859,8 +859,9 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
     }
 
     const handleStep = (dir) => {
-        const n = parseFloat(raw) || 0
-        setRaw(String(Math.max(0, Math.round((n + dir * 10) * 100) / 100)))
+        const n = parseFloat(String(raw).replace(/,/g, '')) || 0
+        const stepped = Math.max(0, Math.round((n + dir * 10) * 100) / 100)
+        setRaw(new Intl.NumberFormat('en-GB').format(stepped))
     }
 
     useEffect(() => {
@@ -3403,11 +3404,35 @@ export default function Dashboard() {
                                         const alreadyOverdraft = od > 0 && bal < -od
 
                                         for (const evt of futureEvts) {
+                                            const prevBal = bal
                                             if (evt.editType === 'weeklySpend') bal -= evt.amount
                                             else bal += evt.type === 'income' ? evt.amount : -evt.amount
                                             if (bal < lowestBal) lowestBal = bal
-                                            if (bal <= 0 && !zeroDate) zeroDate = evt.date
-                                            if (od > 0 && bal < -od && !overdraftDate) overdraftDate = evt.date
+                                            if (bal <= 0 && !zeroDate) {
+                                                // Interpolate actual zero-crossing day for weekly spend
+                                                if (evt.editType === 'weeklySpend' && prevBal > 0 && evt.amount > 0) {
+                                                    const dailySpend = evt.amount / 7
+                                                    const daysToZero = Math.floor(prevBal / dailySpend)
+                                                    const evtDate = new Date(evt.date)
+                                                    const crossDate = new Date(evtDate.getTime() - (7 - daysToZero) * 86400000)
+                                                    zeroDate = toLocalDate(crossDate < new Date(todayStr) ? new Date(todayStr) : crossDate)
+                                                } else {
+                                                    zeroDate = evt.date
+                                                }
+                                            }
+                                            if (od > 0 && bal < -od && !overdraftDate) {
+                                                // Interpolate overdraft breach day for weekly spend
+                                                if (evt.editType === 'weeklySpend' && prevBal >= -od && evt.amount > 0) {
+                                                    const dailySpend = evt.amount / 7
+                                                    const balUntilOd = prevBal + od
+                                                    const daysToOd = Math.floor(balUntilOd / dailySpend)
+                                                    const evtDate = new Date(evt.date)
+                                                    const crossDate = new Date(evtDate.getTime() - (7 - daysToOd) * 86400000)
+                                                    overdraftDate = toLocalDate(crossDate < new Date(todayStr) ? new Date(todayStr) : crossDate)
+                                                } else {
+                                                    overdraftDate = evt.date
+                                                }
+                                            }
                                         }
 
                                         if (!alreadyZero && !alreadyOverdraft && !zeroDate && !overdraftDate) return null
