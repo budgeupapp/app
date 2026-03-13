@@ -34,7 +34,7 @@ export default function MoneyAdviceScreen() {
                 <div style={{
                     padding: '0px 20px',
                     textAlign: 'center',
-                    paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))',
+                    paddingBottom: 'calc(130px + env(safe-area-inset-bottom, 0px))',
                 }}>
                     <img
                         src={MoneyAdviceSvg}
@@ -83,7 +83,7 @@ export default function MoneyAdviceScreen() {
             <div style={{
                 padding: '0px 20px',
                 textAlign: 'center',
-                paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))',
+                paddingBottom: 'calc(130px + env(safe-area-inset-bottom, 0px))',
             }}>
                 {/* SVG Illustration */}
                 <img
