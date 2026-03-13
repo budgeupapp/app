@@ -3,7 +3,7 @@ import { Button, Typography, message } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { POLICY_URLS } from '../lib/policyVersions'
-import { analytics, AUTH_EVENTS, SETTINGS_EVENTS, getErrorProperties } from '../lib/analytics/index.js'
+import { analytics, AUTH_EVENTS, SETTINGS_EVENTS, FEEDBACK_EVENTS, getErrorProperties } from '../lib/analytics/index.js'
 import { CURRENCIES, getCurrency, setCurrency, getGraphStart, setGraphStart, getCurrencySymbol } from '../lib/settings'
 import { fetchUserData, saveTermDates, saveUserFinances, saveCashflowForecast } from '../lib/api'
 import { INITIAL_FORM_DATA, UK_UNIVERSITIES, getTermDatesForUniversity, hasCustomTermDates } from '../config/onboardingConfig'
@@ -366,6 +366,8 @@ export default function SettingsScreen() {
 
   const confirmLogout = async () => {
     setLoggingOut(true)
+    // Track logout before signOut so it fires before analytics.reset() in SIGNED_OUT handler
+    analytics.track(AUTH_EVENTS.LOGOUT)
     const { error } = await supabase.auth.signOut()
     setLoggingOut(false)
 
@@ -373,7 +375,6 @@ export default function SettingsScreen() {
       setShowLogoutModal(false)
       showToast('Failed to log out. Please try again.', 'error', 5000)
     } else {
-      analytics.track(AUTH_EVENTS.LOGOUT)
       await clearAllAppData()
     }
   }
@@ -390,16 +391,21 @@ export default function SettingsScreen() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No user found')
 
-      const { error: dataError } = await supabase
-        .from('user_profiles')
-        .delete()
-        .eq('user_id', user.id)
-
-      if (dataError) console.error('Error deleting user data:', dataError)
+      // Delete all user data from every table before deleting auth account
+      // (term_breaks cascade from term_dates via foreign key)
+      const tables = ['cashflow_forecast', 'balance_history', 'term_dates', 'user_consents', 'user_profiles']
+      for (const table of tables) {
+        const { error } = await supabase
+          .from(table)
+          .delete()
+          .eq('user_id', user.id)
+        if (error) console.error(`Error deleting from ${table}:`, error)
+      }
 
       const { error: authError } = await supabase.rpc('delete_own_account')
       if (authError) throw authError
 
+      // Track before signOut so it fires before analytics.reset() in SIGNED_OUT handler
       analytics.track(SETTINGS_EVENTS.ACCOUNT_DELETED)
       showToast('Account deleted successfully', 'success')
 
@@ -663,7 +669,7 @@ export default function SettingsScreen() {
       }}>
 
         {/* INVITE FRIENDS */}
-        <div style={{ marginBottom: 40 }}>
+        <div style={{ marginTop: 16, marginBottom: 40 }}>
 
           <Button
             type="default"
@@ -766,6 +772,7 @@ export default function SettingsScreen() {
                 value={currency}
                 onChange={(e) => {
                   const code = e.target.value
+                  analytics.track(SETTINGS_EVENTS.CURRENCY_CHANGED, { currency: code })
                   setCurrencyState(code)
                   setCurrency(code)
                   if (userIdRef.current) {
