@@ -68,7 +68,7 @@ function RatingQuestion({ question, value, onChange }) {
                     )
                 })}
             </div>
-            {question.lowerBoundLabel && question.upperBoundLabel && (
+            {!useEmoji && question.lowerBoundLabel && question.upperBoundLabel && (
                 <div style={{
                     display: 'flex', justifyContent: 'space-between',
                     marginTop: 4, padding: '0 4px',
@@ -303,10 +303,11 @@ export default function FeedbackScreen() {
     return (
         <div style={{
             display: 'flex', flexDirection: 'column',
-            height: 'calc(100% - 170px - env(safe-area-inset-bottom, 0px))',
-            background: '#fff',
+            height: '100%',
+            background: '#f0f0f0',
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch',
+            paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))',
         }}>
             {/* Header */}
             <div style={{ padding: '50px 20px 16px', flexShrink: 0 }}>
@@ -340,13 +341,12 @@ export default function FeedbackScreen() {
                                     fontFamily: 'Nunito, sans-serif',
                                     color: '#1a1a1a', margin: '0 0 4px',
                                 }}>Quick feedback</p>
-                                {survey.description && (
-                                    <p style={{
-                                        fontSize: 13, fontWeight: 500,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#888', margin: '0 0 16px',
-                                    }}>{survey.description}</p>
-                                )}
+                                <p style={{
+                                    fontSize: 13, fontWeight: 500,
+                                    fontFamily: 'Nunito, sans-serif',
+                                    color: '#888', margin: '0 0 16px',
+                                    lineHeight: 1.5,
+                                }}>Send feedback anytime — bugs, feature ideas, or just how you're finding the app!</p>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                                     {survey.questions.map((q, i) => renderQuestion(q, i))}
@@ -464,7 +464,7 @@ export default function FeedbackScreen() {
             )}
 
             {/* Detailed Feedback Section */}
-            <div style={{ padding: '0 20px 24px', flexShrink: 0 }} ref={formSectionRef}>
+            <div style={{ padding: '0 20px 0', flexShrink: 0 }} ref={formSectionRef}>
                 <button
                     onClick={toggleForm}
                     style={{
@@ -504,7 +504,7 @@ export default function FeedbackScreen() {
 
                 {/* Collapsible Google Form */}
                 <div style={{
-                    maxHeight: showForm ? 600 : 0,
+                    maxHeight: showForm ? 560 : 0,
                     opacity: showForm ? 1 : 0,
                     overflow: 'hidden',
                     transition: 'max-height 0.4s ease, opacity 0.3s ease',
@@ -514,7 +514,7 @@ export default function FeedbackScreen() {
                     <div style={{
                         height: 560,
                         position: 'relative',
-                        padding: '0 4px 12px',
+                        padding: '0 4px 10px',
                     }}>
                         {showForm && !formLoaded && (
                             <div style={{

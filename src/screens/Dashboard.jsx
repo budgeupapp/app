@@ -8,6 +8,7 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchUserData, saveCashflowForecast, saveUserFinances, saveTermDates, saveBalanceHistory } from '../lib/api'
 import { getCurrencySymbol, getGraphStart, setGraphStart } from '../lib/settings'
 import { toLocalDate, makeOtherInstance, MONTH_KEY_TO_DATE, MONTH_SHORT, isInTerm, distributeEvenly } from '../lib/helpers'
+import { analytics, DASHBOARD_EVENTS, getBalanceRange } from '../lib/analytics/index.js'
 import {
     INITIAL_FORM_DATA,
     DEFAULT_LOAN_MONTHS,
@@ -1455,6 +1456,9 @@ export default function Dashboard() {
     const tabScrollRef = useRef({})
     const tabExpandedRef = useRef({})
     const handleTabChange = (tab) => {
+        if (tab !== activeTab) {
+            analytics.track(DASHBOARD_EVENTS.TAB_SWITCHED, { tab })
+        }
         const el = scrollRef.current
         if (!el) return
         const isCollapsed = el.scrollTop >= SHRINK_DIST
@@ -2121,6 +2125,10 @@ export default function Dashboard() {
     }
 
     const deleteSource = (sourceId, isExpense) => {
+        analytics.track(DASHBOARD_EVENTS.SOURCE_REMOVED, {
+            source_id: sourceId,
+            source_type: isExpense ? 'expense' : 'income',
+        })
         // Check if this is an other income/expense instance
         const isOtherIncome = otherIncomes.some(i => i.id === sourceId)
         const isOtherExpense = otherExpenses.some(i => i.id === sourceId)
@@ -2226,6 +2234,10 @@ export default function Dashboard() {
     }
 
     const addSource = (sourceId, isExpense) => {
+        analytics.track(DASHBOARD_EVENTS.SOURCE_ADDED, {
+            source_id: sourceId,
+            source_type: isExpense ? 'expense' : 'income',
+        })
         addPickerScrollPos.current = null
         // Remove dropdown and expand source in same render to avoid layout jump
         setPickerClosing(false)
@@ -2268,11 +2280,16 @@ export default function Dashboard() {
     const toggleSourceVisibility = (id) => {
         setHiddenSources(prev => {
             const next = new Set(prev)
-            if (next.has(id)) {
+            const wasHidden = next.has(id)
+            if (wasHidden) {
                 next.delete(id)
             } else {
                 next.add(id)
             }
+            analytics.track(DASHBOARD_EVENTS.SOURCE_VISIBILITY_TOGGLED, {
+                source_id: id,
+                action: wasHidden ? 'shown' : 'hidden',
+            })
             localStorage.setItem('budgeup_hidden_sources', JSON.stringify([...next]))
             return next
         })
@@ -2322,6 +2339,10 @@ export default function Dashboard() {
     })()
 
     const handleEventClick = useCallback((evt, e) => {
+        analytics.track(DASHBOARD_EVENTS.GRAPH_EVENT_CLICKED, {
+            event_type: evt.type,
+            edit_type: evt.editType,
+        })
         const rect = e.currentTarget.getBoundingClientRect()
         setEditingEvent({ ...evt, clickX: rect.left + rect.width / 2, clickY: rect.top + rect.height / 2 })
         setEditAmount(String(evt.amount))
@@ -2448,6 +2469,11 @@ export default function Dashboard() {
                                             })
                                             saveBalanceHistory(userIdRef.current, n)
                                         }
+                                        analytics.track(DASHBOARD_EVENTS.BALANCE_RECORDED, {
+                                            balance_range: getBalanceRange(n),
+                                            is_first_recording: true,
+                                            entry_method: 'initial_popup',
+                                        })
                                         localStorage.setItem('budgeup_balance_last_date', today)
                                         setBalanceHistory(prev => {
                                             const entry = { balance: n, recorded_date: today, source: 'manual' }
@@ -2544,6 +2570,12 @@ export default function Dashboard() {
                                             if (userIdRef.current) {
                                                 saveBalanceHistory(userIdRef.current, newVal)
                                             }
+                                            analytics.track(DASHBOARD_EVENTS.BALANCE_RECORDED, {
+                                                balance_range: getBalanceRange(newVal),
+                                                is_first_recording: !originSetRef.current,
+                                                is_update: isUpdate,
+                                                entry_method: 'balance_pill',
+                                            })
                                             localStorage.setItem('budgeup_balance_last_date', today)
                                             // Update local balanceHistory immediately
                                             setBalanceHistory(prev => {
@@ -2605,6 +2637,7 @@ export default function Dashboard() {
                                             </div>
                                             <button
                                                 onClick={() => setShowBalanceHistory(prev => {
+                                                    analytics.track(DASHBOARD_EVENTS.BALANCE_HISTORY_TOGGLED, { visible: !prev })
                                                     localStorage.setItem('budgeup_show_balance_history', String(!prev))
                                                     return !prev
                                                 })}
@@ -3883,6 +3916,10 @@ export default function Dashboard() {
                                                 } else if (editingEvent.editType === 'work') {
                                                     updateField('workAmount', val)
                                                 }
+                                                analytics.track(DASHBOARD_EVENTS.EVENT_EDITED, {
+                                                    edit_type: editingEvent.editType,
+                                                    event_type: editingEvent.type,
+                                                })
                                                 setEditingEvent(null)
                                             }}
                                             style={{
@@ -3903,9 +3940,10 @@ export default function Dashboard() {
                                         const isBursary = editingEvent.editType === 'bursary' && editingEvent.editMonth
                                         if (isLoan || isBursary) {
                                             const monthsKey = isLoan ? 'loanMonths' : 'bursaryMonths'
+                                            const amountKey = isLoan ? 'loanAmount' : 'bursaryAmount'
                                             const defaultMonths = isLoan ? DEFAULT_LOAN_MONTHS : ['october', 'february', 'march']
                                             const currentMonths = formData[monthsKey] || defaultMonths
-                                            if (currentMonths.length <= 0) return null
+                                            if (currentMonths.length <= 1) return null
                                             return (
                                                 <button
                                                     onClick={() => {
@@ -3914,8 +3952,17 @@ export default function Dashboard() {
                                                         const datesKey = isLoan ? 'loanDates' : 'bursaryDates'
                                                         setFormData(prev => {
                                                             const newMonths = (prev[monthsKey] || defaultMonths).filter(m => m !== month)
-                                                            const newInst = { ...(prev[instKey] || {}) }; delete newInst[month]
                                                             const newDates = { ...(prev[datesKey] || {}) }; delete newDates[month]
+                                                            // Redistribute total amount evenly across remaining months
+                                                            const total = parseFloat(String(prev[amountKey] || '0').replace(/,/g, ''))
+                                                            const newInst = {}
+                                                            if (total > 0 && newMonths.length > 0) {
+                                                                const base = Math.floor(total * 100 / newMonths.length) / 100
+                                                                const remainder = Math.round((total - base * newMonths.length) * 100)
+                                                                newMonths.forEach((m, i) => {
+                                                                    newInst[m] = String(Math.round((base + (i < remainder ? 0.01 : 0)) * 100) / 100)
+                                                                })
+                                                            }
                                                             return { ...prev, [monthsKey]: newMonths, [instKey]: newInst, [datesKey]: newDates }
                                                         })
                                                         setEditingEvent(null)
@@ -4055,6 +4102,9 @@ export default function Dashboard() {
                                     onClick={() => {
                                         const val = editOverdraftAmount.replace(/[^0-9.]/g, '')
                                         updateField('overdraft', val)
+                                        analytics.track(DASHBOARD_EVENTS.OVERDRAFT_UPDATED, {
+                                            has_overdraft: parseFloat(val) > 0,
+                                        })
                                         setEditingOverdraft(null)
                                     }}
                                     style={{
