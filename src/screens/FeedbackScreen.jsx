@@ -304,7 +304,7 @@ export default function FeedbackScreen() {
         <div style={{
             display: 'flex', flexDirection: 'column',
             height: '100%',
-            background: '#f0f0f0',
+            background: '#fff',
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch',
             paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))',
