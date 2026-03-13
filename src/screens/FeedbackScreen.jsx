@@ -213,7 +213,7 @@ export default function FeedbackScreen() {
         analytics.track(FEEDBACK_EVENTS.VIEWED)
 
         if (!POSTHOG_SURVEY_ID) return
-        posthog.getActiveMatchingSurveys((surveys) => {
+        posthog.getSurveys((surveys) => {
             const match = surveys.find(s => s.id === POSTHOG_SURVEY_ID)
             if (match) {
                 setSurvey(match)
@@ -324,12 +324,14 @@ export default function FeedbackScreen() {
 
             {/* PostHog Survey Card */}
             {survey && (
-                <div style={{ padding: '0 20px 16px', flexShrink: 0 }}>
+                <div style={{
+                    padding: '0 20px 16px', flexShrink: 0,
+                    animation: 'surveyFadeIn 0.35s ease',
+                }}>
                     <div style={{
                         background: '#f8f9fa',
                         borderRadius: 16,
                         padding: '20px',
-                        transition: 'all 0.3s ease',
                     }}>
                         {!submitted ? (
                             <>
@@ -428,17 +430,35 @@ export default function FeedbackScreen() {
 
             {/* Loading state if survey hasn't loaded yet */}
             {!survey && POSTHOG_SURVEY_ID && (
-                <div style={{ padding: '0 20px 16px', flexShrink: 0 }}>
+                <div style={{
+                    padding: '0 20px 16px', flexShrink: 0,
+                    animation: 'skeletonFadeIn 0.3s ease',
+                }}>
                     <div style={{
                         background: '#f8f9fa', borderRadius: 16, padding: '20px',
                     }}>
-                        <div style={{ width: '40%', height: 16, borderRadius: 8, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', marginBottom: 12 }} />
-                        <div style={{ width: '60%', height: 12, borderRadius: 6, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.1s', marginBottom: 16 }} />
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        {/* "Quick feedback" title */}
+                        <div style={{ width: '45%', height: 18, borderRadius: 9, background: '#ebebeb', animation: 'skeleton-pulse 1.2s ease-in-out infinite', marginBottom: 6 }} />
+                        {/* Subtitle */}
+                        <div style={{ width: '65%', height: 13, borderRadius: 7, background: '#f0f0f0', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.08s', marginBottom: 18 }} />
+                        {/* Question label */}
+                        <div style={{ width: '55%', height: 14, borderRadius: 7, background: '#ebebeb', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.15s', marginBottom: 12 }} />
+                        {/* Emoji rating buttons */}
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
                             {[1, 2, 3, 4, 5].map(i => (
-                                <div key={i} style={{ flex: 1, height: 52, borderRadius: 12, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: `${i * 0.1}s` }} />
+                                <div key={i} style={{
+                                    flex: 1, display: 'flex', flexDirection: 'column',
+                                    alignItems: 'center', gap: 6, padding: '10px 0',
+                                }}>
+                                    <div style={{ width: 32, height: 32, borderRadius: 16, background: '#ebebeb', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: `${0.2 + i * 0.06}s` }} />
+                                    <div style={{ width: 30, height: 10, borderRadius: 5, background: '#f0f0f0', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: `${0.25 + i * 0.06}s` }} />
+                                </div>
                             ))}
                         </div>
+                        {/* Open text question label */}
+                        <div style={{ width: '70%', height: 14, borderRadius: 7, background: '#ebebeb', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.55s', marginBottom: 10 }} />
+                        {/* Textarea placeholder */}
+                        <div style={{ width: '100%', height: 72, borderRadius: 10, background: '#f0f0f0', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.6s' }} />
                     </div>
                 </div>
             )}
@@ -529,6 +549,14 @@ export default function FeedbackScreen() {
                 @keyframes feedbackFadeIn {
                     from { opacity: 0; transform: scale(0.95); }
                     to { opacity: 1; transform: scale(1); }
+                }
+                @keyframes surveyFadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes skeletonFadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
                 }
                 @keyframes skeleton-pulse {
                     0%, 100% { opacity: 1; }
