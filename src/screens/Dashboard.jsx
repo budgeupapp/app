@@ -1668,6 +1668,7 @@ export default function Dashboard() {
                         weeklySpend: formData.weeklySpend,
                         weeklySpendNonTerm: formData.weeklySpendNonTerm,
                         weeklySpendVariesByTerm: formData.weeklySpendVariesByTerm,
+                        balance: formData.balance,
                     }),
                     saveTermDates(userId, formData.termDates),
                 ])
@@ -3256,8 +3257,11 @@ export default function Dashboard() {
                             today.setHours(0, 0, 0, 0)
                             const todayStr = toLocalDate(today)
 
+                            const graphStart = getGraphStart()
                             const sortedEvents = [...events].filter(e => !e.removed).sort((a, b) => a.date.localeCompare(b.date))
-                            const futureEvts = sortedEvents.filter(e => e.date >= todayStr)
+                            // Only count events from signup date onward (pre-signup recurring events
+                            // are already reflected in the entered balance)
+                            const futureEvts = sortedEvents.filter(e => e.date >= todayStr && e.date >= graphStart)
 
                             // End-of-year projected balance (from current balance through future events only)
                             let endOfYearBal = projectionBalance
@@ -3311,8 +3315,8 @@ export default function Dashboard() {
                             const inRange = new Date(today)
                             inRange.setDate(inRange.getDate() + lookAheadDays)
                             const inRangeStr = toLocalDate(inRange)
-                            const upcoming = sortedEvents.filter(e => e.date > todayStr && e.date <= inRangeStr && e.editType !== 'weeklySpend')
-                            const weeklySpendIn90 = sortedEvents.filter(e => e.date > todayStr && e.date <= inRangeStr && e.editType === 'weeklySpend').reduce((s, e) => s + e.amount, 0)
+                            const upcoming = sortedEvents.filter(e => e.date > todayStr && e.date >= graphStart && e.date <= inRangeStr && e.editType !== 'weeklySpend')
+                            const weeklySpendIn90 = sortedEvents.filter(e => e.date > todayStr && e.date >= graphStart && e.date <= inRangeStr && e.editType === 'weeklySpend').reduce((s, e) => s + e.amount, 0)
                             const upcomingIncome = upcoming.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0)
                             const upcomingExpense = upcoming.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0) + weeklySpendIn90
 
@@ -3667,7 +3671,7 @@ export default function Dashboard() {
 
                                         // Green line value at each history date
                                         // Green line is anchored at projBal at today, rewind events to get past values
-                                        const allPastEvts = sortedEvents.filter(e => e.date <= todayStr)
+                                        const allPastEvts = sortedEvents.filter(e => e.date <= todayStr && e.date >= graphStart)
                                         const trackingData = pastEntries.map(bh => {
                                             // Events between this date and today — undo them from projBal
                                             const eventsBetween = allPastEvts.filter(e => e.date > bh.recorded_date)
