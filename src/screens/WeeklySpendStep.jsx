@@ -1,5 +1,6 @@
 import { getCurrencySymbol } from '../lib/settings'
 import { useState, useRef, useCallback } from 'react'
+import { analytics, DASHBOARD_EVENTS } from '../lib/analytics/index.js'
 
 const MAX_SPEND = 350
 const SLIDER_STEP = 5
@@ -58,13 +59,14 @@ export default function WeeklySpendStep({
                     onToggleVaries={() => updateWeeklySpendVariesByTerm(!weeklySpendVariesByTerm)}
                     nonTermVal={nonTermVal}
                     onChangeNonTerm={updateWeeklySpendNonTerm}
+                    onDragEnd={() => analytics.track(DASHBOARD_EVENTS.WEEKLY_SPEND_UPDATED)}
                 />
             </div>
         </div>
     )
 }
 
-function Slider({ value, onChange, max, color }) {
+function Slider({ value, onChange, max, color, onDragEnd }) {
     const trackRef = useRef(null)
     const [dragging, setDragging] = useState(false)
     const pct = (value / max) * 100
@@ -107,6 +109,7 @@ function Slider({ value, onChange, max, color }) {
         }
         const onUp = () => {
             setDragging(false)
+            onDragEnd?.()
             window.removeEventListener('pointermove', onMove)
             window.removeEventListener('pointerup', onUp)
         }
@@ -124,7 +127,7 @@ function Slider({ value, onChange, max, color }) {
     )
 }
 
-function SpendSliderCard({ label, sublabel, description, value, onChange, max, color, variesByTerm, onToggleVaries, nonTermVal, onChangeNonTerm }) {
+function SpendSliderCard({ label, sublabel, description, value, onChange, max, color, variesByTerm, onToggleVaries, nonTermVal, onChangeNonTerm, onDragEnd }) {
     const monthly = Math.round(value * (52 / 12))
     const yearly = value * 52
     const nonTermMonthly = Math.round((nonTermVal || 0) * (52 / 12))
@@ -142,7 +145,7 @@ function SpendSliderCard({ label, sublabel, description, value, onChange, max, c
                     </span>
                     <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000' }}>{getCurrencySymbol()}{value}</span>
                 </div>
-                <Slider value={value} onChange={onChange} max={max} color={color} />
+                <Slider value={value} onChange={onChange} max={max} color={color} onDragEnd={onDragEnd} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
                     <span style={{ fontSize: 10, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c' }}>{getCurrencySymbol()}0</span>
                     <span style={{ fontSize: 10, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c' }}>{getCurrencySymbol()}{max}</span>
@@ -166,7 +169,7 @@ function SpendSliderCard({ label, sublabel, description, value, onChange, max, c
                                 <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#EC8C17' }}>Holidays</span>
                                 <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000' }}>{getCurrencySymbol()}{nonTermVal || 0}</span>
                             </div>
-                            <Slider value={nonTermVal || 0} onChange={onChangeNonTerm} max={max} color="#EC8C17" />
+                            <Slider value={nonTermVal || 0} onChange={onChangeNonTerm} max={max} color="#EC8C17" onDragEnd={onDragEnd} />
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
                                 <span style={{ fontSize: 10, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c' }}>{getCurrencySymbol()}0</span>
                                 <span style={{ fontSize: 10, fontFamily: 'Nunito, sans-serif', color: '#9f9c9c' }}>{getCurrencySymbol()}{max}</span>

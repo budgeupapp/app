@@ -1,5 +1,6 @@
 import { getCurrencySymbol } from '../lib/settings'
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { analytics, DASHBOARD_EVENTS } from '../lib/analytics/index.js'
 
 function formatDisplay(raw) {
     if (!raw) return ''
@@ -200,6 +201,9 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
     }
 
     const addItem = () => {
+        analytics.track(DASHBOARD_EVENTS.ONE_OFF_ADDED, {
+            item_count: items.length + 1,
+        })
         const newIndex = items.length
         setAddingIndex(newIndex)
         updateItems([...items, { name: '', amount: '', date: '', direction: 'out' }])
@@ -239,6 +243,11 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
     }
 
     const removeItem = (index) => {
+        const item = items[index]
+        analytics.track(DASHBOARD_EVENTS.ONE_OFF_REMOVED, {
+            had_amount: !!item?.amount,
+            direction: item?.direction || 'out',
+        })
         if (items.length <= 1) {
             updateItems([{ name: '', amount: '', date: '', direction: 'out' }])
             return

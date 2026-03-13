@@ -279,7 +279,7 @@ export default function SettingsScreen() {
     return () => {
       if (termSaveTimerRef.current) clearTimeout(termSaveTimerRef.current)
       if (pendingTermDatesRef.current && userIdRef.current) {
-        saveTermDates(userIdRef.current, pendingTermDatesRef.current).catch(() => {})
+        saveTermDates(userIdRef.current, pendingTermDatesRef.current).catch(() => { })
       }
     }
   }, [])
@@ -664,12 +664,12 @@ export default function SettingsScreen() {
         overflowY: 'auto',
         overflowX: 'hidden',
         WebkitOverflowScrolling: 'touch',
-        padding: '40px 20px 0',
+        padding: '30px 20px 0',
         paddingBottom: 'calc(250px + env(safe-area-inset-bottom))'
       }}>
 
         {/* INVITE FRIENDS */}
-        <div style={{ marginTop: 16, marginBottom: 40 }}>
+        <div style={{ marginBottom: 40 }}>
 
           <Button
             type="default"

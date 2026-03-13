@@ -2109,6 +2109,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             analytics.track(ONBOARDING_EVENTS.COMPLETED, {
                 ...getUserProperties({
                     university: formData.university,
+                    currency: getCurrencySymbol(),
                     balance: formData.balance,
                     savings: formData.savings,
                     weeklySpend: formData.weeklySpend,
