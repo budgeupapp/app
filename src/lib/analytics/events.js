@@ -23,11 +23,26 @@ export const AUTH_EVENTS = {
 export const ONBOARDING_EVENTS = {
   STARTED: 'onboarding_started',
   STEP_VIEWED: 'onboarding_step_viewed',
-  FIELD_COMPLETED: 'onboarding_field_completed',
   STEP_COMPLETED: 'onboarding_step_completed',
   STEP_BACK: 'onboarding_step_back',
   COMPLETED: 'onboarding_completed',
   ERROR: 'onboarding_error'
+}
+
+// Dashboard Events
+export const DASHBOARD_EVENTS = {
+  BALANCE_RECORDED: 'balance_recorded',
+  SOURCE_ADDED: 'source_added',
+  SOURCE_REMOVED: 'source_removed',
+  SOURCE_VISIBILITY_TOGGLED: 'source_visibility_toggled',
+  ONE_OFF_ADDED: 'one_off_added',
+  ONE_OFF_REMOVED: 'one_off_removed',
+  WEEKLY_SPEND_UPDATED: 'weekly_spend_updated',
+  OVERDRAFT_UPDATED: 'overdraft_updated',
+  EVENT_EDITED: 'event_edited',
+  TAB_SWITCHED: 'tab_switched',
+  BALANCE_HISTORY_TOGGLED: 'balance_history_toggled',
+  GRAPH_EVENT_CLICKED: 'graph_event_clicked',
 }
 
 // Settings Events
@@ -36,7 +51,15 @@ export const SETTINGS_EVENTS = {
   DELETE_ACCOUNT_CLICKED: 'delete_account_clicked',
   ACCOUNT_DELETED: 'account_deleted',
   INVITE_FRIENDS_CLICKED: 'invite_friends_clicked',
-  INVITE_SHARED: 'invite_shared'
+  INVITE_SHARED: 'invite_shared',
+  CURRENCY_CHANGED: 'currency_changed',
+}
+
+// Feedback Events
+export const FEEDBACK_EVENTS = {
+  VIEWED: 'feedback_viewed',
+  QUICK_SUBMITTED: 'feedback_quick_submitted',
+  FORM_OPENED: 'feedback_form_opened',
 }
 
 // Support Events
