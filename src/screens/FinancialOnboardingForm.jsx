@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { getCurrencySymbol } from '../lib/settings'
+import { toLocalDate, makeOtherInstance, MONTH_KEY_TO_DATE, MONTH_SHORT, isInTerm, distributeEvenly } from '../lib/helpers'
+import { getCurrencySymbol, getGraphStart, setGraphStart } from '../lib/settings'
 import { Button, Input, Modal, Radio, Typography, message } from 'antd'
 import StepProgress from '../components/StepProgress'
 import NativeSelect from '../components/NativeSelect'
@@ -17,7 +18,7 @@ import incomeBursary from '../assets/income-family.svg'
 import variableWeeklySpend from '../assets/variable-weekly-spend.svg'
 import variableOneOff from '../assets/variable-one-off.svg'
 import TermDatesStep from './TermDatesStep'
-import TermGraph from '../components/TermGraph'
+import TermGraph, { refreshAY } from '../components/TermGraph'
 import BankBalanceStep from './BankBalanceStep'
 import RegularIncomeStep from './RegularIncomeStep'
 import MaintenanceLoanStep from './MaintenanceLoanStep'
@@ -55,7 +56,9 @@ import {
     OTHER_INCOME_FREQ_OPTIONS,
     REGULAR_FREQ_OPTIONS,
     PAYMENT_TYPE_OPTIONS,
-    INITIAL_FORM_DATA
+    INITIAL_FORM_DATA,
+    getTermDatesForUniversity,
+    hasCustomTermDates
 } from '../config/onboardingConfig'
 
 const { Title, Text } = Typography
@@ -63,9 +66,6 @@ const { Title, Text } = Typography
 const STORAGE_KEY = 'budgeup_onboarding_state'
 
 /* ---------- HELPERS ---------- */
-
-// Use local date to avoid UTC timezone shift (BST → dates shift back 1 day with toISOString)
-const toLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 const formatMoney = raw => {
     const cleaned = raw.replace(/[^0-9.]/g, '')
@@ -75,26 +75,7 @@ const formatMoney = raw => {
     return parts.length > 1 ? `${formatted}.${parts[1]}` : formatted
 }
 
-const makeOtherInstance = (prefix) => ({
-    id: `${prefix}_${Date.now()}`,
-    amount: '', frequency: 'monthly', amountPeriod: 'monthly', label: '',
-    nextDate: null, termDates: {}, quarterlyDates: {},
-    variesByTerm: false, nonTermAmount: '',
-})
-
 /* ---------- GRAPH EVENT HELPERS ---------- */
-
-const MONTH_KEY_TO_DATE = {
-    september: '2025-09-01', october: '2025-10-01', november: '2025-11-01', december: '2025-12-01',
-    january: '2026-01-01', february: '2026-02-01', march: '2026-03-01', april: '2026-04-01',
-    may: '2026-05-01', june: '2026-06-01', july: '2026-07-01', august: '2026-08-01',
-}
-
-const MONTH_SHORT = {
-    september: 'September', october: 'October', november: 'November', december: 'December',
-    january: 'January', february: 'February', march: 'March', april: 'April',
-    may: 'May', june: 'June', july: 'July', august: 'August',
-}
 
 function generateRentDates(frequency, nextDate, formData = {}) {
     const dates = []
@@ -160,27 +141,6 @@ function generateRentDates(frequency, nextDate, formData = {}) {
         current = new Date(current.getFullYear(), current.getMonth() + step, dom)
     }
     return dates
-}
-
-function isInTerm(dateStr, terms) {
-    if (!terms || terms.length === 0) return true
-    const d = new Date(dateStr + 'T00:00:00')
-    for (const term of terms) {
-        if (!term.start || !term.end) continue
-        const start = new Date(term.start + 'T00:00:00')
-        const end = new Date(term.end + 'T00:00:00')
-        if (d >= start && d <= end) return true
-    }
-    return false
-}
-
-// Distribute total evenly across count instalments, ensuring they sum exactly to total
-function distributeEvenly(total, count) {
-    if (count <= 0) return []
-    const per = Math.round((total / count) * 100) / 100
-    const amounts = Array(count).fill(per)
-    amounts[count - 1] = Math.round((total - per * (count - 1)) * 100) / 100
-    return amounts
 }
 
 // Distribute yearly total only among non-removed dates; removed dates keep original amount for display
@@ -1440,6 +1400,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 nonTermAmount: data.otherIncomeNonTermAmount || '',
             }]
         }
+        // Sync term dates with university-specific dates if available
+        if (data.university && hasCustomTermDates(data.university)) {
+            data.termDates = getTermDatesForUniversity(data.university)
+        }
         // Migrate legacy flat other expense fields to otherExpenses array
         if ((!data.otherExpenses || data.otherExpenses.length === 0) && data.otherExpenseAmount) {
             data.otherExpenses = [{
@@ -1491,6 +1455,17 @@ export default function FinancialOnboardingForm({ onComplete }) {
     }, [formData, currentStepId])
 
     /* --- Track onboarding started (only once at the first step) --- */
+
+    // Set graph to show full academic year (Sep 1 – Aug 31) during onboarding
+    useEffect(() => {
+        const prevStart = getGraphStart()
+        setGraphStart('2025-09-01')
+        refreshAY()
+        return () => {
+            setGraphStart(prevStart)
+            refreshAY()
+        }
+    }, [])
 
     useEffect(() => {
         const identifyUser = async () => {
@@ -1811,6 +1786,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 if (!(formData.otherIncomes || []).some(i => i.amount)) {
                     return 'Please enter an amount'
                 }
+                if ((formData.otherIncomes || []).some(i => i.amount && !i.label?.trim())) {
+                    return 'Please give each income a name'
+                }
                 break
 
             case 'rent':
@@ -1840,6 +1818,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
             case 'otherExpense':
                 if (!(formData.otherExpenses || []).some(i => i.amount)) {
                     return 'Please enter an amount'
+                }
+                if ((formData.otherExpenses || []).some(i => i.amount && !i.label?.trim())) {
+                    return 'Please give each expense a name'
                 }
                 break
 
@@ -2554,6 +2535,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                         )}
                                                         <OtherIncomeStep
                                                             compact
+                                                            onboarding
                                                             otherIncomeAmount={inst.amount}
                                                             updateOtherIncomeAmount={(val) => updateOtherInst('otherIncomes', inst.id, 'amount', val)}
                                                             otherIncomeFrequency={inst.frequency}
@@ -2739,6 +2721,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                         )}
                                                         <OtherExpenseStep
                                                             compact
+                                                            onboarding
                                                             otherExpenseAmount={inst.amount}
                                                             updateOtherExpenseAmount={(val) => updateOtherInst('otherExpenses', inst.id, 'amount', val)}
                                                             otherExpenseFrequency={inst.frequency}
@@ -3102,7 +3085,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     </p>
                                     <NativeSelect
                                         value={formData.university}
-                                        onChange={(value) => updateField('university', value)}
+                                        onChange={(value) => {
+                                            updateField('university', value)
+                                            updateField('termDates', getTermDatesForUniversity(value))
+                                        }}
                                         options={UK_UNIVERSITIES.map(uni => ({ value: uni, label: uni }))}
                                         placeholder="Select your university"
                                         style={{ fontSize: 17, height: '40px' }}

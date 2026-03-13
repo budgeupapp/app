@@ -1,9 +1,13 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { flushSync } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { ChevronUp, ChevronDown, Check, Clock, Plus, Trash, Eye, EyeOff, AlertTriangle } from 'react-feather'
-import TermGraph, { refreshAY, AY_START, AY_END, datePct, datePctFromDate, daysBetween, fmt } from '../components/TermGraph'
+import { useSurveySequence } from '../lib/useSurveySequence'
+import TermGraph, { refreshAY, AY_START, AY_END, datePct, daysBetween, fmt } from '../components/TermGraph'
 import { supabase } from '../lib/supabaseClient'
 import { fetchUserData, saveCashflowForecast, saveUserFinances, saveTermDates, saveBalanceHistory } from '../lib/api'
 import { getCurrencySymbol, getGraphStart, setGraphStart } from '../lib/settings'
+import { toLocalDate, makeOtherInstance, MONTH_KEY_TO_DATE, MONTH_SHORT, isInTerm, distributeEvenly } from '../lib/helpers'
 import {
     INITIAL_FORM_DATA,
     DEFAULT_LOAN_MONTHS,
@@ -53,37 +57,13 @@ const FIXED_EXPENSE_SOURCES = [
     { id: 'savings_investments', label: 'Savings & Investments', icon: expenseSavings, panelId: 'savingsInvestments' },
 ]
 
-// Default empty "other" instance
-const makeOtherInstance = (prefix) => ({
-    id: `${prefix}_${Date.now()}`,
-    amount: '', frequency: 'monthly', amountPeriod: 'monthly', label: '',
-    nextDate: null, termDates: {}, quarterlyDates: {},
-    variesByTerm: false, nonTermAmount: '',
-})
-
-
-/* ---------- GRAPH EVENT HELPERS (same as onboarding) ---------- */
-
-const MONTH_KEY_TO_DATE = {
-    september: '2025-09-01', october: '2025-10-01', november: '2025-11-01', december: '2025-12-01',
-    january: '2026-01-01', february: '2026-02-01', march: '2026-03-01', april: '2026-04-01',
-    may: '2026-05-01', june: '2026-06-01', july: '2026-07-01', august: '2026-08-01',
-}
+/* ---------- GRAPH EVENT HELPERS ---------- */
 
 const MONTH_KEY_TO_DATE_MID = {
     september: '2025-09-15', october: '2025-10-15', november: '2025-11-15', december: '2025-12-15',
     january: '2026-01-15', february: '2026-02-15', march: '2026-03-15', april: '2026-04-15',
     may: '2026-05-15', june: '2026-06-15', july: '2026-07-15', august: '2026-08-15',
 }
-
-const MONTH_SHORT = {
-    september: 'September', october: 'October', november: 'November', december: 'December',
-    january: 'January', february: 'February', march: 'March', april: 'April',
-    may: 'May', june: 'June', july: 'July', august: 'August',
-}
-
-// Use local date to avoid UTC timezone shift (BST → dates shift back 1 day with toISOString)
-const toLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 function generateRentDates(frequency, nextDate, formData = {}) {
     const dates = []
@@ -129,26 +109,6 @@ function generateRentDates(frequency, nextDate, formData = {}) {
         current = new Date(current.getFullYear(), current.getMonth() + step, dom)
     }
     return dates
-}
-
-function isInTerm(dateStr, terms) {
-    if (!terms || terms.length === 0) return true
-    const d = new Date(dateStr + 'T00:00:00')
-    for (const term of terms) {
-        if (!term.start || !term.end) continue
-        const start = new Date(term.start + 'T00:00:00')
-        const end = new Date(term.end + 'T00:00:00')
-        if (d >= start && d <= end) return true
-    }
-    return false
-}
-
-function distributeEvenly(total, count) {
-    if (count <= 0) return []
-    const per = Math.round((total / count) * 100) / 100
-    const amounts = Array(count).fill(per)
-    amounts[count - 1] = Math.round((total - per * (count - 1)) * 100) / 100
-    return amounts
 }
 
 // Distribute yearly total only among non-removed dates; removed dates keep original amount for display
@@ -754,8 +714,9 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
         }
     }
 
-    // One-off items
+    // One-off items (skip hidden)
     for (const item of (formData.oneOffItems || [])) {
+        if (item.hidden) continue
         const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
         const isIn = (item.direction || 'out') === 'in'
         if (amt > 0 && item.date) events.push({ date: item.date, amount: amt, type: isIn ? 'income' : 'expense', label: item.name || 'One-off', sublabel: isIn ? 'One-off income' : 'One-off expense', editType: isIn ? 'oneOffIncome' : 'oneOffExpense' })
@@ -1004,7 +965,7 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
                         display: 'flex', alignItems: 'center',
                         background: '#f0f0f0', borderRadius: 14,
                         zIndex: 1100,
-                        boxShadow: '0 2px 12px rgba(0,0,0,0.15)',
+                        animation: `balanceEditIn ${dur} ${ease}`,
                     }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 4px 0 6px' }}>
                             <button
@@ -1086,7 +1047,7 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
 
 /* ---------- INCOME/EXPENSE ROW ---------- */
 
-function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemoved, isExpense, expanded, onToggle, onExpandToggle, onDelete, scrollContainerRef, formData, updateField, children }) {
+function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemoved, isExpense, expanded, onToggle, onExpandToggle, onDelete, scrollContainerRef, isTabSwitchingRef, formData, updateField, children }) {
     const isInactive = !active
     const rowRef = useRef(null)
     const innerRef = useRef(null)
@@ -1169,6 +1130,8 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
     }, [expanded, scrollContainerRef])
 
     useEffect(() => {
+        // Skip scroll-into-view during tab switch (scroll position is restored separately)
+        if (isTabSwitchingRef?.current) return
         if (!expanded || !rowRef.current || !scrollContainerRef?.current) return
         const container = scrollContainerRef.current
         const row = rowRef.current
@@ -1205,16 +1168,15 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                 if (t < 1) {
                     rafId = requestAnimationFrame(animate)
                 } else {
-                    setTimeout(scrollRowToTop, 400)
+                    requestAnimationFrame(scrollRowToTop)
                 }
             }
             rafId = requestAnimationFrame(animate)
             return () => { if (rafId) cancelAnimationFrame(rafId) }
         }
 
-        // Already scrolled past shrink — scroll row to top
-        // Delay to wait for any collapsing row's animation (0.4s) to finish
-        const timer = setTimeout(scrollRowToTop, 450)
+        // Already scrolled past shrink — scroll row to top after layout settles
+        const timer = setTimeout(scrollRowToTop, 50)
         return () => clearTimeout(timer)
     }, [expanded])
 
@@ -1262,7 +1224,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                         color: isInactive ? '#bbb' : isExpense ? 'rgba(224,100,112,0.8)' : 'rgba(20,123,117,0.7)',
                         margin: 0,
                     }}>
-                        {active ? `${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr` : '—'}
+                        {`${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr`}
                     </p>
                     {removedCount > 0 && expanded && (
                         <button
@@ -1283,10 +1245,20 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                     )}
                 </div>
 
-                {/* Toggle + Chevron */}
-                <div onClick={(e) => e.stopPropagation()}>
-                    <ToggleSwitch on={active} onChange={onToggle} size="small" />
-                </div>
+                {/* Eye toggle (hide/show on graph) + Chevron */}
+                <button
+                    onClick={(e) => { e.stopPropagation(); onToggle() }}
+                    style={{
+                        background: 'none', border: 'none', padding: 4,
+                        cursor: 'pointer', display: 'flex', alignItems: 'center',
+                        flexShrink: 0,
+                    }}
+                >
+                    {active
+                        ? <Eye size={16} strokeWidth={1.8} color={isExpense ? '#e06470' : '#147b75'} />
+                        : <EyeOff size={16} strokeWidth={1.8} color="#ccc" />
+                    }
+                </button>
                 <svg
                     width="16" height="16" viewBox="0 0 24 24" fill="none"
                     stroke={isInactive ? '#bbb' : '#999'}
@@ -1315,10 +1287,11 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                         </div>
                     )}
                     {onDelete && (
-                        <div style={{ padding: '0 10px 4px', textAlign: 'center', background: '#fafafa' }}>
+                        <div style={{ padding: '4px 10px 10px', textAlign: 'center', background: '#fafafa' }}>
                             <span
                                 onClick={(e) => {
                                     e.stopPropagation()
+                                    if (deleting) return
                                     setDeleting(true)
                                     setTimeout(() => onDelete(), 350)
                                 }}
@@ -1328,7 +1301,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                                     color: '#e06470', cursor: 'pointer',
                                 }}
                             >
-                                Remove {source.label.toLowerCase()}
+                                Delete {source.label.toLowerCase()}
                             </span>
                         </div>
                     )}
@@ -1418,6 +1391,9 @@ function migrateOtherFields(data) {
 /* ---------- MAIN DASHBOARD ---------- */
 
 export default function Dashboard() {
+    const navigate = useNavigate()
+    useSurveySequence()
+
     const [formData, setFormData] = useState(() => {
         try {
             const saved = localStorage.getItem(STORAGE_KEY)
@@ -1430,32 +1406,49 @@ export default function Dashboard() {
     })
 
     const [graphKey, setGraphKey] = useState(0)
+    const [hiddenSources, setHiddenSources] = useState(() => {
+        try {
+            const saved = localStorage.getItem('budgeup_hidden_sources')
+            return saved ? new Set(JSON.parse(saved)) : new Set()
+        } catch { return new Set() }
+    })
     const [showBalanceHistory, setShowBalanceHistory] = useState(() => localStorage.getItem('budgeup_show_balance_history') !== 'false')
     const [showIncome, setShowIncome] = useState(() => localStorage.getItem('budgeup_show_income') === 'true')
     const [showExpenses, setShowExpenses] = useState(() => localStorage.getItem('budgeup_show_expenses') === 'true')
     const [showOverdraft, setShowOverdraft] = useState(() => localStorage.getItem('budgeup_show_overdraft') !== 'false')
-    const [expandedSource, setExpandedSource] = useState(null)
+    const [expandedSources, setExpandedSources] = useState(new Set())
+    const [visibleExpandedSource, setVisibleExpandedSource] = useState(null)
     const [balanceToast, setBalanceToast] = useState(null)
     const balanceToastTimer = useRef(null)
     const [showInitialBalancePopup, setShowInitialBalancePopup] = useState(false)
     const [balanceBannerDismissing, setBalanceBannerDismissing] = useState(false)
     const [initialBalanceRaw, setInitialBalanceRaw] = useState('')
+    const [initialBalanceNegative, setInitialBalanceNegative] = useState(false)
     const pendingExpandRef = useRef(null)
 
-    // Switch expanded source immediately — scroll animation handles compensation
+    // Toggle expanded source — multiple can be open at once
     const handleExpandToggle = useCallback((sourceId) => {
         if (pendingExpandRef.current) {
             clearTimeout(pendingExpandRef.current)
             pendingExpandRef.current = null
         }
 
-        if (expandedSource === sourceId) {
-            setExpandedSource(null)
-        } else {
-            setExpandedSource(sourceId)
-        }
-    }, [expandedSource])
-    const [activeTab, setActiveTab] = useState('goals')
+        setExpandedSources(prev => {
+            const next = new Set(prev)
+            if (next.has(sourceId)) {
+                next.delete(sourceId)
+                // If collapsing the currently visible source, clear it
+                setVisibleExpandedSource(v => v === sourceId ? null : v)
+            } else {
+                next.add(sourceId)
+                // Set newly expanded as visible source for immediate graph highlight
+                setVisibleExpandedSource(sourceId)
+            }
+            return next
+        })
+    }, [])
+    const [activeTab, setActiveTabRaw] = useState(() => sessionStorage.getItem('budgeup_active_tab') || 'goals')
+    const setActiveTab = (tab) => { sessionStorage.setItem('budgeup_active_tab', tab); setActiveTabRaw(tab) }
     const [goalsShowMore, setGoalsShowMore] = useState(false)
     const goalsMoreRef = useRef(null)
     const goalsTransCardRef = useRef(null)
@@ -1464,39 +1457,77 @@ export default function Dashboard() {
     const handleTabChange = (tab) => {
         const el = scrollRef.current
         if (!el) return
-        const wasScrolledPast = el.scrollTop >= SHRINK_DIST
+        const isCollapsed = el.scrollTop >= SHRINK_DIST
 
-        // Tapping the already-active tab: toggle expanded/shrunk and close dropdowns
+        // Tapping the already-active tab: toggle expanded/collapsed
         if (tab === activeTab) {
-            if (wasScrolledPast) el.style.overflowY = 'auto'
-            setExpandedSource(null)
-            tabExpandedRef.current[tab] = null
-            const target = wasScrolledPast ? 0 : SHRINK_DIST
-            animateScroll(el, target)
+            if (isCollapsed) {
+                el.style.overflowY = 'auto'
+                setExpandedSources(new Set())
+                tabExpandedRef.current[tab] = null
+                animateScroll(el, 0)
+            } else {
+                animateScroll(el, SHRINK_DIST)
+            }
             return
         }
 
-        // Save current tab's expanded dropdown
-        tabExpandedRef.current[activeTab] = expandedSource
-        el.style.overflowY = 'auto'
-        setActiveTab(tab)
-        setExpandedSource(tabExpandedRef.current[tab] || null)
-        setGoalsShowMore(false)
+        // Switching to different tab — save scroll position and expanded state
+        tabExpandedRef.current[activeTab] = expandedSources
+        tabScrollRef.current[activeTab] = el.scrollTop
 
-        // Stay in the same view state: collapsed stays collapsed, expanded stays expanded
-        const targetScroll = wasScrolledPast ? SHRINK_DIST : 0
+        // Match current collapsed/expanded state when switching tabs
+        const targetScroll = isCollapsed ? SHRINK_DIST : 0
         // Suppress snap/scroll handlers during tab switch
         isTabSwitchingRef.current = true
+        isAnimatingRef.current = true
         if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
-        // Apply immediately to prevent flash
+
+        // Force graph to correct size immediately via DOM (survives React re-render)
+        const targetCollapsed = targetScroll >= SHRINK_DIST
+        if (graphContainerRef.current) {
+            graphContainerRef.current.style.height = targetCollapsed ? `${MIN_H}px` : `${MAX_H}px`
+        }
+        if (contentWrapRef.current) {
+            contentWrapRef.current.style.transform = targetCollapsed ? `translate3d(0,${SHRINK_DIST}px,0)` : 'translate3d(0,0,0)'
+        }
+
+        // Hide scroll container to prevent flash during tab switch
+        el.style.visibility = 'hidden'
+
+        // Clear cached DOM nodes before switching
+        cachedNodesRef.current = null
+
+        // Flush state updates synchronously so DOM is ready before next paint
+        flushSync(() => {
+            setActiveTab(tab)
+            setExpandedSources(tabExpandedRef.current[tab] || new Set())
+            setGoalsShowMore(false)
+        })
+
+        // Clear again after render so applyScrollStyles queries fresh DOM
+        cachedNodesRef.current = null
+
+        // Apply scroll immediately after synchronous render
         el.scrollTop = targetScroll
         applyScrollStyles(targetScroll)
-        // Re-apply after React renders new tab content (key={activeTab} remount)
+
+        // Show on next frame once everything is in place
         requestAnimationFrame(() => {
             el.scrollTop = targetScroll
             applyScrollStyles(targetScroll)
-            // Clear flag after one more frame to let scroll events settle
-            requestAnimationFrame(() => { isTabSwitchingRef.current = false })
+            el.style.visibility = ''
+            requestAnimationFrame(() => {
+                el.scrollTop = targetScroll
+                applyScrollStyles(targetScroll)
+                setTimeout(() => {
+                    el.scrollTop = targetScroll
+                    applyScrollStyles(targetScroll)
+                    isTabSwitchingRef.current = false
+                    isAnimatingRef.current = false
+                    if (snapTimerRef.current) { clearTimeout(snapTimerRef.current); snapTimerRef.current = null }
+                }, 100)
+            })
         })
     }
     const [editingEvent, setEditingEvent] = useState(null)
@@ -1514,25 +1545,31 @@ export default function Dashboard() {
         refreshAY()
     }, [])
 
-    // Re-sync from Supabase when navigating back or tab becomes visible
+    // Re-sync from Supabase when tab becomes visible again
     useEffect(() => {
         const sync = async () => {
             if (document.hidden) return
+            // Skip sync if there's a pending save (local data is ahead of server)
+            if (saveTimerRef.current) return
             const userId = userIdRef.current
             if (!userId) return
             try {
                 const result = await fetchUserData(userId)
                 if (result.formData) {
                     const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
+                    // Prefer localStorage term dates (Settings saves there immediately, Supabase may lag)
+                    try {
+                        const saved = localStorage.getItem(STORAGE_KEY)
+                        const parsed = saved ? JSON.parse(saved) : {}
+                        if (parsed.formData?.termDates?.terms?.length) {
+                            merged.termDates = parsed.formData.termDates
+                        }
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, formData: merged }))
+                    } catch { /* ignore */ }
                     setFormData(prev => {
                         if (JSON.stringify(prev) === JSON.stringify(merged)) return prev
                         return merged
                     })
-                    try {
-                        const saved = localStorage.getItem(STORAGE_KEY)
-                        const parsed = saved ? JSON.parse(saved) : {}
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, formData: merged }))
-                    } catch { /* ignore */ }
                 }
                 if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
                 const bal = result.formData?.balance
@@ -1542,10 +1579,8 @@ export default function Dashboard() {
             } catch { /* ignore sync errors */ }
         }
         document.addEventListener('visibilitychange', sync)
-        window.addEventListener('focus', sync)
         return () => {
             document.removeEventListener('visibilitychange', sync)
-            window.removeEventListener('focus', sync)
         }
     }, [])
 
@@ -1558,8 +1593,16 @@ export default function Dashboard() {
                     if (!user || cancelled) return
                     userIdRef.current = user.id
 
-                    // Default graph start to user's join date on first load
-                    if (!localStorage.getItem('budgeup_graph_start') && user.created_at) {
+                    const result = await fetchUserData(user.id)
+
+                    // Sync graph start from database (source of truth), fallback to user's join date
+                    if (result.profile?.graph_start) {
+                        setGraphStart(result.profile.graph_start)
+                        if (!localStorage.getItem('budgeup_graph_start_mode')) {
+                            localStorage.setItem('budgeup_graph_start_mode', 'joined')
+                        }
+                        refreshAY()
+                    } else if (!localStorage.getItem('budgeup_graph_start') && user.created_at) {
                         const d = new Date(user.created_at)
                         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
                         setGraphStart(dateStr)
@@ -1568,18 +1611,20 @@ export default function Dashboard() {
                         }
                         refreshAY()
                     }
-
-                    const result = await fetchUserData(user.id)
                     if (cancelled) return
                     if (result.formData) {
                         // Supabase is the source of truth — prefer it over localStorage
                         const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
-                        setFormData(merged)
+                        // Prefer localStorage term dates (Settings saves there immediately, Supabase may lag)
                         try {
                             const saved = localStorage.getItem(STORAGE_KEY)
                             const parsed = saved ? JSON.parse(saved) : {}
+                            if (parsed.formData?.termDates?.terms?.length) {
+                                merged.termDates = parsed.formData.termDates
+                            }
                             localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, formData: merged }))
                         } catch { /* ignore */ }
+                        setFormData(merged)
                     }
                     if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
                     // Mark origin as set if balance already exists
@@ -1639,7 +1684,19 @@ export default function Dashboard() {
     const SHRINK_DIST = MAX_H - MIN_H
 
     // Keep graphHeight in state for TermGraph prop (initial only matters)
-    const [graphHeight, setGraphHeight] = useState(MAX_H)
+    // Initialize from saved scroll position so graph doesn't flash expanded then collapse
+    const [graphHeight, setGraphHeight] = useState(() => {
+        const saved = sessionStorage.getItem('budgeup_scroll_dashboard_' + (sessionStorage.getItem('budgeup_active_tab') || 'goals'))
+        if (saved) {
+            const pos = parseInt(saved, 10)
+            if (pos > 0) {
+                const t = Math.min(1, pos / (MAX_H - MIN_H))
+                const ct = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+                return MAX_H - ct * (MAX_H - MIN_H)
+            }
+        }
+        return MAX_H
+    })
     const cardDetailsRef = useRef(null)
     const footerRef = useRef(null)
 
@@ -1663,6 +1720,7 @@ export default function Dashboard() {
     const isSnappingRef = useRef(false)
     const isTabSwitchingRef = useRef(false)
     const animFrameRef = useRef(null)
+    const touchOnGraphRef = useRef(false)
 
     const ease = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
     const easeOut = (t) => 1 - Math.pow(1 - t, 3)
@@ -1731,12 +1789,12 @@ export default function Dashboard() {
         }
     }, [getCachedNodes])
 
-    const animateScroll = useCallback((el, target, durationOverride) => {
+    const animateScroll = useCallback((el, target, durationOverride, onComplete) => {
         if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
         const start = el.scrollTop
         const diff = target - start
         const dist = Math.abs(diff)
-        if (dist < 1) { isAnimatingRef.current = false; return }
+        if (dist < 1) { isAnimatingRef.current = false; onComplete?.(); return }
         // Duration proportional to distance: 120-220ms
         const duration = durationOverride ?? Math.max(120, Math.min(220, dist * 2.5))
         isAnimatingRef.current = true
@@ -1751,6 +1809,7 @@ export default function Dashboard() {
                 animFrameRef.current = null
                 isAnimatingRef.current = false
                 isSnappingRef.current = false
+                onComplete?.()
                 return
             }
             const val = start + diff * easeOut(t)
@@ -1768,7 +1827,77 @@ export default function Dashboard() {
         const el = scrollRef.current
         if (!el) return
         applyScrollStyles(el.scrollTop)
-    }, [applyScrollStyles])
+        sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTab, String(el.scrollTop))
+
+        // Detect which expanded source row is currently in view
+        if (expandedSources.size > 0) {
+            const rows = el.querySelectorAll('[data-source-row]')
+            const stickyHeader = el.querySelector('[data-sticky-header]')
+            const headerBottom = stickyHeader ? stickyHeader.getBoundingClientRect().bottom : el.getBoundingClientRect().top
+            const containerBottom = el.getBoundingClientRect().bottom
+            let best = null
+            for (const row of rows) {
+                const sourceId = row.dataset.sourceId
+                if (!expandedSources.has(sourceId)) continue
+                const rect = row.getBoundingClientRect()
+                // Row is in view if any part of it is visible between header and container bottom
+                if (rect.bottom > headerBottom && rect.top < containerBottom) {
+                    best = sourceId
+                    break
+                }
+            }
+            setVisibleExpandedSource(best)
+        } else {
+            setVisibleExpandedSource(null)
+        }
+    }, [applyScrollStyles, activeTab, expandedSources])
+
+    // Apply saved scroll position immediately on mount to prevent graph flash
+    useLayoutEffect(() => {
+        const saved = sessionStorage.getItem('budgeup_scroll_dashboard_' + activeTab)
+        if (saved && scrollRef.current) {
+            const pos = parseInt(saved, 10)
+            if (pos > 0) {
+                scrollRef.current.scrollTop = pos
+                applyScrollStyles(pos)
+            }
+        }
+    }, [])
+
+    // Re-apply scroll position after data loads (content may have changed)
+    useLayoutEffect(() => {
+        if (!dbLoaded) return
+        const saved = sessionStorage.getItem('budgeup_scroll_dashboard_' + activeTab)
+        if (saved && scrollRef.current) {
+            const pos = parseInt(saved, 10)
+            if (pos > 0) {
+                scrollRef.current.scrollTop = pos
+                applyScrollStyles(pos)
+            }
+        }
+    }, [dbLoaded])
+
+    // Prevent scroll when swiping on graph (sticky header area)
+    useEffect(() => {
+        const header = stickyHeaderRef.current
+        if (!header) return
+        let touching = false
+        const onTouchStart = () => { touching = true }
+        const onTouchMove = (e) => {
+            if (touching) {
+                e.preventDefault()
+            }
+        }
+        const onTouchEnd = () => { touching = false }
+        header.addEventListener('touchstart', onTouchStart, { passive: true })
+        header.addEventListener('touchmove', onTouchMove, { passive: false })
+        header.addEventListener('touchend', onTouchEnd, { passive: true })
+        return () => {
+            header.removeEventListener('touchstart', onTouchStart)
+            header.removeEventListener('touchmove', onTouchMove)
+            header.removeEventListener('touchend', onTouchEnd)
+        }
+    }, [])
 
     // Snap graph to expanded or collapsed when scroll stops in the shrink zone
     useEffect(() => {
@@ -1785,9 +1914,12 @@ export default function Dashboard() {
             }
         }
         let wasAtShrink = false
-        const onTouchStart = () => {
+        const onTouchStart = (e) => {
             isTouching = true
             wasAtShrink = el.scrollTop >= SHRINK_DIST - 3
+            // Detect if touch started on graph (sticky header area)
+            const header = stickyHeaderRef.current
+            touchOnGraphRef.current = header && header.contains(e.target)
             // Cancel any pending snap
             if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null }
             isAnimatingRef.current = false
@@ -1801,6 +1933,7 @@ export default function Dashboard() {
         }
         const onTouchEnd = () => {
             isTouching = false
+            touchOnGraphRef.current = false
             const s = el.scrollTop
             // If clearly stopped (no momentum), snap immediately
             if (s > 3 && s < SHRINK_DIST - 3) {
@@ -1819,9 +1952,10 @@ export default function Dashboard() {
         }
         const onScroll = () => {
             if (isTouching || isSnappingRef.current || isAnimatingRef.current || isTabSwitchingRef.current) return
-            // If momentum carries from shrunk into shrink zone, snap back
-            if (wasAtShrink && el.scrollTop < SHRINK_DIST && el.scrollTop > 10) {
-                animateScroll(el, SHRINK_DIST)
+            // If momentum carries from shrunk into shrink zone, snap to nearest
+            if (wasAtShrink && el.scrollTop < SHRINK_DIST && el.scrollTop > 3) {
+                const snapTo = el.scrollTop < SHRINK_DIST * 0.4 ? 0 : SHRINK_DIST
+                animateScroll(el, snapTo)
                 return
             }
             if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
@@ -1849,8 +1983,8 @@ export default function Dashboard() {
                 animateScroll(el, 0, 300)
             }
         }
-        window.addEventListener('home-tap-again', handler)
-        return () => window.removeEventListener('home-tap-again', handler)
+        window.addEventListener('nav-tap-again', handler)
+        return () => window.removeEventListener('nav-tap-again', handler)
     }, [animateScroll])
 
     const freqView = 'Yearly'
@@ -1906,9 +2040,10 @@ export default function Dashboard() {
     const allSourceIds = [...INCOME_SOURCES.map(s => s.id), ...EXPENSE_SOURCES.map(s => s.id)]
     const allEvents = buildGraphEvents({ ...formData, incomeSources: allSourceIds, expenseSources: allSourceIds }, { filterByGraphStart: false })
 
-    // Calculate totals
-    const yearlyIncome = calcYearlyTotal(events, 'income')
-    const yearlyExpense = calcYearlyTotal(events, 'expense')
+    // Calculate totals (fixed only — exclude one-off items)
+    const fixedEvents = events.filter(e => e.editType !== 'oneOffIncome' && e.editType !== 'oneOffExpense')
+    const yearlyIncome = calcYearlyTotal(fixedEvents, 'income')
+    const yearlyExpense = calcYearlyTotal(fixedEvents, 'expense')
     const weeklySpendTotal = events.filter(e => e.editType === 'weeklySpend' && !e.removed).reduce((s, e) => s + e.amount, 0)
     const fixedNet = yearlyIncome - yearlyExpense
 
@@ -1990,6 +2125,15 @@ export default function Dashboard() {
         const isOtherIncome = otherIncomes.some(i => i.id === sourceId)
         const isOtherExpense = otherExpenses.some(i => i.id === sourceId)
 
+        // Also remove from hiddenSources if present
+        setHiddenSources(prev => {
+            if (!prev.has(sourceId)) return prev
+            const next = new Set(prev)
+            next.delete(sourceId)
+            localStorage.setItem('budgeup_hidden_sources', JSON.stringify([...next]))
+            return next
+        })
+
         // Remove from active list
         if (isExpense) {
             const sources = formData.expenseSources || []
@@ -2023,47 +2167,69 @@ export default function Dashboard() {
                 }
             }
         }
-        if (expandedSource === sourceId) {
-            // Find the previous source row before DOM changes
-            const container = scrollRef.current
-            let prevSourceId = null
-            if (container) {
-                const rowsBefore = Array.from(container.querySelectorAll('[data-source-row]'))
-                const deletedIdx = rowsBefore.findIndex(r => r.dataset.sourceId === sourceId)
-                prevSourceId = deletedIdx > 0 ? rowsBefore[deletedIdx - 1].dataset.sourceId : null
-            }
-            setExpandedSource(null)
-            // Wait for collapse/layout to settle, then smoothly scroll to previous row
-            if (prevSourceId && container) {
+        if (expandedSources.has(sourceId)) {
+            setExpandedSources(prev => { const n = new Set(prev); n.delete(sourceId); return n })
+        }
+        // After delete animation, scroll to the previous source row
+        const container = scrollRef.current
+        if (container) {
+            const rows = Array.from(container.querySelectorAll('[data-source-row]'))
+            const idx = rows.findIndex(r => r.dataset.sourceId === sourceId)
+            const prevRow = idx > 0 ? rows[idx - 1] : null
+            if (prevRow) {
                 setTimeout(() => {
-                    const prevRow = container.querySelector(`[data-source-id="${prevSourceId}"]`)
-                    if (prevRow) {
-                        const stickyHeader = container.querySelector('[data-sticky-header]')
-                        const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
-                        const containerTop = container.getBoundingClientRect().top + headerH
-                        const rowTop = prevRow.getBoundingClientRect().top
-                        container.scrollTo({
-                            top: container.scrollTop + (rowTop - containerTop) - 8,
-                            behavior: 'smooth',
-                        })
+                    const stickyHeader = container.querySelector('[data-sticky-header]')
+                    const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
+                    const containerTop = container.getBoundingClientRect().top + headerH
+                    const rowTop = prevRow.getBoundingClientRect().top
+                    const diff = rowTop - containerTop - 8
+                    if (Math.abs(diff) > 2) {
+                        container.scrollTo({ top: container.scrollTop + diff, behavior: 'smooth' })
                     }
-                }, 350)
+                }, 400)
             }
         }
     }
 
     const [addingSourceType, setAddingSourceType] = useState(null) // 'income' | 'expense' | null
+    const [pickerClosing, setPickerClosing] = useState(false)
     const addPickerScrollPos = useRef(null)
 
     const closeAddPicker = () => {
-        setAddingSourceType(null)
-        if (addPickerScrollPos.current != null && scrollRef.current) {
-            scrollRef.current.scrollTo({ top: addPickerScrollPos.current, behavior: 'smooth' })
-            addPickerScrollPos.current = null
+        // Animate dropdown out, then scroll back, then clean up markers
+        setPickerClosing(true)
+        const savedPos = addPickerScrollPos.current
+        addPickerScrollPos.current = null
+        const clearMarkers = () => {
+            setExpandedSources(prev => {
+                const next = new Set(prev)
+                next.delete('__add_income__')
+                next.delete('__add_expense__')
+                return next
+            })
         }
+        setTimeout(() => {
+            setAddingSourceType(null)
+            setPickerClosing(false)
+            // Scroll back first (spacer still present), then remove markers after
+            if (savedPos != null && scrollRef.current) {
+                requestAnimationFrame(() => {
+                    const el = scrollRef.current
+                    if (!el) return
+                    const dist = Math.abs(el.scrollTop - savedPos)
+                    animateScroll(el, savedPos, Math.max(350, Math.min(600, dist)), clearMarkers)
+                })
+            } else {
+                clearMarkers()
+            }
+        }, 200)
     }
 
     const addSource = (sourceId, isExpense) => {
+        addPickerScrollPos.current = null
+        // Remove dropdown and expand source in same render to avoid layout jump
+        setPickerClosing(false)
+        setAddingSourceType(null)
         // "other_income" and "other_expense" create new instances
         if (sourceId === 'other_income') {
             const inst = makeOtherInstance('oi')
@@ -2072,8 +2238,7 @@ export default function Dashboard() {
                 otherIncomes: [...(prev.otherIncomes || []), inst],
                 incomeSources: [...(prev.incomeSources || []), inst.id],
             }))
-            setAddingSourceType(null)
-            setExpandedSource(inst.id)
+            setExpandedSources(prev => new Set(prev).add(inst.id))
             return
         }
         if (sourceId === 'other_expense') {
@@ -2083,8 +2248,7 @@ export default function Dashboard() {
                 otherExpenses: [...(prev.otherExpenses || []), inst],
                 expenseSources: [...(prev.expenseSources || []), inst.id],
             }))
-            setAddingSourceType(null)
-            setExpandedSource(inst.id)
+            setExpandedSources(prev => new Set(prev).add(inst.id))
             return
         }
         if (isExpense) {
@@ -2098,34 +2262,20 @@ export default function Dashboard() {
                 updateField('incomeSources', [...sources, sourceId])
             }
         }
-        setAddingSourceType(null)
-        setExpandedSource(sourceId)
+        setExpandedSources(prev => new Set(prev).add(sourceId))
     }
 
-    const toggleIncomeSource = (id) => {
-        const sources = formData.incomeSources || []
-        const turningOn = !sources.includes(id)
-        const next = turningOn ? [...sources, id] : sources.filter(s => s !== id)
-        updateField('incomeSources', next)
-        if (turningOn) {
-            const yearly = getSourceYearly(incomeEditTypeMap[id] || [])
-            if (yearly <= 0) setExpandedSource(id)
-        } else {
-            if (expandedSource === id) setExpandedSource(null)
-        }
-    }
-
-    const toggleExpenseSource = (id) => {
-        const sources = formData.expenseSources || []
-        const turningOn = !sources.includes(id)
-        const next = turningOn ? [...sources, id] : sources.filter(s => s !== id)
-        updateField('expenseSources', next)
-        if (turningOn) {
-            const yearly = getSourceYearly(expenseEditTypeMap[id] || [])
-            if (yearly <= 0) setExpandedSource(id)
-        } else {
-            if (expandedSource === id) setExpandedSource(null)
-        }
+    const toggleSourceVisibility = (id) => {
+        setHiddenSources(prev => {
+            const next = new Set(prev)
+            if (next.has(id)) {
+                next.delete(id)
+            } else {
+                next.add(id)
+            }
+            localStorage.setItem('budgeup_hidden_sources', JSON.stringify([...next]))
+            return next
+        })
     }
 
     // Map source ids to editTypes for yearly calc
@@ -2150,11 +2300,26 @@ export default function Dashboard() {
         expenseEditTypeMap[inst.id] = [inst.id]
     }
 
-    // Map expandedSource to currentEventType for dot highlighting
+    // Map expandedSources to currentEventType for dot highlighting
+    // Only show dots when the expanded dropdown is actually visible in the scroll viewport
     const sourceToEditType = { ...incomeEditTypeMap, ...expenseEditTypeMap }
-    const currentEventType = expandedSource && sourceToEditType[expandedSource]
-        ? sourceToEditType[expandedSource][0]
+    const activeSource = visibleExpandedSource && expandedSources.has(visibleExpandedSource)
+        ? visibleExpandedSource : null
+    const currentEventType = activeSource && sourceToEditType[activeSource]
+        ? sourceToEditType[activeSource][0]
         : null
+
+    // Compute editTypes for upcoming transactions shown in goals "show more"
+    const goalsVisibleEditTypes = (() => {
+        if (!goalsShowMore || activeTab !== 'goals') return new Set()
+        const now = new Date(); now.setHours(0, 0, 0, 0)
+        const todayStr = toLocalDate(now)
+        const lookAhead = new Date(now); lookAhead.setDate(lookAhead.getDate() + 90)
+        const lookAheadStr = toLocalDate(lookAhead)
+        const upcoming = events.filter(e => !e.removed && e.date > todayStr && e.date <= lookAheadStr && e.editType !== 'weeklySpend')
+        const sorted = upcoming.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 10)
+        return new Set(sorted.map(e => e.editType))
+    })()
 
     const handleEventClick = useCallback((evt, e) => {
         const rect = e.currentTarget.getBoundingClientRect()
@@ -2181,7 +2346,7 @@ export default function Dashboard() {
                     flex: 1, overflowY: showInitialBalancePopup ? 'hidden' : 'auto', overflowX: 'hidden',
                     WebkitOverflowScrolling: 'touch',
                     overscrollBehavior: 'none',
-                    paddingBottom: 'calc(400px + env(safe-area-inset-bottom))',
+                    paddingBottom: 'calc(260px + env(safe-area-inset-bottom))',
                 }}
             >
                 {/* Graph + tabs — sticky, shrinks on scroll */}
@@ -2214,7 +2379,22 @@ export default function Dashboard() {
                                 fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
                                 color: '#c0928f', margin: '0 0 12px',
                             }}>Add up all your accounts — a rough estimate is fine. Don't include savings or overdraft.</p>
-                            <div style={{ display: 'flex', gap: 8 }}>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                <button
+                                    onClick={() => setInitialBalanceNegative(v => !v)}
+                                    style={{
+                                        background: initialBalanceNegative ? '#e06470' : '#147b75',
+                                        color: '#fff',
+                                        border: 'none', borderRadius: 8,
+                                        width: 32, height: 40,
+                                        fontSize: 18, fontWeight: 700,
+                                        cursor: 'pointer', flexShrink: 0,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontFamily: 'Nunito, sans-serif',
+                                    }}
+                                >
+                                    {initialBalanceNegative ? '−' : '+'}
+                                </button>
                                 <div style={{
                                     display: 'flex', alignItems: 'center', flex: 1,
                                     background: '#fff', borderRadius: 8, border: '1px solid #e0c0c0',
@@ -2249,8 +2429,9 @@ export default function Dashboard() {
                                 </div>
                                 <button
                                     onClick={async () => {
-                                        const n = parseFloat(String(initialBalanceRaw || '0').replace(/,/g, '')) || 0
-                                        if (n === 0) return
+                                        const abs = parseFloat(String(initialBalanceRaw || '0').replace(/,/g, '')) || 0
+                                        if (abs === 0) return
+                                        const n = initialBalanceNegative ? -abs : abs
                                         const val = String(n)
                                         const today = toLocalDate(new Date())
                                         originSetRef.current = true
@@ -2316,22 +2497,28 @@ export default function Dashboard() {
                             marginTop={0}
                             terms={terms}
                             balance={projectionBalance || undefined}
+                            balanceStartDate={getGraphStart()}
                             actualBalance={balanceNum}
                             overdraft={showOverdraft ? overdraftNum : undefined}
                             onOverdraftClick={handleOverdraftClick}
-                            events={(activeTab === 'goals' && goalsShowMore) ? (() => {
-                                const now = new Date(); now.setHours(0, 0, 0, 0)
-                                const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() + 30)
-                                const nowStr = toLocalDate(now), cutoffStr = toLocalDate(cutoff)
-                                return events.filter(e => e.date > nowStr && e.date <= cutoffStr && e.editType !== 'weeklySpend')
-                            })() : events}
-                            hiddenEventTypes={(activeTab === 'goals' && goalsShowMore) ? [] : [
+                            events={events}
+                            hiddenEventTypes={[
                                 ...(!showIncome ? ['loan', 'bursary', 'family', 'work', 'oneOffIncome', ...otherIncomes.map(i => i.id)] : []),
                                 ...(!showExpenses ? ['rent', 'bills', 'uniFees', 'savingsInv', 'weeklySpend', 'oneOffExpense', ...otherExpenses.map(i => i.id)] : []),
+                                // Per-source eye/hide toggles
+                                ...[...hiddenSources].flatMap(id => {
+                                    const allMaps = { ...incomeEditTypeMap, ...expenseEditTypeMap }
+                                    return allMaps[id] || []
+                                }),
                             ].filter(t => {
                                 if (t === currentEventType) return false
                                 if (activeTab === 'variable' && (t === 'oneOffIncome' || t === 'oneOffExpense')) return false
+                                if (goalsVisibleEditTypes.has(t)) return false
                                 return true
+                            })}
+                            balanceHiddenTypes={[...hiddenSources].flatMap(id => {
+                                const allMaps = { ...incomeEditTypeMap, ...expenseEditTypeMap }
+                                return allMaps[id] || []
                             })}
                             currentEventType={currentEventType}
                             onEventClick={handleEventClick}
@@ -2339,7 +2526,7 @@ export default function Dashboard() {
                             balanceHistory={balanceHistory}
                             showBalanceHistory={showBalanceHistory}
                             footer={
-                                <div ref={footerRef} style={{ padding: '2px 1px 6px' }}>
+                                <div ref={footerRef} style={{ padding: '8px 1px 6px' }}>
                                     {/* Row 1: Balance pill + toggle buttons */}
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginLeft: 10 }}>
                                         <BalancePill value={balanceNum} onSave={val => {
@@ -2375,8 +2562,8 @@ export default function Dashboard() {
                                                 balanceToastTimer.current = setTimeout(() => setBalanceToast(null), 2500)
                                             }
                                         }} scrollContainerRef={scrollRef} />
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, alignItems: 'flex-end', flexShrink: 1 }}>
-                                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', width: 'fit-content', marginLeft: 'auto' }}>
+                                            <div style={{ display: 'flex', gap: 4 }}>
                                                 <button
                                                     onClick={() => setShowExpenses(prev => {
                                                         localStorage.setItem('budgeup_show_expenses', String(!prev))
@@ -2429,6 +2616,7 @@ export default function Dashboard() {
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
                                                     height: 20, transition: 'all 0.18s ease',
                                                     whiteSpace: 'nowrap',
+                                                    alignSelf: 'stretch',
                                                     boxShadow: showBalanceHistory ? '0 1px 3px rgba(236,140,23,0.18)' : 'none'
                                                 }}
                                             >
@@ -2467,7 +2655,7 @@ export default function Dashboard() {
                                     <rect x="3" y="4" width="18" height="18" rx="2" stroke={activeTab === 'fixed' ? '#000' : '#838383'} strokeWidth="2" />
                                     <path d="M16 2v4M8 2v4M3 10h18" stroke={activeTab === 'fixed' ? '#000' : '#838383'} strokeWidth="2" strokeLinecap="round" />
                                 </svg>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: activeTab === 'fixed' ? '#000' : '#838383' }}>Fixed</span>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: activeTab === 'fixed' ? '#000' : '#838383' }}>Regular</span>
                             </div>
                             <div data-card-detail style={{ overflow: 'hidden' }}>
                                 <p style={{
@@ -2483,7 +2671,7 @@ export default function Dashboard() {
                             </div>
                         </div>
 
-                        {/* Goals card (center) */}
+                        {/* Insights card (center) */}
                         <div data-card onClick={() => handleTabChange('goals')} style={{
                             flex: 1, borderRadius: 10,
                             cursor: 'pointer',
@@ -2497,12 +2685,12 @@ export default function Dashboard() {
                             overflow: 'hidden',
                         }}>
                             <div data-card-header style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 6 }}>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                                    <circle cx="12" cy="12" r="10" stroke={activeTab === 'goals' ? '#000' : '#838383'} strokeWidth="2" />
-                                    <circle cx="12" cy="12" r="6" stroke={activeTab === 'goals' ? '#000' : '#838383'} strokeWidth="2" />
-                                    <circle cx="12" cy="12" r="2" fill={activeTab === 'goals' ? '#000' : '#838383'} />
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={activeTab === 'goals' ? '#000' : '#838383'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M9 18h6" />
+                                    <path d="M10 22h4" />
+                                    <path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" />
                                 </svg>
-                                <span style={{ fontSize: 11, fontWeight: 700, color: activeTab === 'goals' ? '#000' : '#838383' }}>Goals</span>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: activeTab === 'goals' ? '#000' : '#838383' }}>Insights</span>
                             </div>
                             <div data-card-detail style={{ overflow: 'hidden' }}>
                                 <p style={{
@@ -2563,11 +2751,11 @@ export default function Dashboard() {
 
                 {/* Content below — held in place during graph shrink */}
                 <div ref={contentWrapRef} style={{ willChange: 'transform', contain: 'layout style', minHeight: '60vh', opacity: showInitialBalancePopup ? 0.35 : 1, pointerEvents: showInitialBalancePopup ? 'none' : 'auto' }}>
-                    <div key={activeTab} style={{ animation: 'tabFadeIn 0.2s ease' }}>
+                    <div>
 
-                        {activeTab === 'fixed' && (<div style={{ marginBottom: -120 }}>
+                        {activeTab === 'fixed' && (<div>
                             {/* Regular Income Section */}
-                            <div style={{ padding: '12px 16px 0' }}>
+                            <div style={{ padding: '10px 16px 0' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                                     <ArrowUpCircle />
                                     <span style={{
@@ -2577,11 +2765,11 @@ export default function Dashboard() {
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                     {INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).map(source => {
-                                        const active = (formData.incomeSources || []).includes(source.id)
+                                        const active = !hiddenSources.has(source.id)
                                         const editTypes = incomeEditTypeMap[source.id] || []
                                         const yearly = getSourceYearly(editTypes)
                                         const removedCount = getSourceRemovedCount(editTypes)
-                                        const isExpanded = expandedSource === source.id
+                                        const isExpanded = expandedSources.has(source.id)
 
                                         return (
                                             <SourceRow
@@ -2592,10 +2780,11 @@ export default function Dashboard() {
                                                 removedCount={removedCount}
                                                 onRestoreRemoved={() => restoreSourceEvents(editTypes)}
                                                 expanded={isExpanded}
-                                                onToggle={() => toggleIncomeSource(source.id)}
+                                                onToggle={() => toggleSourceVisibility(source.id)}
                                                 onExpandToggle={() => handleExpandToggle(source.id)}
                                                 onDelete={() => deleteSource(source.id, false)}
                                                 scrollContainerRef={scrollRef}
+                                                isTabSwitchingRef={isTabSwitchingRef}
                                                 formData={formData}
                                                 updateField={updateField}
                                             >
@@ -2707,19 +2896,22 @@ export default function Dashboard() {
                                                         if (opening) {
                                                             addPickerScrollPos.current = scrollRef.current?.scrollTop ?? null
                                                             setAddingSourceType('income')
+                                                            setExpandedSources(prev => new Set(prev).add('__add_income__'))
                                                             const btn = e.currentTarget.parentElement
                                                             const container = scrollRef.current
                                                             if (btn && container) {
-                                                                requestAnimationFrame(() => {
+                                                                requestAnimationFrame(() => requestAnimationFrame(() => {
                                                                     const stickyHeader = container.querySelector('[data-sticky-header]')
                                                                     const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
                                                                     const containerTop = container.getBoundingClientRect().top + headerH
                                                                     const btnTop = btn.getBoundingClientRect().top
-                                                                    container.scrollTo({
-                                                                        top: container.scrollTop + (btnTop - containerTop) - 8,
-                                                                        behavior: 'smooth',
-                                                                    })
-                                                                })
+                                                                    const SHRINK = MAX_H - MIN_H
+                                                                    const btnOffset = container.scrollTop + (btnTop - containerTop) - 8
+                                                                    // If graph will collapse during scroll, content shifts up by SHRINK
+                                                                    const graphWillCollapse = container.scrollTop < SHRINK && btnOffset > SHRINK
+                                                                    const target = Math.max(SHRINK, graphWillCollapse ? btnOffset - SHRINK : btnOffset)
+                                                                    animateScroll(container, target, 400)
+                                                                }))
                                                             }
                                                         } else {
                                                             closeAddPicker()
@@ -2742,6 +2934,7 @@ export default function Dashboard() {
                                                         background: '#fff', overflow: 'hidden',
                                                         boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
                                                         position: 'relative', zIndex: 51,
+                                                        animation: pickerClosing ? 'pickerSlideUp 0.2s ease forwards' : 'pickerSlideDown 0.25s ease',
                                                     }}>
                                                         {pickerOptions.map(source => (
                                                             <button
@@ -2778,7 +2971,7 @@ export default function Dashboard() {
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                     {EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).map(source => {
-                                        const active = (formData.expenseSources || []).includes(source.id)
+                                        const active = !hiddenSources.has(source.id)
                                         const editTypes = expenseEditTypeMap[source.id] || []
                                         const yearly = getSourceYearly(editTypes)
                                         const removedCount = getSourceRemovedCount(editTypes)
@@ -2792,11 +2985,12 @@ export default function Dashboard() {
                                                 removedCount={removedCount}
                                                 onRestoreRemoved={() => restoreSourceEvents(editTypes)}
                                                 isExpense
-                                                expanded={expandedSource === source.id}
-                                                onToggle={() => toggleExpenseSource(source.id)}
+                                                expanded={expandedSources.has(source.id)}
+                                                onToggle={() => toggleSourceVisibility(source.id)}
                                                 onExpandToggle={() => handleExpandToggle(source.id)}
                                                 onDelete={() => deleteSource(source.id, true)}
                                                 scrollContainerRef={scrollRef}
+                                                isTabSwitchingRef={isTabSwitchingRef}
                                                 formData={formData}
                                                 updateField={updateField}
                                             >
@@ -2948,19 +3142,21 @@ export default function Dashboard() {
                                                         if (opening) {
                                                             addPickerScrollPos.current = scrollRef.current?.scrollTop ?? null
                                                             setAddingSourceType('expense')
+                                                            setExpandedSources(prev => new Set(prev).add('__add_expense__'))
                                                             const btn = e.currentTarget.parentElement
                                                             const container = scrollRef.current
                                                             if (btn && container) {
-                                                                requestAnimationFrame(() => {
+                                                                requestAnimationFrame(() => requestAnimationFrame(() => {
                                                                     const stickyHeader = container.querySelector('[data-sticky-header]')
                                                                     const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
                                                                     const containerTop = container.getBoundingClientRect().top + headerH
                                                                     const btnTop = btn.getBoundingClientRect().top
-                                                                    container.scrollTo({
-                                                                        top: container.scrollTop + (btnTop - containerTop) - 8,
-                                                                        behavior: 'smooth',
-                                                                    })
-                                                                })
+                                                                    const SHRINK = MAX_H - MIN_H
+                                                                    const btnOffset = container.scrollTop + (btnTop - containerTop) - 8
+                                                                    const graphWillCollapse = container.scrollTop < SHRINK && btnOffset > SHRINK
+                                                                    const target = Math.max(SHRINK, graphWillCollapse ? btnOffset - SHRINK : btnOffset)
+                                                                    animateScroll(container, target, 400)
+                                                                }))
                                                             }
                                                         } else {
                                                             closeAddPicker()
@@ -2983,6 +3179,7 @@ export default function Dashboard() {
                                                         background: '#fff', overflow: 'hidden',
                                                         boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
                                                         position: 'relative', zIndex: 51,
+                                                        animation: pickerClosing ? 'pickerSlideUp 0.2s ease forwards' : 'pickerSlideDown 0.25s ease',
                                                     }}>
                                                         {pickerOptions.map(source => (
                                                             <button
@@ -3026,11 +3223,11 @@ export default function Dashboard() {
                             const todayStr = toLocalDate(today)
 
                             const sortedEvents = [...events].filter(e => !e.removed).sort((a, b) => a.date.localeCompare(b.date))
-                            const futureEvts = sortedEvents.filter(e => e.date > todayStr)
+                            const futureEvts = sortedEvents.filter(e => e.date >= todayStr)
 
-                            // End-of-year projected balance (from original balance through all events)
+                            // End-of-year projected balance (from current balance through future events only)
                             let endOfYearBal = projectionBalance
-                            for (const evt of sortedEvents) {
+                            for (const evt of futureEvts) {
                                 if (evt.editType === 'weeklySpend') endOfYearBal -= evt.amount
                                 else endOfYearBal += evt.type === 'income' ? evt.amount : -evt.amount
                             }
@@ -3042,7 +3239,7 @@ export default function Dashboard() {
                             let endOfTermBal = null
                             if (targetTerm) {
                                 endOfTermBal = projectionBalance
-                                const termEndEvts = sortedEvents.filter(e => e.date <= targetTerm.end)
+                                const termEndEvts = futureEvts.filter(e => e.date <= targetTerm.end)
                                 for (const evt of termEndEvts) {
                                     if (evt.editType === 'weeklySpend') endOfTermBal -= evt.amount
                                     else endOfTermBal += evt.type === 'income' ? evt.amount : -evt.amount
@@ -3161,7 +3358,116 @@ export default function Dashboard() {
                             )
 
                             return (
-                                <div style={{ padding: '16px 16px 0', marginBottom: -120 }}>
+                                <div style={{ padding: '10px 16px 0' }}>
+                                    {/* Zero balance & overdraft breach warnings */}
+                                    {(() => {
+                                        let bal = projectionBalance
+                                        let zeroDate = null
+                                        let overdraftDate = null
+                                        let lowestBal = bal
+                                        const od = overdraftNum || 0
+                                        const alreadyZero = bal <= 0
+                                        const alreadyOverdraft = od > 0 && bal < -od
+
+                                        for (const evt of futureEvts) {
+                                            if (evt.editType === 'weeklySpend') bal -= evt.amount
+                                            else bal += evt.type === 'income' ? evt.amount : -evt.amount
+                                            if (bal < lowestBal) lowestBal = bal
+                                            if (bal <= 0 && !zeroDate) zeroDate = evt.date
+                                            if (od > 0 && bal < -od && !overdraftDate) overdraftDate = evt.date
+                                        }
+
+                                        if (!alreadyZero && !alreadyOverdraft && !zeroDate && !overdraftDate) return null
+
+                                        const daysUntil = (dateStr) => daysBetween(todayStr, dateStr)
+
+                                        return (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                                                {(alreadyZero || zeroDate) && (
+                                                    <div style={{ ...cardStyle, background: '#fffaf0', border: '1px solid #f5e6cc' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                                            <div style={{
+                                                                width: 28, height: 28, borderRadius: 8,
+                                                                background: '#EC8C17', display: 'flex',
+                                                                alignItems: 'center', justifyContent: 'center',
+                                                            }}>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                                                    <line x1="12" y1="9" x2="12" y2="13" />
+                                                                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                                                                </svg>
+                                                            </div>
+                                                            <p style={{ ...cardTitle, margin: 0, color: '#EC8C17' }}>Zero Balance</p>
+                                                        </div>
+                                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                            {alreadyZero
+                                                                ? `Your balance is currently at or below ${sym}0`
+                                                                : zeroDate === todayStr
+                                                                    ? `Projected to hit ${sym}0 today`
+                                                                    : `Projected to hit ${sym}0 on ${fmt(zeroDate)}`
+                                                            }
+                                                        </p>
+                                                        {!alreadyZero && zeroDate !== todayStr && (
+                                                            <p style={{ ...subText, fontSize: 12, marginTop: 4 }}>
+                                                                {daysUntil(zeroDate)} {daysUntil(zeroDate) === 1 ? 'day' : 'days'} from now
+                                                            </p>
+                                                        )}
+                                                        {lowestBal < 0 && (zeroDate === todayStr || alreadyZero) && (
+                                                            <p style={{ ...subText, fontSize: 12, marginTop: 4 }}>
+                                                                Projected to reach {sym}{Math.abs(Math.round(lowestBal)).toLocaleString()} in the negative
+                                                            </p>
+                                                        )}
+                                                        <button
+                                                            onClick={() => navigate('/support')}
+                                                            style={{
+                                                                marginTop: 10, padding: '8px 14px',
+                                                                background: '#EC8C17', color: '#fff',
+                                                                border: 'none', borderRadius: 8,
+                                                                fontSize: 12, fontWeight: 700,
+                                                                fontFamily: 'Nunito, sans-serif',
+                                                                cursor: 'pointer',
+                                                                boxShadow: '0 2px 6px rgba(236,140,23,0.3)',
+                                                            }}
+                                                        >
+                                                            Get money advice
+                                                        </button>
+                                                    </div>
+                                                )}
+                                                {(alreadyOverdraft || overdraftDate) && (
+                                                    <div style={{ ...cardStyle, background: '#fdf0f1', border: '1px solid #f5cccc' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                                            <div style={{
+                                                                width: 28, height: 28, borderRadius: 8,
+                                                                background: '#e06470', display: 'flex',
+                                                                alignItems: 'center', justifyContent: 'center',
+                                                            }}>
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                                    <circle cx="12" cy="12" r="10" />
+                                                                    <line x1="15" y1="9" x2="9" y2="15" />
+                                                                    <line x1="9" y1="9" x2="15" y2="15" />
+                                                                </svg>
+                                                            </div>
+                                                            <p style={{ ...cardTitle, margin: 0, color: '#e06470' }}>Overdraft Limit</p>
+                                                        </div>
+                                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                            {alreadyOverdraft
+                                                                ? `You\u2019ve exceeded your ${sym}${Math.round(od).toLocaleString()} overdraft limit`
+                                                                : overdraftDate === todayStr
+                                                                    ? `Projected to exceed ${sym}${Math.round(od).toLocaleString()} overdraft today`
+                                                                    : `Projected to exceed ${sym}${Math.round(od).toLocaleString()} overdraft on ${fmt(overdraftDate)}`
+                                                            }
+                                                        </p>
+                                                        {!alreadyOverdraft && overdraftDate !== todayStr && (
+                                                            <p style={{ ...subText, fontSize: 12, marginTop: 4 }}>
+                                                                {daysUntil(overdraftDate)} {daysUntil(overdraftDate) === 1 ? 'day' : 'days'} from now
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )
+                                    })()}
+
                                     {/* Next N Days */}
                                     <div style={cardStyle}>
                                         <p style={cardTitle}>Next {lookAheadDays} Days</p>
@@ -3423,84 +3729,12 @@ export default function Dashboard() {
                                         </div>
                                     </div>
 
-                                    {/* Zero balance & overdraft breach warnings */}
-                                    {(() => {
-                                        // Walk future events from projection balance (consistent with graph)
-                                        let bal = projectionBalance
-                                        let zeroDate = null
-                                        let overdraftDate = null
-                                        const od = overdraftNum || 0
-
-                                        for (const evt of futureEvts) {
-                                            if (evt.editType === 'weeklySpend') bal -= evt.amount
-                                            else bal += evt.type === 'income' ? evt.amount : -evt.amount
-                                            if (bal <= 0 && !zeroDate) zeroDate = evt.date
-                                            if (od > 0 && bal < -od && !overdraftDate) overdraftDate = evt.date
-                                        }
-
-                                        if (!zeroDate && !overdraftDate) return null
-
-                                        const daysUntil = (dateStr) => daysBetween(todayStr, dateStr)
-
-                                        return (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                                                {zeroDate && (
-                                                    <div style={{ ...cardStyle, background: '#fffaf0', border: '1px solid #f5e6cc' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                                            <div style={{
-                                                                width: 28, height: 28, borderRadius: 8,
-                                                                background: '#EC8C17', display: 'flex',
-                                                                alignItems: 'center', justifyContent: 'center',
-                                                            }}>
-                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                                                    <line x1="12" y1="9" x2="12" y2="13" />
-                                                                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                                                                </svg>
-                                                            </div>
-                                                            <p style={{ ...cardTitle, margin: 0, color: '#EC8C17' }}>Zero Balance</p>
-                                                        </div>
-                                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                                                            Projected to hit {sym}0 on {fmt(zeroDate)}
-                                                        </p>
-                                                        <p style={{ ...subText, fontSize: 12, marginTop: 4 }}>
-                                                            {daysUntil(zeroDate)} days from now
-                                                        </p>
-                                                    </div>
-                                                )}
-                                                {overdraftDate && (
-                                                    <div style={{ ...cardStyle, background: '#fdf0f1', border: '1px solid #f5cccc' }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                                                            <div style={{
-                                                                width: 28, height: 28, borderRadius: 8,
-                                                                background: '#e06470', display: 'flex',
-                                                                alignItems: 'center', justifyContent: 'center',
-                                                            }}>
-                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                                    <circle cx="12" cy="12" r="10" />
-                                                                    <line x1="15" y1="9" x2="9" y2="15" />
-                                                                    <line x1="9" y1="9" x2="15" y2="15" />
-                                                                </svg>
-                                                            </div>
-                                                            <p style={{ ...cardTitle, margin: 0, color: '#e06470' }}>Overdraft Limit</p>
-                                                        </div>
-                                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                                                            Projected to exceed {sym}{Math.round(od).toLocaleString()} overdraft on {fmt(overdraftDate)}
-                                                        </p>
-                                                        <p style={{ ...subText, fontSize: 12, marginTop: 4 }}>
-                                                            {daysUntil(overdraftDate)} days from now
-                                                        </p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )
-                                    })()}
                                 </div>
                             )
                         })()}
 
                         {activeTab === 'variable' && (
-                            <div style={{ padding: '12px 16px 0' }}>
+                            <div style={{ padding: '10px 16px 0' }}>
                                 <WeeklySpendStep compact
                                     weeklySpend={formData.weeklySpend}
                                     updateWeeklySpend={(val) => updateField('weeklySpend', val)}
@@ -3518,11 +3752,13 @@ export default function Dashboard() {
                                     <OneOffItemsStep compact
                                         items={formData.oneOffItems || [{ name: '', amount: '', date: '', direction: 'out' }]}
                                         updateItems={(val) => updateField('oneOffItems', val)}
+                                        minDate={getGraphStart()}
                                     />
                                 </div>
                             </div>
                         )}
 
+                        {expandedSources.size > 0 && <div style={{ height: 150 }} />}
 
                     </div>
                 </div>
@@ -3535,8 +3771,8 @@ export default function Dashboard() {
                 const w = 140
                 const h = editingEvent.removed ? 60 : 80
                 const left = Math.max(8, Math.min(editingEvent.clickX - w / 2, window.innerWidth - w - 8))
-                const showBelow = editingEvent.clickY < h + 20
-                const top = showBelow ? editingEvent.clickY + 14 : editingEvent.clickY - h - 5
+                const showBelow = editingEvent.clickY < h + 24
+                const top = showBelow ? editingEvent.clickY + 14 : editingEvent.clickY - h - 10
                 return (
                     <>
                         <div
@@ -3853,6 +4089,7 @@ export default function Dashboard() {
                     {balanceToast}
                 </div>
             )}
+
         </div>
     )
 }

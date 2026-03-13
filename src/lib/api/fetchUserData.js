@@ -64,6 +64,7 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
                     id: b.id,
                     start: b.start_date,
                     end: b.end_date,
+                    ...(b.name ? { name: b.name } : {}),
                 }))
             }))
         }
@@ -277,14 +278,15 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
         })
     }
 
-    // One-off items
-    const oneOffRows = (byCategory['oneOff'] || []).filter(r => !r.is_removed)
+    // One-off items (is_removed means hidden, not deleted — deleted items are removed from the array)
+    const oneOffRows = (byCategory['oneOff'] || [])
     if (oneOffRows.length) {
         fd.oneOffItems = oneOffRows.map(r => ({
             name: r.title,
             amount: String(r.amount),
             date: r.scheduled_date,
             direction: r.direction === 'in' ? 'in' : 'out',
+            ...(r.is_removed ? { hidden: true } : {}),
         }))
     }
 

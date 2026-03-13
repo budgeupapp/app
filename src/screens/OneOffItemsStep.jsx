@@ -63,9 +63,28 @@ function EditPencilIcon() {
     )
 }
 
-export default function OneOffItemsStep({ items, updateItems, compact = false }) {
+function EyeIcon({ color }) {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+        </svg>
+    )
+}
+
+function EyeOffIcon() {
+    return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+            <line x1="1" y1="1" x2="23" y2="23" />
+        </svg>
+    )
+}
+
+export default function OneOffItemsStep({ items, updateItems, compact = false, minDate = null }) {
     const scrollRef = useRef(null)
     const [focusedField, setFocusedField] = useState(null)
+    const [dateError, setDateError] = useState(null)
     const blurTimerRef = useRef(null)
     const focusedRef = useRef(false)
     const touchStartRef = useRef(null)
@@ -75,13 +94,14 @@ export default function OneOffItemsStep({ items, updateItems, compact = false })
     const [addingIndex, setAddingIndex] = useState(null)
     const cardRefs = useRef({})
 
+    const savedCompactScrollRef = useRef(null)
+
     const scrollInputToTop = (input, containerOverride) => {
         const container = containerOverride || scrollRef.current
         if (!container) return
         const containerRect = container.getBoundingClientRect()
         const stickyHeader = container.querySelector('[data-sticky-header]')
         const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
-        // Find the subtitle label above the input to scroll it into view
         let label = null
         let el = input.parentElement
         while (el && el !== container) {
@@ -91,11 +111,35 @@ export default function OneOffItemsStep({ items, updateItems, compact = false })
         }
         const targetRect = label ? label.getBoundingClientRect() : input.getBoundingClientRect()
         const offset = targetRect.top - containerRect.top + container.scrollTop
-        container.scrollTo({ top: Math.max(0, offset - headerH - 8), behavior: 'smooth' })
+        container.scrollTo({ top: Math.max(0, offset - headerH - 7), behavior: 'smooth' })
+    }
+
+    const scrollCardToTop = (input, containerOverride) => {
+        const container = containerOverride
+        if (!container) return
+        const card = input.closest('[data-oneoff-card]')
+        if (!card) return
+        const nameLabel = card.querySelector('p')
+        const target = nameLabel || card
+        const containerRect = container.getBoundingClientRect()
+        const targetRect = target.getBoundingClientRect()
+        const stickyHeader = container.querySelector('[data-sticky-header]')
+        const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
+        container.scrollTo({ top: Math.max(0, targetRect.top - containerRect.top + container.scrollTop - headerH - 7), behavior: 'smooth' })
     }
 
     const handleInputTouchStart = (e) => {
         touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    }
+
+    const findCompactScrollParent = (input) => {
+        let scrollParent = input.closest('[data-oneoff-card]')?.parentElement
+        while (scrollParent) {
+            const style = window.getComputedStyle(scrollParent)
+            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollParent.scrollHeight > scrollParent.clientHeight) break
+            scrollParent = scrollParent.parentElement
+        }
+        return scrollParent
     }
 
     const handleInputTouchEnd = (e) => {
@@ -108,13 +152,11 @@ export default function OneOffItemsStep({ items, updateItems, compact = false })
         input.focus({ preventScroll: true })
         if (focusedRef.current) return
         if (compact) {
-            let scrollParent = input.closest('[data-oneoff-card]')?.parentElement
-            while (scrollParent) {
-                const style = window.getComputedStyle(scrollParent)
-                if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollParent.scrollHeight > scrollParent.clientHeight) break
-                scrollParent = scrollParent.parentElement
+            const scrollParent = findCompactScrollParent(input)
+            if (scrollParent) {
+                if (savedCompactScrollRef.current === null) savedCompactScrollRef.current = scrollParent.scrollTop
+                scrollCardToTop(input, scrollParent)
             }
-            if (scrollParent) scrollInputToTop(input, scrollParent)
         } else {
             scrollInputToTop(input)
         }
@@ -130,13 +172,11 @@ export default function OneOffItemsStep({ items, updateItems, compact = false })
         const input = e.target
         if (compact) {
             setTimeout(() => {
-                let scrollParent = input.closest('[data-oneoff-card]')?.parentElement
-                while (scrollParent) {
-                    const style = window.getComputedStyle(scrollParent)
-                    if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollParent.scrollHeight > scrollParent.clientHeight) break
-                    scrollParent = scrollParent.parentElement
+                const scrollParent = findCompactScrollParent(input)
+                if (scrollParent) {
+                    if (savedCompactScrollRef.current === null) savedCompactScrollRef.current = scrollParent.scrollTop
+                    scrollCardToTop(input, scrollParent)
                 }
-                if (scrollParent) scrollInputToTop(input, scrollParent)
             }, 320)
             return
         }
@@ -144,41 +184,12 @@ export default function OneOffItemsStep({ items, updateItems, compact = false })
     }
 
     const handleBlur = (e) => {
-        const blurredInput = e.target
+        if (e.relatedTarget && e.target.closest('[data-oneoff-card]')?.contains(e.relatedTarget)) return
         blurTimerRef.current = setTimeout(() => {
             focusedRef.current = false
-            if (!compact) {
-                scrollRef.current?.scrollTo({ top: savedScrollRef.current, behavior: 'smooth' })
-                setTimeout(() => setFocusedField(false), 400)
-            } else {
-                setFocusedField(false)
-                const card = blurredInput.closest('[data-oneoff-card]')
-                if (!card) return
-                const container = getScrollContainer()
-                if (!container) return
-
-                // Keep card pinned in place while keyboard closes by tracking its position each frame
-                const stickyHeader = container.querySelector('[data-sticky-header]')
-                const getHeaderBottom = () => stickyHeader
-                    ? stickyHeader.getBoundingClientRect().bottom
-                    : container.getBoundingClientRect().top
-                const gap = 10
-                // Pin for ~400ms while keyboard animates closed
-                let rafId
-                const start = performance.now()
-                const pin = () => {
-                    const cardTop = card.getBoundingClientRect().top
-                    const diff = cardTop - getHeaderBottom() - gap
-                    if (Math.abs(diff) > 1) {
-                        container.scrollTop += diff
-                    }
-                    if (performance.now() - start < 400) {
-                        rafId = requestAnimationFrame(pin)
-                    }
-                }
-                rafId = requestAnimationFrame(pin)
-            }
-        }, 50)
+            savedCompactScrollRef.current = null
+            setFocusedField(false)
+        }, 200)
     }
 
     const updateItem = (index, field, value) => {
@@ -319,148 +330,172 @@ export default function OneOffItemsStep({ items, updateItems, compact = false })
                     {items.map((item, i) => {
                         const isRemoving = removingIndex === i
                         const isAdding = addingIndex === i
+                        const dirColor = (item.direction || 'out') === 'in' ? '#147b75' : '#e06470'
                         return (
-                        <div key={i} data-oneoff-card style={{
-                            border: '1.5px solid #f3f3f3',
-                            borderRadius: 10,
-                            padding: isRemoving ? '0 12px' : '10px 12px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: isRemoving ? 0 : 8,
-                            maxHeight: isRemoving ? 0 : 500,
-                            opacity: isRemoving ? 0 : 1,
-                            overflow: 'hidden',
-                            marginBottom: isRemoving ? -10 : 0,
-                            borderWidth: isRemoving ? 0 : 1.5,
-                            transition: 'max-height 0.28s ease, opacity 0.22s ease, padding 0.28s ease, margin-bottom 0.28s ease, border-width 0.28s ease, gap 0.28s ease',
-                            ...(isAdding ? { animation: 'oneoff-slide-in 0.3s ease forwards' } : {}),
-                        }}>
-                            {/* Row 1: Direction toggle + Delete */}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <button
-                                    onClick={() => toggleDirection(i)}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: 4,
-                                        background: (item.direction || 'out') === 'in' ? '#e8f5e9' : '#fce4ec',
-                                        border: 'none', borderRadius: 5,
-                                        padding: '3px 8px 3px 5px',
-                                        fontSize: 10, fontWeight: 700,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: (item.direction || 'out') === 'in' ? '#147b75' : '#e06470',
-                                        cursor: 'pointer',
-                                        whiteSpace: 'nowrap',
-                                        flexShrink: 0,
-                                    }}
-                                >
-                                    <ArrowCircleIcon direction={item.direction || 'out'} />
-                                    {(item.direction || 'out') === 'in' ? 'Income' : 'Expense'}
-                                </button>
-                                {(item.name || item.amount || items.length > 1) && (
-                                    <span
-                                        onClick={() => removeItem(i)}
+                            <div key={i} data-oneoff-card style={{
+                                border: '1.5px solid #f3f3f3',
+                                borderRadius: 10,
+                                padding: isRemoving ? '0 24px' : '10px 24px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: isRemoving ? 0 : 8,
+                                maxHeight: isRemoving ? 0 : 500,
+                                opacity: isRemoving ? 0 : 1,
+                                overflow: 'hidden',
+                                marginBottom: isRemoving ? -10 : 0,
+                                borderWidth: isRemoving ? 0 : 1.5,
+                                transition: 'max-height 0.28s ease, opacity 0.22s ease, padding 0.28s ease, margin-bottom 0.28s ease, border-width 0.28s ease, gap 0.28s ease',
+                                ...(isAdding ? { animation: 'oneoff-slide-in 0.3s ease forwards' } : {}),
+                            }}>
+                                {/* Row 1: Direction toggle + Hide icon */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <button
+                                        onClick={() => toggleDirection(i)}
                                         style={{
-                                            fontSize: 10, fontWeight: 600,
+                                            display: 'flex', alignItems: 'center', gap: 4,
+                                            background: (item.direction || 'out') === 'in' ? '#e8f5e9' : '#fce4ec',
+                                            border: 'none', borderRadius: 5,
+                                            padding: '3px 8px 3px 5px',
+                                            fontSize: 10, fontWeight: 700,
                                             fontFamily: 'Nunito, sans-serif',
-                                            color: '#e06470', cursor: 'pointer',
+                                            color: dirColor,
+                                            cursor: 'pointer',
+                                            whiteSpace: 'nowrap',
+                                            flexShrink: 0,
                                         }}
                                     >
-                                        Delete one-off {(item.direction || 'out') === 'in' ? 'income' : 'expense'}
-                                    </span>
+                                        <ArrowCircleIcon direction={item.direction || 'out'} />
+                                        {(item.direction || 'out') === 'in' ? 'Income' : 'Expense'}
+                                    </button>
+                                    <button
+                                        onClick={() => updateItem(i, 'hidden', !item.hidden)}
+                                        style={{
+                                            background: 'none', border: 'none', padding: 4,
+                                            cursor: 'pointer', display: 'flex', alignItems: 'center',
+                                            flexShrink: 0,
+                                        }}
+                                    >
+                                        {item.hidden ? <EyeOffIcon /> : <EyeIcon color={dirColor} />}
+                                    </button>
+                                </div>
+
+                                {/* Row 2: Name */}
+                                <div>
+                                    <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Item name</p>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Birthday money, Holiday"
+                                        value={item.name || ''}
+                                        onChange={(e) => updateItem(i, 'name', e.target.value)}
+                                        onTouchStart={handleInputTouchStart}
+                                        onTouchEnd={handleInputTouchEnd}
+                                        onFocus={handleFocus}
+                                        onBlur={handleBlur}
+                                        style={{
+                                            width: '100%', boxSizing: 'border-box',
+                                            border: '1px solid #e8e8e8', borderRadius: 10,
+                                            padding: '10px 14px',
+                                            fontSize: 15, fontWeight: 500,
+                                            fontFamily: 'Nunito, sans-serif',
+                                            color: '#000', outline: 'none',
+                                            marginBottom: 0,
+                                        }}
+                                    />
+                                </div>
+
+                                {/* Row 3: Amount + Date */}
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Amount</p>
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center',
+                                            border: '1px solid #e8e8e8', borderRadius: 10,
+                                            padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
+                                        }}>
+                                            <span style={{
+                                                fontSize: 16, fontWeight: 600,
+                                                color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
+                                            }}>{getCurrencySymbol()}</span>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                placeholder="0.00"
+                                                value={formatDisplay(item.amount)}
+                                                onChange={(e) => updateItem(i, 'amount', cleanNum(e.target.value))}
+                                                onTouchStart={handleInputTouchStart}
+                                                onTouchEnd={handleInputTouchEnd}
+                                                onFocus={handleFocus}
+                                                onBlur={handleBlur}
+                                                style={{
+                                                    flex: 1, border: 'none',
+                                                    background: 'transparent',
+                                                    fontSize: 16, fontWeight: 500,
+                                                    fontFamily: 'Nunito, sans-serif',
+                                                    color: '#000', outline: 'none', padding: 0,
+                                                    height: '100%', minWidth: 0,
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Date</p>
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center',
+                                            border: '1px solid #e8e8e8', borderRadius: 10,
+                                            height: 40, boxSizing: 'border-box', overflow: 'hidden',
+                                        }}>
+                                            <input
+                                                type="date"
+                                                value={item.date || ''}
+                                                onChange={(e) => {
+                                                    updateItem(i, 'date', e.target.value)
+                                                }}
+                                                onFocus={(e) => {
+                                                    const container = scrollRef.current
+                                                    if (container) {
+                                                        const pos = container.scrollTop
+                                                        requestAnimationFrame(() => { container.scrollTop = pos })
+                                                    }
+                                                }}
+                                                onBlur={(e) => {
+                                                    const val = items[i]?.date
+                                                    if (minDate && val && val < minDate) {
+                                                        setDateError('Date can\u2019t be before you joined the app')
+                                                        setTimeout(() => setDateError(null), 3000)
+                                                    }
+                                                    handleBlur(e)
+                                                }}
+                                                style={{
+                                                    border: 'none', background: 'transparent',
+                                                    fontSize: 14, fontWeight: 500,
+                                                    fontFamily: 'Nunito, sans-serif',
+                                                    color: item.date ? '#000' : '#aaa',
+                                                    outline: 'none', padding: '0 14px',
+                                                    height: '100%', width: '100%',
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Delete at bottom */}
+                                {(item.name || item.amount || items.length > 1) && (
+                                    <div style={{ textAlign: 'center', margin: '0 -12px', padding: '8px 12px 0' }}>
+                                        <span
+                                            onClick={() => removeItem(i)}
+                                            style={{
+                                                fontSize: 10, fontWeight: 600,
+                                                fontFamily: 'Nunito, sans-serif',
+                                                color: '#e06470', cursor: 'pointer',
+                                            }}
+                                        >
+                                            Delete one-off {(item.direction || 'out') === 'in' ? 'income' : 'expense'}
+                                        </span>
+                                    </div>
                                 )}
                             </div>
-
-                            {/* Row 2: Name */}
-                            <div>
-                            <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Item name</p>
-                            <input
-                                type="text"
-                                placeholder="e.g. Birthday money, Holiday"
-                                value={item.name}
-                                onChange={(e) => updateItem(i, 'name', e.target.value)}
-                                onTouchStart={handleInputTouchStart}
-                                onTouchEnd={handleInputTouchEnd}
-                                onFocus={handleFocus}
-                                onBlur={handleBlur}
-                                style={{
-                                    width: '100%', boxSizing: 'border-box',
-                                    border: '1px solid #e8e8e8', borderRadius: 10,
-                                    padding: '10px 14px',
-                                    fontSize: 15, fontWeight: 500,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#000', outline: 'none',
-                                    marginBottom: 0,
-                                }}
-                            />
-                            </div>
-
-                            {/* Row 3: Amount + Date */}
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Amount</p>
-                                    <div style={{
-                                        display: 'flex', alignItems: 'center',
-                                        border: '1px solid #e8e8e8', borderRadius: 10,
-                                        padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
-                                    }}>
-                                        <span style={{
-                                            fontSize: 16, fontWeight: 600,
-                                            color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
-                                        }}>{getCurrencySymbol()}</span>
-                                        <input
-                                            type="text"
-                                            inputMode="decimal"
-                                            placeholder="0.00"
-                                            value={formatDisplay(item.amount)}
-                                            onChange={(e) => updateItem(i, 'amount', cleanNum(e.target.value))}
-                                            onTouchStart={handleInputTouchStart}
-                                            onTouchEnd={handleInputTouchEnd}
-                                            onFocus={handleFocus}
-                                            onBlur={handleBlur}
-                                            style={{
-                                                flex: 1, border: 'none',
-                                                background: 'transparent',
-                                                fontSize: 16, fontWeight: 500,
-                                                fontFamily: 'Nunito, sans-serif',
-                                                color: '#000', outline: 'none', padding: 0,
-                                                height: '100%', minWidth: 0,
-                                            }}
-                                        />
-                                    </div>
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Date</p>
-                                    <div style={{
-                                        display: 'flex', alignItems: 'center',
-                                        border: '1px solid #e8e8e8', borderRadius: 10,
-                                        height: 40, boxSizing: 'border-box', overflow: 'hidden',
-                                    }}>
-                                        <input
-                                            type="date"
-                                            value={item.date}
-                                            onChange={(e) => updateItem(i, 'date', e.target.value)}
-                                            onFocus={(e) => {
-                                                // Lock scroll position when date picker opens
-                                                const container = scrollRef.current
-                                                if (container) {
-                                                    const pos = container.scrollTop
-                                                    requestAnimationFrame(() => { container.scrollTop = pos })
-                                                }
-                                            }}
-                                            onBlur={handleBlur}
-                                            style={{
-                                                border: 'none', background: 'transparent',
-                                                fontSize: 14, fontWeight: 500,
-                                                fontFamily: 'Nunito, sans-serif',
-                                                color: item.date ? '#000' : '#aaa',
-                                                outline: 'none', padding: '0 14px',
-                                                height: '100%', width: '100%',
-                                            }}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )})}
+                        )
+                    })}
                 </div>
 
                 {/* Add new item button */}
@@ -480,8 +515,28 @@ export default function OneOffItemsStep({ items, updateItems, compact = false })
                     + Add another item
                 </button>
 
-                {focusedField && <div style={{ height: '60vh', flexShrink: 0 }} />}
+                <div style={{
+                    height: focusedField ? '60vh' : 0,
+                    flexShrink: 0,
+                    transition: 'height 0.3s ease',
+                    overflow: 'hidden',
+                }} />
             </div>
+
+            {/* Date error toast */}
+            {dateError && (
+                <div style={{
+                    position: 'fixed', bottom: 100, left: '50%', transform: 'translateX(-50%)',
+                    background: '#333', color: '#fff', padding: '10px 18px',
+                    borderRadius: 10, fontSize: 13, fontWeight: 600,
+                    fontFamily: 'Nunito, sans-serif', zIndex: 1000,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                    animation: 'fadeIn 0.2s ease',
+                    whiteSpace: 'nowrap',
+                }}>
+                    {dateError}
+                </div>
+            )}
         </div>
     )
 }

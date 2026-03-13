@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Home, MessageCircle, Settings } from 'react-feather'
+import { Home, MessageCircle, Settings, MessageSquare } from 'react-feather'
 import { analytics, MONEY_ADVICE_EVENTS } from '../lib/analytics/index.js'
 import './BottomNav.css'
 
@@ -7,9 +7,20 @@ export default function BottomNav() {
     const navigate = useNavigate()
     const location = useLocation()
 
+    const university = (() => {
+        try {
+            const saved = localStorage.getItem('budgeup_onboarding_state')
+            const parsed = saved ? JSON.parse(saved) : {}
+            return parsed?.formData?.university || ''
+        } catch { return '' }
+    })()
+
     const tabs = [
         { key: 'home', path: '/dashboard', label: 'Home', icon: <Home /> },
-        { key: 'advice', path: '/support', label: 'Money Advice', icon: <MessageCircle /> },
+        ...(university === 'University of Bristol'
+            ? [{ key: 'advice', path: '/support', label: 'Money Advice', icon: <MessageCircle /> }]
+            : []),
+        { key: 'feedback', path: '/feedback', label: 'Feedback', icon: <MessageSquare /> },
         { key: 'settings', path: '/settings', label: 'Settings', icon: <Settings /> },
     ]
 
@@ -24,9 +35,7 @@ export default function BottomNav() {
                         data-href={tab.path}
                         onClick={() => {
                             if (isActive(tab.path)) {
-                                if (tab.key === 'home') {
-                                    window.dispatchEvent(new CustomEvent('home-tap-again'))
-                                }
+                                window.dispatchEvent(new CustomEvent('nav-tap-again'))
                                 return
                             }
                             if (tab.path === '/support') {

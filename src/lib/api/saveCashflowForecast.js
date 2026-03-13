@@ -354,6 +354,7 @@ export async function saveCashflowForecast(userId, data) {
             amount: amt, currency: 'GBP', recurrence: 'once',
             scheduled_date: item.date, end_date: null, source: 'manual',
             category: 'oneOff',
+            is_removed: !!item.hidden,
         })
     }
 

@@ -69,6 +69,7 @@ function Chevron({ open }) {
 
 function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete }) {
     const ref = useRef(null)
+    const headerRef = useRef(null)
     const contentRef = useRef(null)
     const [contentHeight, setContentHeight] = useState(0)
     const prevExpanded = useRef(expanded)
@@ -85,6 +86,15 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
             measure()
             // Re-measure after a frame in case content is still rendering
             requestAnimationFrame(measure)
+
+            // Scroll the accordion header to top of container after expand animation
+            if (!prevExpanded.current && headerRef.current) {
+                setTimeout(() => {
+                    if (headerRef.current) {
+                        headerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }
+                }, 350)
+            }
         }
     }, [expanded, term.breaks.length, removingBreak])
 
@@ -173,12 +183,15 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
         <div ref={ref} style={{ border: '1px solid #f3f3f3', borderRadius: 10, background: '#fff' }}>
 
             {/* ── Header (2-line) ── */}
-            <div onClick={onToggle} style={{ padding: '10px 12px', cursor: 'pointer' }}>
+            <div ref={headerRef} onClick={onToggle} style={{ padding: '10px 12px', cursor: 'pointer', scrollMarginTop: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <input
                         value={term.name}
                         onChange={(e) => onUpdate({ ...term, name: e.target.value })}
                         onClick={(e) => e.stopPropagation()}
+                        onFocus={(e) => {
+                            e.stopPropagation()
+                        }}
                         style={{
                             fontSize: 14, fontWeight: 700, color: '#147b75',
                             fontFamily: 'Nunito, sans-serif',
@@ -230,8 +243,12 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                 transition: 'max-height 0.3s ease, opacity 0.2s ease',
                             }}>
                                 <div style={{
-                                    background: 'rgba(243,243,243,0.8)',
-                                    margin: '10px 10px',
+                                    background: (brk.name && /^exams?$/i.test(brk.name.trim()))
+                                        ? 'rgba(240,212,212,0.8)'
+                                        : (brk.name && /reading/i.test(brk.name))
+                                            ? 'rgba(212,228,240,0.8)'
+                                            : 'rgba(243,243,243,0.8)',
+                                    margin: '5px 10px',
                                     borderRadius: 10,
                                     overflow: 'hidden',
                                 }}>
@@ -243,7 +260,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                         <span style={{
                                             fontSize: 12, fontWeight: 700, color: '#4b4a4a',
                                             fontFamily: 'Nunito, sans-serif',
-                                        }}>Holiday</span>
+                                        }}>{brk.name || 'Holiday'}</span>
                                         <span style={{
                                             fontSize: 9, fontWeight: 600, color: '#9f9c9c',
                                             fontFamily: 'Nunito, sans-serif',

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { Button, Typography, message } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
@@ -6,7 +6,7 @@ import { POLICY_URLS } from '../lib/policyVersions'
 import { analytics, AUTH_EVENTS, SETTINGS_EVENTS, getErrorProperties } from '../lib/analytics/index.js'
 import { CURRENCIES, getCurrency, setCurrency, getGraphStart, setGraphStart, getCurrencySymbol } from '../lib/settings'
 import { fetchUserData, saveTermDates, saveUserFinances, saveCashflowForecast } from '../lib/api'
-import { INITIAL_FORM_DATA, UK_UNIVERSITIES } from '../config/onboardingConfig'
+import { INITIAL_FORM_DATA, UK_UNIVERSITIES, getTermDatesForUniversity, hasCustomTermDates } from '../config/onboardingConfig'
 import TermDatesStep from './TermDatesStep'
 
 const { Title, Text } = Typography
@@ -186,6 +186,7 @@ export default function SettingsScreen() {
     } catch { return '' }
   })
   const universitySaveTimerRef = useRef(null)
+  const [termDatesPrompt, setTermDatesPrompt] = useState(null) // { university, termDates }
   const [overdraft, setOverdraft] = useState(() => {
     try {
       const saved = localStorage.getItem('budgeup_onboarding_state')
@@ -197,6 +198,7 @@ export default function SettingsScreen() {
   const [showOverdraftToggle, setShowOverdraftToggle] = useState(() => localStorage.getItem('budgeup_show_overdraft') !== 'false')
   const userIdRef = useRef(null)
   const termSaveTimerRef = useRef(null)
+  const pendingTermDatesRef = useRef(null)
 
   const firstTermStart = (() => {
     try {
@@ -205,21 +207,79 @@ export default function SettingsScreen() {
       return parsed?.formData?.termDates?.terms?.[0]?.start || null
     } catch { return null }
   })()
+  const [newsletterOn, setNewsletterOn] = useState(() => localStorage.getItem('budgeup_newsletter') !== 'false')
+  const [newsletterLoading, setNewsletterLoading] = useState(false)
   const [messageApi, contextHolder] = message.useMessage({ maxCount: 1 })
   const [linkCopied, setLinkCopied] = useState(false)
   const [toast, setToast] = useState(null) // { text, type: 'success'|'error' }
   const toastTimerRef = useRef(null)
+  const settingsScrollRef = useRef(null)
   const showToast = (text, type = 'success', duration = 3000) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToast({ text, type })
     toastTimerRef.current = setTimeout(() => setToast(null), duration)
   }
 
+  // Restore scroll position from previous visit (layout effect to avoid flash)
+  useLayoutEffect(() => {
+    const saved = sessionStorage.getItem('budgeup_scroll_settings')
+    if (saved && settingsScrollRef.current) {
+      settingsScrollRef.current.scrollTop = parseInt(saved, 10)
+    }
+  }, [])
+
+  // Tap Settings tab again → scroll to top
+  useEffect(() => {
+    const handler = () => {
+      if (settingsScrollRef.current) {
+        settingsScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    }
+    window.addEventListener('nav-tap-again', handler)
+    return () => window.removeEventListener('nav-tap-again', handler)
+  }, [])
+
+  // Scroll focused input into view when keyboard opens
+  useEffect(() => {
+    const sc = settingsScrollRef.current
+    if (!sc) return
+    const onFocusIn = (e) => {
+      const el = e.target
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return
+      // Skip inputs that handle their own scroll-into-view (e.g. term name inputs)
+      if (el.dataset.scrollHandled) return
+      // Pin scroll to prevent keyboard-induced jump
+      const pos = sc.scrollTop
+      sc.style.overflowY = 'hidden'
+      sc.scrollTop = pos
+      // After keyboard settles, unlock and scroll input into view
+      setTimeout(() => {
+        sc.style.overflowY = 'auto'
+        const scRect = sc.getBoundingClientRect()
+        const elRect = el.getBoundingClientRect()
+        const targetTop = elRect.top - scRect.top + sc.scrollTop - 100
+        sc.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
+      }, 400)
+    }
+    sc.addEventListener('focusin', onFocusIn)
+    return () => sc.removeEventListener('focusin', onFocusIn)
+  }, [])
+
   // Persist buffered graph start date on unmount
   useEffect(() => {
     return () => {
       if (graphStartDirtyRef.current) {
         setGraphStart(graphStartRef.current)
+      }
+    }
+  }, [])
+
+  // Flush pending term dates save on unmount so Dashboard doesn't fetch stale data
+  useEffect(() => {
+    return () => {
+      if (termSaveTimerRef.current) clearTimeout(termSaveTimerRef.current)
+      if (pendingTermDatesRef.current && userIdRef.current) {
+        saveTermDates(userIdRef.current, pendingTermDatesRef.current).catch(() => {})
       }
     }
   }, [])
@@ -257,6 +317,19 @@ export default function SettingsScreen() {
         } finally {
           setTermDatesLoading(false)
         }
+        // Load newsletter consent
+        try {
+          const { data: nlConsent } = await supabase
+            .from('user_consents')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('scope', 'newsletter')
+            .is('revoked_at', null)
+            .maybeSingle()
+          const isOn = !!nlConsent
+          setNewsletterOn(isOn)
+          localStorage.setItem('budgeup_newsletter', String(isOn))
+        } catch { /* ignore */ }
       } else {
         setTermDatesLoading(false)
       }
@@ -360,12 +433,26 @@ export default function SettingsScreen() {
       // Clear balance-related localStorage
       localStorage.removeItem('budgeup_balance_last_date')
 
+      // Reset graph start date to today
+      const today = new Date()
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      setGraphStart(todayStr)
+      setGraphStartState(todayStr)
+      graphStartRef.current = todayStr
+      localStorage.setItem('budgeup_graph_start_mode', 'joined')
+      setGraphStartMode('joined')
+
       // Reset on Supabase if user is logged in
       if (userIdRef.current) {
         await saveUserFinances(userIdRef.current, {
           ...resetData,
           onboardingCompleted: true,
         })
+        // Save new graph start date
+        await supabase
+          .from('user_profiles')
+          .update({ graph_start: todayStr, updated_at: new Date().toISOString() })
+          .eq('user_id', userIdRef.current)
         await saveCashflowForecast(userIdRef.current, [])
         // Delete all balance history records
         await supabase
@@ -380,6 +467,54 @@ export default function SettingsScreen() {
     } finally {
       setResetting(false)
       setShowResetModal(false)
+    }
+  }
+
+  const handleNewsletterToggle = async () => {
+    if (newsletterLoading || !userIdRef.current) return
+    const newVal = !newsletterOn
+    setNewsletterOn(newVal)
+    localStorage.setItem('budgeup_newsletter', String(newVal))
+    setNewsletterLoading(true)
+    try {
+      // Check if a newsletter consent row already exists for this user
+      const { data: existing } = await supabase.from('user_consents')
+        .select('id')
+        .eq('user_id', userIdRef.current)
+        .eq('scope', 'newsletter')
+        .limit(1)
+        .maybeSingle()
+
+      if (newVal) {
+        if (existing) {
+          // Unrevoke: clear revoked_at and update granted_at
+          await supabase.from('user_consents')
+            .update({ revoked_at: null, granted_at: new Date().toISOString() })
+            .eq('id', existing.id)
+        } else {
+          await supabase.from('user_consents').insert({
+            user_id: userIdRef.current,
+            provider: 'budgeup',
+            scope: 'newsletter',
+            policy_version: 'v1',
+            granted_at: new Date().toISOString(),
+          })
+        }
+      } else {
+        if (existing) {
+          await supabase.from('user_consents')
+            .update({ revoked_at: new Date().toISOString() })
+            .eq('id', existing.id)
+        }
+      }
+      showToast(newVal ? 'Subscribed to newsletter' : 'Unsubscribed from newsletter')
+    } catch (err) {
+      // Revert on failure
+      setNewsletterOn(!newVal)
+      localStorage.setItem('budgeup_newsletter', String(!newVal))
+      showToast('Failed to update newsletter preference', 'error')
+    } finally {
+      setNewsletterLoading(false)
     }
   }
 
@@ -516,7 +651,9 @@ export default function SettingsScreen() {
       />
 
       {/* CONTENT WRAPPER */}
-      <div style={{
+      <div ref={settingsScrollRef} onScroll={() => {
+        if (settingsScrollRef.current) sessionStorage.setItem('budgeup_scroll_settings', String(settingsScrollRef.current.scrollTop))
+      }} style={{
         flex: 1,
         overflowY: 'auto',
         overflowX: 'hidden',
@@ -597,6 +734,17 @@ export default function SettingsScreen() {
                         console.error('Failed to save university:', err)
                       }
                     }, 1500)
+                    if (hasCustomTermDates(val)) {
+                      const custom = getTermDatesForUniversity(val)
+                      // Only prompt if current term dates differ from the university's defaults
+                      const currentTerms = termDates?.terms || []
+                      const customTerms = custom.terms || []
+                      const alreadySet = currentTerms.length === customTerms.length &&
+                        customTerms.every((ct, i) => currentTerms[i]?.start === ct.start && currentTerms[i]?.end === ct.end)
+                      if (!alreadySet) {
+                        setTermDatesPrompt({ university: val, termDates: custom })
+                      }
+                    }
                   }}
                   style={{ width: 180 }}
                 >
@@ -617,8 +765,12 @@ export default function SettingsScreen() {
               <SettingsSelect
                 value={currency}
                 onChange={(e) => {
-                  setCurrencyState(e.target.value)
-                  setCurrency(e.target.value)
+                  const code = e.target.value
+                  setCurrencyState(code)
+                  setCurrency(code)
+                  if (userIdRef.current) {
+                    supabase.from('user_profiles').update({ currency: code, updated_at: new Date().toISOString() }).eq('user_id', userIdRef.current).then()
+                  }
                 }}
                 style={{ width: 180 }}
               >
@@ -661,18 +813,18 @@ export default function SettingsScreen() {
                     try {
                       const raw = localStorage.getItem('budgeup_onboarding_state')
                       const parsed = raw ? JSON.parse(raw) : {}
-                      if (parsed.formData) {
-                        parsed.formData.overdraft = val
-                        localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
-                      }
+                      if (!parsed.formData) parsed.formData = {}
+                      parsed.formData.overdraft = val
+                      localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
                     } catch { }
                     if (overdraftSaveTimerRef.current) clearTimeout(overdraftSaveTimerRef.current)
                     overdraftSaveTimerRef.current = setTimeout(async () => {
                       if (!userIdRef.current) return
                       try {
-                        const raw = localStorage.getItem('budgeup_onboarding_state')
-                        const parsed = raw ? JSON.parse(raw) : {}
-                        await saveUserFinances(userIdRef.current, { ...parsed.formData, onboardingCompleted: true })
+                        await supabase
+                          .from('user_profiles')
+                          .update({ overdraft: Number(val.replace(/,/g, '')) || 0, updated_at: new Date().toISOString() })
+                          .eq('user_id', userIdRef.current)
                       } catch (err) {
                         console.error('Failed to save overdraft:', err)
                       }
@@ -730,14 +882,19 @@ export default function SettingsScreen() {
                     const mode = e.target.value
                     setGraphStartMode(mode)
                     localStorage.setItem('budgeup_graph_start_mode', mode)
-                    if (mode === 'joined' && userCreatedAt) {
-                      setGraphStartState(userCreatedAt)
-                      graphStartRef.current = userCreatedAt
-                      graphStartDirtyRef.current = true
+                    let newDate = null
+                    if (mode === 'joined') {
+                      newDate = graphStartRef.current || getGraphStart()
                     } else if (mode === 'first_term' && firstTermStart) {
-                      setGraphStartState(firstTermStart)
-                      graphStartRef.current = firstTermStart
-                      graphStartDirtyRef.current = true
+                      newDate = firstTermStart
+                    }
+                    if (newDate) {
+                      setGraphStartState(newDate)
+                      graphStartRef.current = newDate
+                      setGraphStart(newDate)
+                      if (userIdRef.current) {
+                        supabase.from('user_profiles').update({ graph_start: newDate, updated_at: new Date().toISOString() }).eq('user_id', userIdRef.current).then()
+                      }
                     }
                   }}
                   style={{ width: 180 }}
@@ -764,17 +921,17 @@ export default function SettingsScreen() {
                       onChange={(e) => {
                         if (e.target.value) {
                           const today = new Date().toISOString().split('T')[0]
-                          if (e.target.value > today) {
-                            const todayStr = today
-                            setGraphStartState(todayStr)
-                            graphStartRef.current = todayStr
-                            graphStartDirtyRef.current = true
+                          let val = e.target.value
+                          if (val > today) {
+                            val = today
                             showToast('Start date can\u2019t be in the future', 'error')
-                            return
                           }
-                          setGraphStartState(e.target.value)
-                          graphStartRef.current = e.target.value
-                          graphStartDirtyRef.current = true
+                          setGraphStartState(val)
+                          graphStartRef.current = val
+                          setGraphStart(val)
+                          if (userIdRef.current) {
+                            supabase.from('user_profiles').update({ graph_start: val, updated_at: new Date().toISOString() }).eq('user_id', userIdRef.current).then()
+                          }
                         }
                       }}
                       style={{
@@ -786,15 +943,19 @@ export default function SettingsScreen() {
                   </div>
                 </div>
               )}
-              {graphStartMode === 'joined' && userCreatedAt && (
+              {graphStartMode === 'joined' && (
                 <span style={{ fontSize: 13, color: '#888', fontFamily: 'Nunito, sans-serif', display: 'block', marginTop: 8 }}>
-                  {new Date(userCreatedAt + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  {new Date(graphStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </span>
               )}
-              {graphStartMode === 'first_term' && firstTermStart && (
-                <span style={{ fontSize: 13, color: '#888', fontFamily: 'Nunito, sans-serif', display: 'block', marginTop: 8 }}>
-                  {new Date(firstTermStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </span>
+              {graphStartMode === 'first_term' && (
+                firstTermStart ? (
+                  <span style={{ fontSize: 13, color: '#888', fontFamily: 'Nunito, sans-serif', display: 'block', marginTop: 8 }}>
+                    {new Date(firstTermStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </span>
+                ) : (
+                  <LoadingSkeleton width={140} height={16} borderRadius={8} style={{ marginTop: 8 }} />
+                )
               )}
             </div>
 
@@ -803,9 +964,9 @@ export default function SettingsScreen() {
               <span style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', display: 'block', marginBottom: 10 }}>Term dates</span>
               {termDatesLoading ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <LoadingSkeleton height={52} style={{ opacity: 0, animation: 'fadeIn 0.3s ease 0s forwards' }} />
-                  <LoadingSkeleton height={52} style={{ opacity: 0, animation: 'fadeIn 0.3s ease 0.1s forwards' }} />
-                  <LoadingSkeleton height={52} style={{ opacity: 0, animation: 'fadeIn 0.3s ease 0.2s forwards' }} />
+                  <LoadingSkeleton height={58} style={{ opacity: 0, animation: 'fadeIn 0.3s ease 0s forwards' }} />
+                  <LoadingSkeleton height={58} style={{ opacity: 0, animation: 'fadeIn 0.3s ease 0.1s forwards' }} />
+                  <LoadingSkeleton height={58} style={{ opacity: 0, animation: 'fadeIn 0.3s ease 0.2s forwards' }} />
                 </div>
               ) : termDates ? (
                 <div style={{ animation: 'fadeIn 0.35s ease' }}>
@@ -822,8 +983,10 @@ export default function SettingsScreen() {
                           localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
                         }
                       } catch { }
+                      pendingTermDatesRef.current = updated
                       if (termSaveTimerRef.current) clearTimeout(termSaveTimerRef.current)
                       termSaveTimerRef.current = setTimeout(async () => {
+                        pendingTermDatesRef.current = null
                         if (!userIdRef.current) return
                         try {
                           await saveTermDates(userIdRef.current, updated)
@@ -884,6 +1047,7 @@ export default function SettingsScreen() {
               padding: '16px 20px',
               background: 'transparent',
               border: 'none',
+              borderBottom: '1px solid #f0f0f0',
               textAlign: 'left',
               cursor: 'pointer'
             }}
@@ -891,6 +1055,33 @@ export default function SettingsScreen() {
             <Text>Cookie Preferences</Text>
             <span style={{ float: 'right', color: '#8c8c8c' }}>→</span>
           </button>
+
+          {/* Newsletter toggle */}
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '14px 20px',
+          }}>
+            <Text style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif' }}>Weekly newsletter</Text>
+            <button
+              onClick={handleNewsletterToggle}
+              style={{
+                width: 48, height: 26, borderRadius: 13,
+                background: newsletterOn ? '#147b75' : '#e0e0e0',
+                border: 'none', cursor: 'pointer', padding: 0,
+                position: 'relative', flexShrink: 0,
+                opacity: newsletterLoading ? 0.5 : 1,
+                transition: 'background 0.2s ease, opacity 0.2s ease',
+              }}
+            >
+              <div style={{
+                width: 22, height: 22, borderRadius: '50%',
+                background: '#fff', position: 'absolute', top: 2,
+                left: newsletterOn ? 24 : 2,
+                transition: 'left 0.2s ease',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+              }} />
+            </button>
+          </div>
         </div>
 
 
@@ -952,6 +1143,74 @@ export default function SettingsScreen() {
         </div>
 
       </div>
+
+      {/* Term dates auto-set prompt */}
+      {termDatesPrompt && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.35)',
+          animation: 'fadeIn 0.2s ease',
+        }}
+          onClick={() => setTermDatesPrompt(null)}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: 16, padding: '24px 22px 20px',
+              width: 'calc(100% - 48px)', maxWidth: 340,
+              boxShadow: '0 8px 30px rgba(0,0,0,0.18)',
+              animation: 'fadeIn 0.2s ease',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 16, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', marginBottom: 8 }}>
+              Update term dates?
+            </div>
+            <div style={{ fontSize: 13, fontFamily: 'Nunito, sans-serif', color: '#666', lineHeight: 1.5, marginBottom: 20 }}>
+              We have term dates for {termDatesPrompt.university}. Would you like to auto-set them? This will replace your current term dates.
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setTermDatesPrompt(null)}
+                style={{
+                  flex: 1, height: 40, border: '1px solid #e0e0e0', borderRadius: 10,
+                  background: '#fff', fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                  color: '#666', cursor: 'pointer',
+                }}
+              >
+                No thanks
+              </button>
+              <button
+                onClick={() => {
+                  const td = termDatesPrompt.termDates
+                  setTermDates(td)
+                  try {
+                    const raw = localStorage.getItem('budgeup_onboarding_state')
+                    const parsed = raw ? JSON.parse(raw) : {}
+                    if (parsed.formData) {
+                      parsed.formData.termDates = td
+                      localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
+                    }
+                  } catch { }
+                  if (userIdRef.current) {
+                    saveTermDates(userIdRef.current, td).catch(err =>
+                      console.error('Failed to save term dates:', err)
+                    )
+                  }
+                  setTermDatesPrompt(null)
+                }}
+                style={{
+                  flex: 1, height: 40, border: 'none', borderRadius: 10,
+                  background: '#147b75', fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                  color: '#fff', cursor: 'pointer',
+                }}
+              >
+                Yes, update
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

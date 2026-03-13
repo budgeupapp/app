@@ -17,7 +17,7 @@
     "antd": "^6.2.3",
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.19",
-    "posthog-js": "^1.350.0",
+    "posthog-js": "^1.360.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-feather": "^2.0.10",

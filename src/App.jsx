@@ -27,6 +27,7 @@ import LoadingScreen from './screens/LoadingScreen'
 import Dashboard from './screens/Dashboard'
 import MoneyAdviceScreen from './screens/MoneyAdviceScreen'
 import SettingsScreen from './screens/SettingsScreen'
+import FeedbackScreen from './screens/FeedbackScreen'
 import NotFound from './screens/NotFound'
 import BottomNav from './components/BottomNav'
 import MoneyAdviceSvg from './assets/money-advice.svg'
@@ -255,6 +256,14 @@ export default function App() {
                     <div className="app-container">
                         <div style={{ height: '100vh', position: 'relative' }}>
                             <MoneyAdviceScreen />
+                        </div>
+                        <BottomNav />
+                    </div>
+                } />
+                <Route path="/feedback" element={
+                    <div className="app-container">
+                        <div style={{ height: '100vh', position: 'relative' }}>
+                            <FeedbackScreen />
                         </div>
                         <BottomNav />
                     </div>

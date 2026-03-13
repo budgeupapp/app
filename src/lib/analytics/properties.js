@@ -67,38 +67,6 @@ export function getOnboardingStepProperties(step, totalSteps) {
 }
 
 /**
- * Get finance field update properties
- */
-export function getFinanceFieldProperties(fieldName, oldValue, newValue) {
-  return {
-    field_name: fieldName,
-    field_type: getFieldType(fieldName),
-    has_old_value: oldValue !== null && oldValue !== undefined && oldValue !== '',
-    has_new_value: newValue !== null && newValue !== undefined && newValue !== '',
-    value_changed: oldValue !== newValue
-  }
-}
-
-/**
- * Determine field type for categorization
- */
-function getFieldType(fieldName) {
-  if (['balance', 'savings', 'loanAmount', 'bursaryAmount'].includes(fieldName)) {
-    return 'monetary'
-  }
-  if (['instalmentDates', 'loanMonths', 'bursaryDates'].includes(fieldName)) {
-    return 'date_array'
-  }
-  if (['oneOffIncome', 'oneOffExpenses', 'studentLoan', 'bursary'].includes(fieldName)) {
-    return 'boolean'
-  }
-  if (['currency', 'university', 'weeklySpend'].includes(fieldName)) {
-    return 'selection'
-  }
-  return 'other'
-}
-
-/**
  * Get student loan properties
  */
 export function getStudentLoanProperties(data) {
@@ -126,50 +94,6 @@ export function getBursaryProperties(data) {
     bursary_amount: data.bursaryAmount ? Number(data.bursaryAmount) : 0,
     instalment_count: data.bursaryDates?.length || 0
   }
-}
-
-/**
- * Get one-off transaction properties
- */
-export function getOneOffTransactionProperties(items, type) {
-  if (!items || !Array.isArray(items)) return {}
-
-  const validItems = items.filter(item => item.amount && item.name)
-
-  return {
-    transaction_type: type, // 'income' or 'expense'
-    count: validItems.length,
-    total_amount: validItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
-    has_dates: validItems.filter(item => item.date).length,
-    missing_dates: validItems.filter(item => !item.date).length
-  }
-}
-
-/**
- * Get recurring transaction properties
- */
-export function getRecurringTransactionProperties(items, type) {
-  if (!items || !Array.isArray(items)) return {}
-
-  const validItems = items.filter(item => item.amount && item.name)
-
-  return {
-    transaction_type: type, // 'income' or 'expense'
-    count: validItems.length,
-    total_monthly_amount: validItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0),
-    frequency_breakdown: getFrequencyBreakdown(validItems)
-  }
-}
-
-/**
- * Get frequency breakdown for recurring items
- */
-function getFrequencyBreakdown(items) {
-  return items.reduce((acc, item) => {
-    const freq = item.frequency || 'unknown'
-    acc[freq] = (acc[freq] || 0) + 1
-    return acc
-  }, {})
 }
 
 /**
@@ -209,40 +133,3 @@ export function getEmailDomain(email) {
   return parts.length === 2 ? parts[1] : 'unknown'
 }
 
-/**
- * Get time since date (in days)
- */
-export function getDaysSince(dateString) {
-  if (!dateString) return null
-
-  const date = new Date(dateString)
-  const now = new Date()
-  const diffTime = Math.abs(now - date)
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-
-  return diffDays
-}
-
-/**
- * Sanitize properties to remove sensitive data
- */
-export function sanitizeProperties(properties) {
-  const sanitized = { ...properties }
-
-  // Remove sensitive fields
-  const sensitiveFields = [
-    'email',
-    'password',
-    'token',
-    'auth',
-    'session',
-    'api_key',
-    'secret'
-  ]
-
-  sensitiveFields.forEach(field => {
-    delete sanitized[field]
-  })
-
-  return sanitized
-}

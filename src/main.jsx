@@ -6,20 +6,37 @@ import './index.css'
 import 'antd/dist/reset.css'
 
 import posthog from 'posthog-js'
+import 'posthog-js/dist/surveys'
 import { supabase } from './lib/supabaseClient'
+
+// Prevent pinch-to-zoom on iOS (Safari ignores viewport meta)
+document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false })
+document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false })
+document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false })
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length > 1) e.preventDefault()
+}, { passive: false })
+
+// Clear saved scroll positions and tab state on fresh page load
+sessionStorage.removeItem('budgeup_scroll_dashboard_fixed')
+sessionStorage.removeItem('budgeup_scroll_dashboard_goals')
+sessionStorage.removeItem('budgeup_scroll_dashboard_variable')
+sessionStorage.removeItem('budgeup_scroll_settings')
+sessionStorage.removeItem('budgeup_active_tab')
 
 // Fetch the existing Supabase session (reads from localStorage — effectively sync)
 // so PostHog can be bootstrapped with the user identity before init. This prevents
 // the anonymous→identified session rotation that causes two session_started events.
 const { data: { session } } = await supabase.auth.getSession()
 
+window.posthog = posthog
+
 posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_KEY, {
   api_host: import.meta.env.VITE_PUBLIC_POSTHOG_HOST,
 
   capture_pageview: true,
   capture_pageleave: true,
-
-
+  opt_in_site_apps: true,
 })
 
 // Prevent page-level scrolling on iOS — only allow scroll inside scrollable containers

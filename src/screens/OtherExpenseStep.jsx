@@ -103,6 +103,7 @@ export default function OtherExpenseStep({
     otherExpenseVariesByTerm, updateOtherExpenseVariesByTerm,
     otherExpenseNonTermAmount, updateOtherExpenseNonTermAmount,
     compact = false,
+    onboarding = false,
 }) {
     const amountPeriod = otherExpenseAmountPeriod || otherExpenseFrequency || 'monthly'
     const freq = amountPeriod === 'yearly' ? (otherExpenseFrequency || 'monthly') : amountPeriod
@@ -142,6 +143,7 @@ export default function OtherExpenseStep({
     }
 
     const questionRef = useRef(null)
+    const amountLabelRef = useRef(null)
     const rootRef = useRef(null)
 
     // Find the nearest scrollable ancestor
@@ -167,48 +169,116 @@ export default function OtherExpenseStep({
 
     const touchStartRef = useRef(null)
     const handleInputTouchStart = (e) => { touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY } }
-    const handleInputTouchEnd = (e) => {
-        if (!touchStartRef.current) return
+    const isTap = (e) => {
+        if (!touchStartRef.current) return false
         const dx = e.changedTouches[0].clientX - touchStartRef.current.x
         const dy = e.changedTouches[0].clientY - touchStartRef.current.y
         touchStartRef.current = null
-        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return
+        return Math.abs(dx) <= 10 && Math.abs(dy) <= 10
+    }
+    // Scroll the parent container so a target element is at the top
+    const scrollTargetToTop = (scrollParent, target) => {
+        const containerRect = scrollParent.getBoundingClientRect()
+        const targetRect = target.getBoundingClientRect()
+        const stickyHeader = scrollParent.querySelector('[data-sticky-header]')
+        const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
+        scrollParent.scrollTo({ top: Math.max(0, targetRect.top - containerRect.top + scrollParent.scrollTop - headerH - 8), behavior: 'smooth' })
+    }
+
+    // Pin all scroll positions (page + container) to prevent iOS keyboard scroll
+    const pinAllScroll = (scrollParent) => {
+        const pageY = window.scrollY
+        const parentY = scrollParent ? scrollParent.scrollTop : 0
+        const restore = () => {
+            window.scrollTo(0, pageY)
+            if (scrollParent) scrollParent.scrollTop = parentY
+        }
+        restore()
+        requestAnimationFrame(restore)
+        setTimeout(restore, 50)
+        setTimeout(restore, 150)
+        return parentY
+    }
+
+    const handleNameTouchEnd = (e) => {
+        if (!isTap(e)) return
+        if (!compact) return
+        const wrapper = rootRef.current
+        const scrollParent = wrapper ? findScrollParent(wrapper.parentElement) : null
+        e.target.focus({ preventScroll: true })
+        pinAllScroll(scrollParent)
+    }
+
+    const handleInputTouchEnd = (e) => {
+        if (!isTap(e)) return
         if (!compact) return
         const input = e.target
-        input.focus({ preventScroll: true })
         const wrapper = rootRef.current
         if (!wrapper) return
         const scrollParent = findScrollParent(wrapper.parentElement)
-        if (scrollParent) {
-            const containerRect = scrollParent.getBoundingClientRect()
-            const inputRect = input.getBoundingClientRect()
-            const stickyHeader = scrollParent.querySelector('[data-sticky-header]')
-            const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
-            scrollParent.scrollTo({ top: Math.max(0, inputRect.top - containerRect.top + scrollParent.scrollTop - headerH - 8), behavior: 'smooth' })
+        input.focus({ preventScroll: true })
+        pinAllScroll(scrollParent)
+        if (onboarding) {
+            // Onboarding: scroll amount label to top of container
+            if (scrollParent && amountLabelRef.current) {
+                setTimeout(() => {
+                    scrollTargetToTop(scrollParent, amountLabelRef.current)
+                }, 350)
+            }
+        } else {
+            // Dashboard: scroll the input itself to top
+            if (scrollParent) {
+                setTimeout(() => {
+                    scrollTargetToTop(scrollParent, input)
+                }, 350)
+            }
+        }
+    }
+
+    const handleNameFocus = (e) => {
+        if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
+        setInputFocused(true)
+        if (compact) {
+            const wrapper = rootRef.current
+            const scrollParent = wrapper ? findScrollParent(wrapper.parentElement) : null
+            pinAllScroll(scrollParent)
+            return
+        }
+        // Pin scroll position so iOS doesn't auto-scroll the name input
+        const container = scrollRef.current
+        if (container) {
+            const pos = container.scrollTop
+            requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = pos })
+            setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = pos }, 100)
+            setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = pos }, 300)
         }
     }
 
     const scrollInputToTop = (e) => {
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
         setInputFocused(true)
-        const input = e.target
-        if (compact) return
+        if (compact) {
+            const wrapper = rootRef.current
+            const scrollParent = wrapper ? findScrollParent(wrapper.parentElement) : null
+            pinAllScroll(scrollParent)
+            return
+        }
+        // Wait for keyboard + spacer to settle, then scroll amount label to top
         setTimeout(() => {
             const container = scrollRef.current
-            if (!container) return
+            if (!container || !amountLabelRef.current) return
             const containerRect = container.getBoundingClientRect()
-            if (questionRef.current) {
-                const qr = questionRef.current.getBoundingClientRect()
-                const qTop = qr.top - containerRect.top + container.scrollTop
-                container.scrollTo({ top: Math.max(0, qTop), behavior: 'smooth' })
-            } else {
-                const ir = input.getBoundingClientRect()
-                container.scrollTo({ top: Math.max(0, ir.top - containerRect.top + container.scrollTop - 30), behavior: 'smooth' })
-            }
-        }, 301)
+            const lr = amountLabelRef.current.getBoundingClientRect()
+            const lTop = lr.top - containerRect.top + container.scrollTop
+            container.scrollTo({ top: Math.max(0, lTop - 4), behavior: 'smooth' })
+        }, 400)
     }
 
-    const handleInputBlur = () => {
+    const handleInputBlur = (e) => {
+        // If focus is moving to another input within this component, skip blur scroll
+        if (e.relatedTarget && rootRef.current?.contains(e.relatedTarget)) return
+        // Use 200ms delay so the next input's focus handler can cancel this timer
+        // (iOS Safari doesn't set relatedTarget on touch-based focus changes)
         blurTimerRef.current = setTimeout(() => {
             if (dateActiveRef.current || freqTapRef.current) { setInputFocused(false); freqTapRef.current = false; return }
             if (compact) {
@@ -227,7 +297,7 @@ export default function OtherExpenseStep({
                 scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
                 setTimeout(() => { if (!dateActiveRef.current) setInputFocused(false) }, 500)
             }
-        }, 50)
+        }, 200)
     }
 
     const handleAmountChange = (e) => { const val = cleanNum(e.target.value); setRawAmount(val); updateOtherExpenseAmount(val) }
@@ -260,15 +330,15 @@ export default function OtherExpenseStep({
 
                 <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Give it a name</p>
                 <input type="text" placeholder="e.g. Gym, Subscriptions, etc." value={otherExpenseLabel || ''} onChange={(e) => updateOtherExpenseLabel(e.target.value)}
-                    onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd}
-                    onFocus={scrollInputToTop} onBlur={handleInputBlur}
+                    onTouchStart={handleInputTouchStart} onTouchEnd={handleNameTouchEnd}
+                    onFocus={handleNameFocus} onBlur={handleInputBlur}
                     style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 10, padding: '10px 14px', fontSize: 15, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', marginBottom: 20 }} />
 
                 {(() => {
                     const showDual = amountPeriod !== 'yearly' && otherExpenseVariesByTerm && (freq === 'weekly' || freq === 'monthly')
                     return (
                         <>
-                            <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much does it cost?</p>
+                            <p ref={amountLabelRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much does it cost?</p>
                             <div style={{ display: 'flex', marginBottom: showDual ? 16 : 20, transition: 'margin-bottom 0.3s ease' }}>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{

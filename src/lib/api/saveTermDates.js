@@ -37,13 +37,25 @@ export async function saveTermDates(userId, termDates) {
                 term_date_id: inserted.id,
                 start_date: b.start,
                 end_date: b.end,
+                ...(b.name ? { name: b.name } : {}),
             }))
 
             const { error: breakError } = await supabase
                 .from('term_breaks')
                 .insert(breakRows)
 
-            if (breakError) throw breakError
+            // Retry without name if column doesn't exist yet
+            if (breakError) {
+                const fallbackRows = term.breaks.map(b => ({
+                    term_date_id: inserted.id,
+                    start_date: b.start,
+                    end_date: b.end,
+                }))
+                const { error: fallbackError } = await supabase
+                    .from('term_breaks')
+                    .insert(fallbackRows)
+                if (fallbackError) throw fallbackError
+            }
         }
     }
 }

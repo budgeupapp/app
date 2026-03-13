@@ -79,10 +79,32 @@ function Slider({ value, onChange, max, color }) {
     }, [max, onChange])
 
     const handlePointerDown = (e) => {
-        e.preventDefault()
-        setDragging(true)
-        updateFromX(e.clientX)
-        const onMove = (ev) => updateFromX(ev.clientX)
+        const startX = e.clientX
+        const startY = e.clientY
+        let decided = false
+        let isHorizontal = false
+
+        const onMove = (ev) => {
+            if (!decided) {
+                const dx = Math.abs(ev.clientX - startX)
+                const dy = Math.abs(ev.clientY - startY)
+                if (dx < 5 && dy < 5) return
+                decided = true
+                isHorizontal = dx > dy
+                if (isHorizontal) {
+                    setDragging(true)
+                    updateFromX(ev.clientX)
+                } else {
+                    window.removeEventListener('pointermove', onMove)
+                    window.removeEventListener('pointerup', onUp)
+                    return
+                }
+            }
+            if (isHorizontal) {
+                ev.preventDefault()
+                updateFromX(ev.clientX)
+            }
+        }
         const onUp = () => {
             setDragging(false)
             window.removeEventListener('pointermove', onMove)
@@ -94,7 +116,7 @@ function Slider({ value, onChange, max, color }) {
 
     return (
         <div ref={trackRef} onPointerDown={handlePointerDown}
-            style={{ position: 'relative', height: 20, cursor: 'pointer', touchAction: 'none', display: 'flex', alignItems: 'center' }}>
+            style={{ position: 'relative', height: 20, cursor: 'pointer', touchAction: 'pan-y', display: 'flex', alignItems: 'center' }}>
             <div style={{ position: 'absolute', left: 0, right: 0, height: 4, borderRadius: 2, background: '#f0f0f0' }} />
             <div style={{ position: 'absolute', left: 0, width: `${pct}%`, height: 4, borderRadius: 2, background: color, transition: dragging ? 'none' : 'width 0.1s ease' }} />
             <div style={{ position: 'absolute', left: `clamp(0px, calc(${pct}% - 7px), calc(100% - 14px))`, width: 14, height: 14, borderRadius: 7, background: '#fff', border: `2.5px solid ${color}`, boxShadow: '0 1px 3px rgba(0,0,0,0.15)', transition: dragging ? 'none' : 'left 0.1s ease' }} />

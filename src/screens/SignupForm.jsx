@@ -11,6 +11,7 @@ export default function SignupForm() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [consentChecked, setConsentChecked] = useState(false)
+  const [newsletterChecked, setNewsletterChecked] = useState(true)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
 
@@ -38,6 +39,7 @@ export default function SignupForm() {
 
     localStorage.setItem('signup_email', email)
     localStorage.setItem('signup_timestamp', Date.now().toString())
+    localStorage.setItem('budgeup_newsletter', newsletterChecked ? 'true' : 'false')
 
     const referralCode = localStorage.getItem('referral_code')
 
@@ -133,6 +135,32 @@ export default function SignupForm() {
           <a href={POLICY_URLS.privacy} target="_blank" rel="noopener noreferrer" style={{ color: '#147b75', textDecoration: 'none', fontWeight: 700 }}>
             Privacy Policy
           </a>
+        </span>
+      </label>
+
+      {/* Newsletter opt-in */}
+      <label style={{
+        display: 'flex', alignItems: 'flex-start', gap: 10,
+        cursor: 'pointer', padding: '2px 0',
+      }}>
+        <div
+          onClick={(e) => { e.preventDefault(); setNewsletterChecked(!newsletterChecked) }}
+          style={{
+            width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1,
+            border: newsletterChecked ? '2px solid #147b75' : '1.5px solid #d0d0d0',
+            background: newsletterChecked ? '#147b75' : '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          {newsletterChecked && (
+            <svg width="12" height="9" viewBox="0 0 14 10" fill="none">
+              <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', lineHeight: 1.4 }}>
+          Send me the weekly newsletter
         </span>
       </label>
 

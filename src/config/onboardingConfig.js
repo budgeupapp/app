@@ -296,9 +296,58 @@ export const INITIAL_TERM_DATES = {
     ]
 }
 
+export const BRISTOL_TERM_DATES = {
+    terms: [
+        {
+            id: 'term1',
+            name: 'Term 1',
+            start: '2025-09-15',
+            end: '2025-12-19',
+            breaks: [
+                { id: 'b1_welcome', name: 'Welcome Week', start: '2025-09-15', end: '2025-09-21' },
+                { id: 'b1_reading', name: 'Reading Week', start: '2025-10-27', end: '2025-11-02' },
+                { id: 'b1_examprep', name: 'Exam Prep Week', start: '2025-12-08', end: '2025-12-14' },
+                { id: 'b1_exams', name: 'Exams', start: '2025-12-15', end: '2025-12-19' },
+            ]
+        },
+        {
+            id: 'term2',
+            name: 'Term 2',
+            start: '2026-01-12',
+            end: '2026-03-22',
+            breaks: [
+                { id: 'b2_prep', name: 'Prep Week', start: '2026-01-12', end: '2026-01-18' },
+                { id: 'b2_reading', name: 'Reading Week', start: '2026-02-23', end: '2026-03-01' },
+            ]
+        },
+        {
+            id: 'term3',
+            name: 'Term 3',
+            start: '2026-04-13',
+            end: '2026-05-22',
+            breaks: [
+                { id: 'b3_examprep', name: 'Exam Prep Week', start: '2026-04-27', end: '2026-05-04' },
+                { id: 'b3_exams', name: 'Exams', start: '2026-05-05', end: '2026-05-22' },
+            ]
+        }
+    ]
+}
+
+const UNIVERSITY_TERM_DATES = {
+    'University of Bristol': BRISTOL_TERM_DATES,
+}
+
+export function getTermDatesForUniversity(university) {
+    return UNIVERSITY_TERM_DATES[university] || INITIAL_TERM_DATES
+}
+
+export function hasCustomTermDates(university) {
+    return university in UNIVERSITY_TERM_DATES
+}
+
 export const INITIAL_FORM_DATA = {
     university: 'University of Bristol',
-    termDates: { ...INITIAL_TERM_DATES },
+    termDates: { ...BRISTOL_TERM_DATES },
     balance: '',
     overdraft: '',
     incomeSources: [],

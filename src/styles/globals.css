@@ -61,17 +61,3 @@ input[type="search"]::-webkit-search-cancel-button {
     -webkit-appearance: none;
 }
 
-@keyframes balancePillExpand {
-    from { opacity: 0; transform: scaleX(0.7); transform-origin: left center; }
-    to { opacity: 1; transform: scaleX(1); transform-origin: left center; }
-}
-
-@keyframes shimmer {
-    0%   { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(5px); }
-    to   { opacity: 1; transform: translateY(0); }
-}

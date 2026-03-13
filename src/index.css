@@ -149,6 +149,22 @@ button:focus {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* PostHog survey widget — center above bottom nav */
+[class^="PostHogSurvey"] {
+  position: fixed !important;
+  bottom: auto !important;
+  left: 50% !important;
+  right: auto !important;
+  top: 66% !important;
+  bottom: auto !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 99999 !important;
+  width: calc(100% - 32px) !important;
+  max-width: 400px !important;
+  --ph-survey-border-radius: 16px 16px 16px 16px !important;
+  --ph-survey-box-shadow: 0 8px 32px rgba(0,0,0,0.18) !important;
+}
+
 :root {
   --vh: 1vh;
 }
@@ -166,17 +182,7 @@ button:focus {
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
-@keyframes labelFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes pillIn {
   from { opacity: 0; }
   to { opacity: 1; }
 }
@@ -221,6 +227,20 @@ button:focus {
   100% { transform: translateX(100%); }
 }
 @keyframes tabFadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pickerSlideDown {
+  from { opacity: 0; transform: translateY(-8px); max-height: 0; }
+  to { opacity: 1; transform: translateY(0); max-height: 500px; }
+}
+@keyframes pickerSlideUp {
+  from { opacity: 1; transform: translateY(0); max-height: 500px; }
+  to { opacity: 0; transform: translateY(-8px); max-height: 0; }
+}
+
+@keyframes balanceEditIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }

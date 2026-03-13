@@ -13,7 +13,9 @@ export async function saveSignupConsents(userId) {
     return { alreadyExists: true }
   }
 
-  // Insert terms + privacy consents
+  const newsletter = localStorage.getItem('budgeup_newsletter') !== 'false'
+
+  // Insert terms + privacy consents (+ newsletter if opted in)
   const rows = [
     {
       user_id: userId,
@@ -30,6 +32,16 @@ export async function saveSignupConsents(userId) {
       granted_at: new Date().toISOString()
     }
   ]
+
+  if (newsletter) {
+    rows.push({
+      user_id: userId,
+      provider: 'budgeup',
+      scope: 'newsletter',
+      policy_version: 'v1',
+      granted_at: new Date().toISOString()
+    })
+  }
 
   const { error } = await supabase
     .from('user_consents')
