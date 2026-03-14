@@ -9,12 +9,12 @@ export const STEPS = [
     {
         id: 'termDates',
         heading: 'Have we got your term dates right?',
-        subtitle: "If we've got anything wrong, tap on the date to edit it."
+        subtitle: "These currently default to the University of Bristol term dates, but you can edit them if the dates are different for your uni"
     },
     {
         id: 'balance',
         heading: "What's your current bank balance?",
-        subtitle: 'Your best estimate is fine.'
+        subtitle: "Add up all your accounts — a rough estimate is fine!"
     },
     {
         id: 'overdraft',
@@ -24,12 +24,12 @@ export const STEPS = [
     {
         id: 'regularIncome',
         heading: 'Where do you regularly receive money from?',
-        subtitle: 'Select any income you receive regularly, even if only during term time or holidays.'
+        subtitle: "Enter any income that you're almost certain you're going to receive."
     },
     {
         id: 'maintenanceLoan',
         heading: 'How much is your maintenance loan?',
-        subtitle: "If you're not 100% sure, your best estimate will do!"
+        subtitle: "Enter the loan you're given for rent and living costs."
     },
     {
         id: 'bursary',
@@ -82,14 +82,9 @@ export const STEPS = [
         subtitle: 'Include any other regular expenses not listed above.'
     },
     {
-        id: 'oneOffItems',
-        heading: 'One-off Items',
-        subtitle: 'Add any one-off income or expenses you\'re expecting.'
-    },
-    {
         id: 'weeklySpend',
         heading: 'How much do you typically spend each week?',
-        subtitle: 'Excluding rent and bills.'
+        subtitle: "Food, transport, going out — just a rough weekly average."
     },
     {
         id: 'summary',
@@ -429,7 +424,7 @@ export const INITIAL_FORM_DATA = {
 
     oneOffItems: [{ name: '', amount: '', date: '', direction: 'out' }],
 
-    weeklySpend: '',
+    weeklySpend: '75',
     weeklySpendNonTerm: '',
     weeklySpendVariesByTerm: false,
 }

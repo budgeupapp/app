@@ -322,7 +322,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
                     </h2>
                     <p style={{
                         fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                        color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5,
+                        color: '#444', margin: '0 0 16px', lineHeight: 1.5,
                     }}>
                         Holidays, birthdays, or anything that only happens once.
                     </p>
@@ -423,7 +423,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
                                         }}>
                                             <span style={{
                                                 fontSize: 16, fontWeight: 600,
-                                                color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
+                                                color: '#444', fontFamily: 'Nunito, sans-serif',
                                             }}>{getCurrencySymbol()}</span>
                                             <input
                                                 type="text"

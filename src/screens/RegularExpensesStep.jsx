@@ -1,8 +1,12 @@
-import expenseBills from '../assets/expense-bills.svg'
-import expenseUnifees from '../assets/expense-unifees.svg'
-import expenseSavings from '../assets/expense-savings.svg'
-import expenseRent from '../assets/expense-rent.svg'
-import iconOtherExpense from '../assets/icon-other-expense.svg'
+import { SOURCE_ICONS } from './Dashboard'
+
+const EXPENSE_SOURCES = [
+    { id: 'rent', label: 'Rent' },
+    { id: 'bills', label: 'Bills & Utilities' },
+    { id: 'uni_fees', label: 'University Fees' },
+    { id: 'savings_investments', label: 'Savings & Investments' },
+    { id: 'other_expense', label: 'Other' },
+]
 
 function CheckIcon() {
     return (
@@ -12,16 +16,7 @@ function CheckIcon() {
     )
 }
 
-
-const EXPENSE_SOURCES = [
-    { id: 'rent', label: 'Rent', color: '#e06470', icon: expenseRent, panelId: 'rent' },
-    { id: 'bills', label: 'Bills & Utilities', color: '#e06470', icon: expenseBills, panelId: 'bills' },
-    { id: 'uni_fees', label: 'University Fees', color: '#EC8C17', icon: expenseUnifees, panelId: 'uniFees' },
-    { id: 'savings_investments', label: 'Savings & Investments', color: '#147b75', icon: expenseSavings, panelId: 'savingsInvestments' },
-    { id: 'other_expense', label: 'Other', color: '#9b8ec4', icon: iconOtherExpense, panelId: 'otherExpense' },
-]
-
-export default function RegularExpensesStep({ expenseSources = [], updateExpenseSources }) {
+export default function RegularExpensesStep({ expenseSources = [], updateExpenseSources, heading = 'Regular Expenses', subtitle = 'Select any expenses you pay regularly.' }) {
     const toggle = (id) => {
         const next = expenseSources.includes(id)
             ? expenseSources.filter(s => s !== id)
@@ -37,13 +32,13 @@ export default function RegularExpensesStep({ expenseSources = [], updateExpense
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 8px', lineHeight: 1.3,
                 }}>
-                    Regular Expenses
+                    {heading}
                 </h2>
                 <p style={{
                     fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                    color: '#5e5e5e', margin: 0, lineHeight: 1.5,
+                    color: '#444', margin: 0, lineHeight: 1.5,
                 }}>
-                    Select any expenses you pay regularly.
+                    {subtitle}
                 </p>
             </div>
 
@@ -52,8 +47,10 @@ export default function RegularExpensesStep({ expenseSources = [], updateExpense
                 padding: '12px 19px 16px',
                 display: 'flex', flexDirection: 'column', gap: 10,
             }}>
-                {EXPENSE_SOURCES.map(({ id, label, color, icon, letter, panelId }) => {
+                {EXPENSE_SOURCES.map(({ id, label }) => {
                     const selected = expenseSources.includes(id)
+                    const sourceIcon = SOURCE_ICONS[id]
+                    const IconComponent = sourceIcon?.Icon
                     return (
                         <div
                             key={id}
@@ -64,27 +61,23 @@ export default function RegularExpensesStep({ expenseSources = [], updateExpense
                                 border: selected ? '1.5px solid #e06470' : '1.5px solid #f3f3f3',
                                 borderRadius: 10,
                                 cursor: 'pointer',
-                                gap: 14,
-                                background: selected ? 'rgba(224,100,112,0.05)' : '#fff',
-                                transition: 'border-color 0.15s ease, background 0.15s ease',
+                                gap: 12,
+                                background: '#fff',
                             }}
                         >
-                            {/* Icon */}
+                            {/* Icon in circle */}
                             <div style={{
-                                width: 36, height: 36,
+                                width: 36, height: 36, borderRadius: '50%',
+                                background: 'rgba(224, 100, 112, 0.08)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0,
                             }}>
-                                {icon ? (
-                                    <img src={icon} alt="" style={{ width: 28, height: 28, objectFit: 'contain', opacity: 0.8 }} />
-                                ) : (
-                                    <span style={{ fontSize: 18, fontWeight: 700, color, fontFamily: 'Nunito, sans-serif' }}>{letter}</span>
-                                )}
+                                {IconComponent && <IconComponent size={20} color="#e06470" />}
                             </div>
 
                             {/* Label */}
                             <span style={{
-                                flex: 1, fontSize: 17, fontWeight: 600,
+                                flex: 1, fontSize: 14, fontWeight: 600,
                                 fontFamily: 'Nunito, sans-serif',
                                 color: '#000',
                             }}>
@@ -94,11 +87,11 @@ export default function RegularExpensesStep({ expenseSources = [], updateExpense
                             {/* Checkbox */}
                             <div style={{
                                 width: 25, height: 25, borderRadius: 5,
-                                border: selected ? '1.5px solid #e06470' : '1.5px solid #f3f3f3',
+                                border: selected ? '1.5px solid #e06470' : '1.5px solid #ddd',
                                 background: selected ? '#e06470' : '#fff',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0,
-                                transition: 'background 0.15s ease',
+                                transition: 'background 0.15s ease, border-color 0.15s ease',
                             }}>
                                 {selected && <CheckIcon />}
                             </div>

@@ -10,7 +10,7 @@ const PERIOD_OPTIONS = [
     { id: 'quarterly', label: 'Quarterly' }, { id: 'termly', label: 'Per Term' }, { id: 'yearly', label: 'Yearly' },
 ]
 const FREQ_PILL_OPTIONS = [
-    { id: 'weekly', label: 'Weekly' }, { id: 'monthly', label: 'Monthly' },
+    { id: 'weekly', label: 'Weekly' }, { id: 'fortnightly', label: 'Fortnightly' }, { id: 'monthly', label: 'Monthly' },
     { id: 'quarterly', label: 'Quarterly' }, { id: 'termly', label: 'Per Term' }, { id: 'yearly', label: 'Yearly' },
 ]
 const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4']
@@ -49,6 +49,8 @@ export default function BillsStep({
     billsTermDates, updateBillsTermDates,
     billsQuarterlyDates, updateBillsQuarterlyDates,
     compact = false,
+    heading = 'Bills',
+    subtitle = 'WiFi, electric, water \u2014 the boring but important stuff.',
 }) {
     const amountPeriod = billsAmountPeriod || billsFrequency || 'monthly'
     const freq = amountPeriod === 'yearly' ? (billsFrequency || 'monthly') : amountPeriod
@@ -145,7 +147,7 @@ export default function BillsStep({
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
                     <p style={{ fontSize: stopProp ? 13 : 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Set a specific date range</p>
-                    <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – e.g. September to June</p>
+                    <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – e.g. September to June</p>
                 </div>
                 <Chevron open={periodExpanded} />
             </div>
@@ -170,8 +172,8 @@ export default function BillsStep({
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             {!compact && (
                 <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                    <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>Bills</h2>
-                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>WiFi, electric, water — the boring but important stuff.</p>
+                    <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>{heading}</h2>
+                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>{subtitle}</p>
                 </div>
             )}
             <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
@@ -179,7 +181,7 @@ export default function BillsStep({
                 <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much are your bills?</p>
                 <div style={{ display: 'flex', marginBottom: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderRadius: '10px 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6, flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                        <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                         <input type="text" inputMode="decimal" placeholder="0.00" value={formatDisplay(rawAmount)} onChange={handleAmountChange}
                             onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd} onFocus={scrollInputToTop} onBlur={handleInputBlur}
                             style={{ flex: 1, border: 'none', background: 'transparent', fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', padding: 0, height: '100%', minWidth: 0 }} />
@@ -199,7 +201,7 @@ export default function BillsStep({
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div>
                                 <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Set a specific date range</p>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – e.g. September to June</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – e.g. September to June</p>
                             </div>
                             <Chevron open={periodExpanded} />
                         </div>
@@ -245,7 +247,7 @@ export default function BillsStep({
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <div>
                                             <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Set a specific date range</p>
-                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – e.g. September to June</p>
+                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – e.g. September to June</p>
                                         </div>
                                         <Chevron open={periodExpanded} />
                                     </div>
@@ -269,7 +271,7 @@ export default function BillsStep({
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <div>
                                             <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
-                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
+                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
                                         </div>
                                         <Chevron open={datesExpanded} />
                                     </div>
@@ -292,7 +294,7 @@ export default function BillsStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {(terms || []).map(term => (
                                         <DateRow key={term.id} label={term.name} value={billsTermDates?.[term.id] || term.start}
@@ -314,7 +316,7 @@ export default function BillsStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {QUARTER_LABELS.map((label, i) => (
                                         <DateRow key={i} label={label} value={billsQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}
@@ -348,7 +350,7 @@ export default function BillsStep({
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <div>
                                         <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
-                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast your budget more accurately</p>
+                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – helps us forecast your budget more accurately</p>
                                     </div>
                                     <Chevron open={datesExpanded} />
                                 </div>
@@ -368,7 +370,7 @@ export default function BillsStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {(terms || []).map(t => <DateRow key={t.id} label={t.name} value={billsTermDates?.[t.id] || t.start} onChange={(v) => updateBillsTermDates({ ...billsTermDates, [t.id]: v })} onDateTap={(a) => { dateActiveRef.current = a }} scrollRef={scrollRef} />)}
                                 </div>
@@ -386,7 +388,7 @@ export default function BillsStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {QUARTER_LABELS.map((l, i) => <DateRow key={i} label={l} value={billsQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]} onChange={(v) => updateBillsQuarterlyDates({ ...billsQuarterlyDates, [i]: v })} onDateTap={(a) => { dateActiveRef.current = a }} scrollRef={scrollRef} />)}
                                 </div>

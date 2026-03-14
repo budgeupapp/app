@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, ChevronDown, Check } from 'react-feather'
+import { Send, Check, MessageSquare } from 'react-feather'
+import { PiThumbsDown, PiMinus, PiThumbsUp, PiHeart, PiHeartBreak } from 'react-icons/pi'
 import posthog from 'posthog-js'
 import { analytics, FEEDBACK_EVENTS } from '../lib/analytics/index.js'
 
 const POSTHOG_SURVEY_ID = import.meta.env.VITE_POSTHOG_FEEDBACK_SURVEY_ID
 
-const RATING_EMOJIS = ['😡', '😕', '😐', '🙂', '😍']
+const RATING_ICONS = [PiHeartBreak, PiThumbsDown, PiMinus, PiThumbsUp, PiHeart]
 const RATING_LABELS = ['Terrible', 'Bad', 'Okay', 'Good', 'Love it']
 
 function RatingQuestion({ question, value, onChange }) {
     const scale = question.scale || 5
-    const useEmoji = question.display === 'emoji'
     const options = Array.from({ length: scale }, (_, i) => i + 1)
 
     return (
@@ -27,6 +27,7 @@ function RatingQuestion({ question, value, onChange }) {
             }}>
                 {options.map(num => {
                     const selected = value === num
+                    const Icon = RATING_ICONS[num - 1]
                     return (
                         <button
                             key={num}
@@ -34,41 +35,30 @@ function RatingQuestion({ question, value, onChange }) {
                             style={{
                                 display: 'flex', flexDirection: 'column',
                                 alignItems: 'center', gap: 4,
-                                background: selected ? 'rgba(20, 123, 117, 0.1)' : 'transparent',
+                                background: selected ? 'rgba(20, 123, 117, 0.1)' : '#f5f5f5',
                                 border: selected ? '2px solid #147B75' : '2px solid transparent',
                                 borderRadius: 12,
-                                padding: useEmoji ? '10px 8px' : '12px 8px',
+                                padding: '10px 8px',
                                 cursor: 'pointer',
                                 transition: 'all 0.2s ease',
                                 flex: 1,
                                 transform: selected ? 'scale(1.08)' : 'scale(1)',
                             }}
                         >
-                            {useEmoji ? (
-                                <>
-                                    <span style={{ fontSize: 28, lineHeight: 1 }}>
-                                        {RATING_EMOJIS[num - 1] || num}
-                                    </span>
-                                    <span style={{
-                                        fontSize: 11, fontWeight: 600,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: selected ? '#147B75' : '#888',
-                                        transition: 'color 0.2s ease',
-                                    }}>{RATING_LABELS[num - 1] || num}</span>
-                                </>
-                            ) : (
-                                <span style={{
-                                    fontSize: 18, fontWeight: 700,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: selected ? '#147B75' : '#666',
-                                    transition: 'color 0.2s ease',
-                                }}>{num}</span>
+                            {Icon && (
+                                <Icon size={24} color={selected ? '#147B75' : '#999'} style={{ transition: 'color 0.2s ease' }} />
                             )}
+                            <span style={{
+                                fontSize: 10, fontWeight: 600,
+                                fontFamily: 'Nunito, sans-serif',
+                                color: selected ? '#147B75' : '#888',
+                                transition: 'color 0.2s ease',
+                            }}>{RATING_LABELS[num - 1] || num}</span>
                         </button>
                     )
                 })}
             </div>
-            {!useEmoji && question.lowerBoundLabel && question.upperBoundLabel && (
+            {question.lowerBoundLabel && question.upperBoundLabel && (
                 <div style={{
                     display: 'flex', justifyContent: 'space-between',
                     marginTop: 4, padding: '0 4px',
@@ -97,25 +87,25 @@ function OpenQuestion({ question, value, onChange }) {
                 value={value || ''}
                 onChange={e => onChange(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur() } }}
-                placeholder={question.placeholder || 'Type your response...'}
+                placeholder="Go on, tell us!"
                 rows={3}
                 enterKeyHint="done"
                 style={{
                     width: '100%',
                     padding: '12px 14px',
                     borderRadius: 10,
-                    border: '1.5px solid #e0e0e0',
-                    background: '#fff',
+                    border: '1.5px solid #e8e8e8',
+                    background: '#f5f5f5',
                     fontSize: 14, fontWeight: 500,
                     fontFamily: 'Nunito, sans-serif',
                     color: '#1a1a1a',
                     resize: 'none',
                     outline: 'none',
                     boxSizing: 'border-box',
-                    transition: 'border-color 0.2s ease',
+                    transition: 'border-color 0.2s ease, background 0.2s ease',
                 }}
-                onFocus={e => e.target.style.borderColor = '#147B75'}
-                onBlur={e => e.target.style.borderColor = '#e0e0e0'}
+                onFocus={e => { e.target.style.borderColor = '#147B75'; e.target.style.background = '#fff' }}
+                onBlur={e => { e.target.style.borderColor = '#e8e8e8'; e.target.style.background = '#f5f5f5' }}
             />
         </div>
     )
@@ -129,7 +119,7 @@ function SingleChoiceQuestion({ question, value, onChange }) {
                 fontFamily: 'Nunito, sans-serif',
                 color: '#1a1a1a', margin: '0 0 8px',
             }}>{question.question}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {(question.choices || []).map(choice => {
                     const selected = value === choice
                     return (
@@ -139,8 +129,9 @@ function SingleChoiceQuestion({ question, value, onChange }) {
                             style={{
                                 padding: '10px 14px',
                                 borderRadius: 10,
-                                border: selected ? '2px solid #147B75' : '1.5px solid #e0e0e0',
-                                background: selected ? 'rgba(20, 123, 117, 0.06)' : '#fff',
+                                border: 'none',
+                                outline: selected ? '2px solid #147B75' : '1px solid #e8e8e8',
+                                background: selected ? '#f0faf9' : '#f5f5f5',
                                 fontSize: 14, fontWeight: 600,
                                 fontFamily: 'Nunito, sans-serif',
                                 color: selected ? '#147B75' : '#444',
@@ -173,7 +164,7 @@ function MultipleChoiceQuestion({ question, value, onChange }) {
                 fontFamily: 'Nunito, sans-serif',
                 color: '#1a1a1a', margin: '0 0 8px',
             }}>{question.question}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {(question.choices || []).map(choice => {
                     const isSelected = selected.includes(choice)
                     return (
@@ -183,8 +174,9 @@ function MultipleChoiceQuestion({ question, value, onChange }) {
                             style={{
                                 padding: '10px 14px',
                                 borderRadius: 10,
-                                border: isSelected ? '2px solid #147B75' : '1.5px solid #e0e0e0',
-                                background: isSelected ? 'rgba(20, 123, 117, 0.06)' : '#fff',
+                                border: 'none',
+                                outline: isSelected ? '2px solid #147B75' : '1px solid #e8e8e8',
+                                background: isSelected ? '#f0faf9' : '#f5f5f5',
                                 fontSize: 14, fontWeight: 600,
                                 fontFamily: 'Nunito, sans-serif',
                                 color: isSelected ? '#147B75' : '#444',
@@ -205,9 +197,8 @@ export default function FeedbackScreen() {
     const [responses, setResponses] = useState({})
     const [submitted, setSubmitted] = useState(false)
     const [submitting, setSubmitting] = useState(false)
-    const [showForm, setShowForm] = useState(false)
     const [formLoaded, setFormLoaded] = useState(false)
-    const formSectionRef = useRef(null)
+    const scrollRef = useRef(null)
 
     useEffect(() => {
         analytics.track(FEEDBACK_EVENTS.VIEWED)
@@ -244,7 +235,6 @@ export default function FeedbackScreen() {
         if (!hasRequiredResponses()) return
         setSubmitting(true)
 
-        // Build PostHog survey response payload
         const payload = { $survey_id: POSTHOG_SURVEY_ID }
         survey.questions.forEach((_, i) => {
             const key = i === 0 ? '$survey_response' : `$survey_response_${i}`
@@ -271,17 +261,6 @@ export default function FeedbackScreen() {
         setSubmitted(false)
     }
 
-    const toggleForm = () => {
-        const next = !showForm
-        setShowForm(next)
-        if (next) {
-            analytics.track(FEEDBACK_EVENTS.FORM_OPENED)
-            setTimeout(() => {
-                formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }, 350)
-        }
-    }
-
     const renderQuestion = (question, index) => {
         const value = responses[index]
         const onChange = (val) => setResponse(index, val)
@@ -304,51 +283,64 @@ export default function FeedbackScreen() {
         <div style={{
             display: 'flex', flexDirection: 'column',
             height: '100%',
-            background: '#fff',
-            overflowY: 'auto',
-            WebkitOverflowScrolling: 'touch',
-            paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))',
+            background: '#efefef',
         }}>
             {/* Header */}
-            <div style={{ padding: '50px 20px 16px', flexShrink: 0 }}>
+            <div style={{
+                paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
+                padding: 'calc(env(safe-area-inset-top, 0px) + 16px) 20px 12px',
+                background: '#efefef',
+            }}>
                 <h1 style={{
-                    fontSize: 22, fontWeight: 800,
+                    fontSize: 24, fontWeight: 800,
                     fontFamily: 'Nunito, sans-serif',
-                    color: '#000', margin: 0,
+                    color: '#1a1a1a', margin: 0,
                 }}>Feedback</h1>
-                <p style={{
-                    fontSize: 13, fontWeight: 500,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: '#888', margin: '4px 0 0',
-                }}>Help us improve Budge Up</p>
             </div>
 
-            {/* PostHog Survey Card */}
-            {survey && (
-                <div style={{
-                    padding: '0 20px 16px', flexShrink: 0,
-                    animation: 'surveyFadeIn 0.35s ease',
-                }}>
+            <div ref={scrollRef} style={{
+                flex: 1,
+                overflowY: 'auto',
+                overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch',
+                padding: '0 16px 0',
+                paddingBottom: 'calc(180px + env(safe-area-inset-bottom, 0px))',
+            }}>
+
+                <p style={{
+                    fontSize: 14, fontWeight: 500,
+                    fontFamily: 'Nunito, sans-serif',
+                    color: '#888', margin: '0 6px 16px',
+                    lineHeight: 1.5,
+                }}>Budge Up is at a very early stage, and students' finances are all so different! We'd really appreciate you sharing your unique perspective.</p>
+
+                {/* Suggestion Box Card */}
+                {survey && (
                     <div style={{
-                        background: '#f8f9fa',
-                        borderRadius: 16,
-                        padding: '20px',
+                        background: '#fff',
+                        borderRadius: 14,
+                        padding: '20px 18px',
+                        marginBottom: 12,
+                        animation: 'surveyFadeIn 0.35s ease',
                     }}>
                         {!submitted ? (
                             <>
-                                <p style={{
-                                    fontSize: 15, fontWeight: 700,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#1a1a1a', margin: '0 0 4px',
-                                }}>Quick feedback</p>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                                    <MessageSquare size={18} color="#147B75" />
+                                    <p style={{
+                                        fontSize: 16, fontWeight: 700,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        color: '#1a1a1a', margin: 0,
+                                    }}>Suggestion Box</p>
+                                </div>
                                 <p style={{
                                     fontSize: 13, fontWeight: 500,
                                     fontFamily: 'Nunito, sans-serif',
-                                    color: '#888', margin: '0 0 16px',
+                                    color: '#888', margin: '0 0 18px',
                                     lineHeight: 1.5,
-                                }}>Send feedback anytime — bugs, feature ideas, or just how you're finding the app!</p>
+                                }}>Any bugs, complaints, suggestions, or praise?</p>
 
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                                     {survey.questions.map((q, i) => renderQuestion(q, i))}
                                 </div>
 
@@ -364,11 +356,11 @@ export default function FeedbackScreen() {
                                         disabled={submitting}
                                         style={{
                                             width: '100%',
-                                            marginTop: 16,
-                                            padding: '12px',
-                                            borderRadius: 10,
+                                            marginTop: 18,
+                                            padding: '13px',
+                                            borderRadius: 12,
                                             border: 'none',
-                                            background: 'linear-gradient(135deg, #147B75 0%, #1E9C94 100%)',
+                                            background: '#147B75',
                                             color: '#fff',
                                             fontSize: 15, fontWeight: 700,
                                             fontFamily: 'Nunito, sans-serif',
@@ -387,19 +379,19 @@ export default function FeedbackScreen() {
                         ) : (
                             <div style={{
                                 display: 'flex', flexDirection: 'column',
-                                alignItems: 'center', padding: '12px 0',
+                                alignItems: 'center', padding: '16px 0',
                                 animation: 'feedbackFadeIn 0.4s ease',
                             }}>
                                 <div style={{
-                                    width: 48, height: 48, borderRadius: 24,
-                                    background: 'linear-gradient(135deg, #147B75 0%, #1E9C94 100%)',
+                                    width: 52, height: 52, borderRadius: 26,
+                                    background: '#147B75',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    marginBottom: 12,
+                                    marginBottom: 14,
                                 }}>
-                                    <Check size={24} color="#fff" strokeWidth={3} />
+                                    <Check size={26} color="#fff" strokeWidth={3} />
                                 </div>
                                 <p style={{
-                                    fontSize: 16, fontWeight: 700,
+                                    fontSize: 17, fontWeight: 700,
                                     fontFamily: 'Nunito, sans-serif',
                                     color: '#1a1a1a', margin: '0 0 4px',
                                 }}>
@@ -408,7 +400,7 @@ export default function FeedbackScreen() {
                                 <p style={{
                                     fontSize: 13, fontWeight: 500,
                                     fontFamily: 'Nunito, sans-serif',
-                                    color: '#888', margin: '0 0 12px',
+                                    color: '#888', margin: '0 0 16px',
                                     textAlign: 'center',
                                 }}>
                                     {survey.appearance?.thankYouMessageDescription || 'Your input helps us make Budge Up better'}
@@ -416,34 +408,28 @@ export default function FeedbackScreen() {
                                 <button
                                     onClick={handleReset}
                                     style={{
-                                        background: 'none', border: 'none',
-                                        color: '#147B75', fontSize: 13,
+                                        background: '#f3f3f3', border: 'none',
+                                        color: '#147B75', fontSize: 14,
                                         fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                                        cursor: 'pointer', padding: '4px 8px',
+                                        cursor: 'pointer', padding: '8px 20px',
+                                        borderRadius: 99,
                                     }}
                                 >Send another</button>
                             </div>
                         )}
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Loading state if survey hasn't loaded yet */}
-            {!survey && POSTHOG_SURVEY_ID && (
-                <div style={{
-                    padding: '0 20px 16px', flexShrink: 0,
-                    animation: 'skeletonFadeIn 0.3s ease',
-                }}>
+                {/* Loading skeleton for survey */}
+                {!survey && POSTHOG_SURVEY_ID && (
                     <div style={{
-                        background: '#f8f9fa', borderRadius: 16, padding: '20px',
+                        background: '#fff', borderRadius: 14,
+                        padding: '20px 18px', marginBottom: 12,
+                        animation: 'skeletonFadeIn 0.3s ease',
                     }}>
-                        {/* "Quick feedback" title */}
                         <div style={{ width: '45%', height: 18, borderRadius: 9, background: '#ebebeb', animation: 'skeleton-pulse 1.2s ease-in-out infinite', marginBottom: 6 }} />
-                        {/* Subtitle */}
                         <div style={{ width: '65%', height: 13, borderRadius: 7, background: '#f0f0f0', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.08s', marginBottom: 18 }} />
-                        {/* Question label */}
                         <div style={{ width: '55%', height: 14, borderRadius: 7, background: '#ebebeb', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.15s', marginBottom: 12 }} />
-                        {/* Emoji rating buttons */}
                         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
                             {[1, 2, 3, 4, 5].map(i => (
                                 <div key={i} style={{
@@ -455,94 +441,58 @@ export default function FeedbackScreen() {
                                 </div>
                             ))}
                         </div>
-                        {/* Open text question label */}
                         <div style={{ width: '70%', height: 14, borderRadius: 7, background: '#ebebeb', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.55s', marginBottom: 10 }} />
-                        {/* Textarea placeholder */}
                         <div style={{ width: '100%', height: 72, borderRadius: 10, background: '#f0f0f0', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.6s' }} />
                     </div>
-                </div>
-            )}
+                )}
 
-            {/* Detailed Feedback Section */}
-            <div style={{ padding: '0 20px 0', flexShrink: 0 }} ref={formSectionRef}>
-                <button
-                    onClick={toggleForm}
-                    style={{
-                        width: '100%',
-                        display: 'flex', alignItems: 'center',
-                        justifyContent: 'space-between',
-                        background: '#f8f9fa',
-                        borderRadius: showForm ? '16px 16px 0 0' : 16,
-                        padding: '18px 20px',
-                        border: 'none',
-                        cursor: 'pointer',
-                        transition: 'border-radius 0.3s ease',
-                    }}
-                >
-                    <div>
+                {/* Quick Post-Setup Survey */}
+                <div style={{
+                    borderRadius: 14,
+                    overflow: 'hidden',
+                    marginBottom: 12,
+                    background: '#fff',
+                    position: 'relative',
+                }}>
+                    <div style={{ padding: '18px 18px 0' }}>
                         <p style={{
-                            fontSize: 15, fontWeight: 700,
+                            fontSize: 16, fontWeight: 700,
                             fontFamily: 'Nunito, sans-serif',
                             color: '#1a1a1a', margin: 0,
-                            textAlign: 'left',
-                        }}>Detailed feedback</p>
+                        }}>Quick Survey</p>
                         <p style={{
                             fontSize: 13, fontWeight: 500,
                             fontFamily: 'Nunito, sans-serif',
-                            color: '#888', margin: '2px 0 0',
-                            textAlign: 'left',
-                        }}>Have more to say? Fill out our full form</p>
+                            color: '#888', margin: '4px 0 0',
+                            lineHeight: 1.4,
+                        }}>A few quick questions to help us understand your needs</p>
                     </div>
-                    <div style={{
-                        transition: 'transform 0.3s ease',
-                        transform: showForm ? 'rotate(180deg)' : 'rotate(0deg)',
-                        color: '#888',
-                    }}>
-                        <ChevronDown size={20} />
-                    </div>
-                </button>
-
-                {/* Collapsible Google Form */}
-                <div style={{
-                    maxHeight: showForm ? 560 : 0,
-                    opacity: showForm ? 1 : 0,
-                    overflow: 'hidden',
-                    transition: 'max-height 0.4s ease, opacity 0.3s ease',
-                    background: '#f8f9fa',
-                    borderRadius: '0 0 16px 16px',
-                }}>
-                    <div style={{
-                        height: 560,
-                        position: 'relative',
-                        padding: '0 4px 10px',
-                    }}>
-                        {showForm && !formLoaded && (
-                            <div style={{
-                                padding: '20px 16px',
-                                display: 'flex', flexDirection: 'column', gap: 16,
-                            }}>
-                                <div style={{ width: '60%', height: 14, borderRadius: 7, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite' }} />
-                                <div style={{ width: '100%', height: 40, borderRadius: 10, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.1s' }} />
-                                <div style={{ width: '45%', height: 14, borderRadius: 7, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.2s' }} />
-                                <div style={{ width: '100%', height: 80, borderRadius: 10, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.3s' }} />
-                            </div>
-                        )}
-                        {showForm && (
-                            <iframe
-                                src="https://docs.google.com/forms/d/e/1FAIpQLSdOCeCs4tTbidXiCCQnJdb-34MgybgseESE1OX-Y-H5iiNfQg/viewform?embedded=true"
-                                onLoad={() => setFormLoaded(true)}
-                                style={{
-                                    width: '100%', height: '100%',
-                                    border: 'none',
-                                    borderRadius: '0 0 16px 16px',
-                                    opacity: formLoaded ? 1 : 0,
-                                    transition: 'opacity 0.3s ease',
-                                }}
-                                title="Detailed feedback form"
-                            />
-                        )}
-                    </div>
+                    <div style={{ height: 8 }} />
+                    {!formLoaded && (
+                        <div style={{
+                            padding: '20px 18px',
+                            display: 'flex', flexDirection: 'column', gap: 16,
+                        }}>
+                            <div style={{ width: '60%', height: 14, borderRadius: 7, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite' }} />
+                            <div style={{ width: '100%', height: 40, borderRadius: 10, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.1s' }} />
+                            <div style={{ width: '45%', height: 14, borderRadius: 7, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.2s' }} />
+                            <div style={{ width: '100%', height: 80, borderRadius: 10, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.3s' }} />
+                        </div>
+                    )}
+                    <iframe
+                        src="https://docs.google.com/forms/d/e/1FAIpQLSdOCeCs4tTbidXiCCQnJdb-34MgybgseESE1OX-Y-H5iiNfQg/viewform?embedded=true"
+                        onLoad={() => setFormLoaded(true)}
+                        style={{
+                            width: '100%', height: 560,
+                            border: 'none',
+                            borderRadius: 14,
+                            opacity: formLoaded ? 1 : 0,
+                            transition: 'opacity 0.3s ease',
+                        }}
+                        title="Quick post-setup survey"
+                    />
                 </div>
+
             </div>
 
             <style>{`

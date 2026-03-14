@@ -1,6 +1,16 @@
 // Use local date to avoid UTC timezone shift (BST → dates shift back 1 day with toISOString)
 export const toLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
+// Safe month arithmetic — clamps day to last day of target month to prevent
+// infinite loops when dom > days-in-month (e.g. dom=31 in February → March overflow)
+export function addMonths(d, n, dom) {
+    const targetMonth = d.getMonth() + n
+    const target = new Date(d.getFullYear(), targetMonth, 1)
+    const maxDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()
+    target.setDate(Math.min(dom, maxDay))
+    return target
+}
+
 // Default empty "other" instance
 export const makeOtherInstance = (prefix) => ({
     id: `${prefix}_${Date.now()}`,

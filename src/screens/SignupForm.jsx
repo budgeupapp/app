@@ -80,6 +80,20 @@ export default function SignupForm() {
 
   return (
     <form onSubmit={handleSignup} autoComplete="on" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ textAlign: 'center', marginBottom: 4 }}>
+        <h2 style={{
+          fontSize: 22, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+          color: '#1a1a1a', margin: '0 0 6px',
+        }}>Welcome to Budge Up!</h2>
+        <p style={{
+          fontSize: 14, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
+          color: '#555', margin: 0, lineHeight: 1.5,
+        }}>The free, zero-effort budgeting app for students, by students.</p>
+        <p style={{
+          fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
+          color: '#888', margin: '6px 0 0', lineHeight: 1.5,
+        }}>We're very early stage, so we'd love your feedback on our prototype!</p>
+      </div>
       <div>
         <span style={lbl}>Email</span>
         <div style={field}>
@@ -127,7 +141,7 @@ export default function SignupForm() {
             </svg>
           )}
         </div>
-        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', lineHeight: 1.4 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#444', lineHeight: 1.4 }}>
           I agree to the{' '}
           <a href={POLICY_URLS.terms} target="_blank" rel="noopener noreferrer" style={{ color: '#147b75', textDecoration: 'none', fontWeight: 700 }}>
             Terms
@@ -159,8 +173,8 @@ export default function SignupForm() {
             </svg>
           )}
         </div>
-        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', lineHeight: 1.4 }}>
-          Send me the weekly newsletter
+        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#444', lineHeight: 1.4 }}>
+          Sign up for behind-the-scenes updates and features!
         </span>
       </label>
 
@@ -201,7 +215,7 @@ export default function SignupForm() {
 const lbl = {
   fontSize: 13, fontWeight: 700,
   fontFamily: 'Nunito, sans-serif',
-  color: '#5e5e5e', display: 'block', marginBottom: 6,
+  color: '#444', display: 'block', marginBottom: 6,
 }
 
 const field = {

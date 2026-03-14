@@ -27,6 +27,13 @@ export function refreshAY() {
     MONTHS = getMonthsFromStart()
 }
 
+// Convert percentage back to a Date
+export const pctToDate = (pct) => {
+    const total = AY_END.getTime() - AY_START.getTime()
+    const ms = (pct / 100) * total
+    return new Date(AY_START.getTime() + ms)
+}
+
 // Convert a Date object to percentage across the graph (AY_START = 0%, AY_END = 100%)
 export const datePctFromDate = (dt) => {
     const ms = dt.getTime() - AY_START.getTime()
@@ -41,7 +48,7 @@ export const datePct = (d) => {
 
 // End-of-day: for inclusive end dates (the block should cover the full last day)
 export const datePctEnd = (d) => {
-    const dt = new Date(d + 'T00:00:00')
+    const dt = new Date(d + 'T12:00:00')
     dt.setDate(dt.getDate() + 1)
     return datePctFromDate(dt)
 }
@@ -59,32 +66,14 @@ export const daysBetween = (s, e) => Math.max(0, Math.round(
     (new Date(e + 'T00:00:00') - new Date(s + 'T00:00:00')) / (24 * 60 * 60 * 1000)
 ))
 
-// Diagonal hash pattern for breaks
-export const HASH_BG = `repeating-linear-gradient(
-  -45deg,
-  #E8E8E8 0px,
-  #E8E8E8 1px,
-  transparent 1px,
-  transparent 2.5px
-)`
+// Vertical gradient for breaks (warm grey)
+export const HASH_BG = `linear-gradient(to bottom, rgba(160,160,160,0) 0%, rgba(160,160,160,0.07) 35%, rgba(160,160,160,0.07) 65%, rgba(160,160,160,0) 100%)`
 
-// Diagonal hash pattern for exam breaks (light red)
-export const HASH_BG_EXAM = `repeating-linear-gradient(
-  -45deg,
-  #F0D4D4 0px,
-  #F0D4D4 1px,
-  transparent 1px,
-  transparent 2.5px
-)`
+// Vertical gradient for exam breaks (soft rose)
+export const HASH_BG_EXAM = `linear-gradient(to bottom, rgba(210,100,100,0) 0%, rgba(210,100,100,0.08) 35%, rgba(210,100,100,0.08) 65%, rgba(210,100,100,0) 100%)`
 
-// Diagonal hash pattern for reading weeks (light blue)
-export const HASH_BG_READING = `repeating-linear-gradient(
-  -45deg,
-  #D4E4F0 0px,
-  #D4E4F0 1px,
-  transparent 1px,
-  transparent 2.5px
-)`
+// Vertical gradient for reading weeks (soft blue)
+export const HASH_BG_READING = `linear-gradient(to bottom, rgba(100,140,200,0) 0%, rgba(100,140,200,0.08) 35%, rgba(100,140,200,0.08) 65%, rgba(100,140,200,0) 100%)`
 
 /* ---------- BALANCE HELPERS ---------- */
 
@@ -154,7 +143,7 @@ function fmtMoney(v) {
 
 /* ---------- TERM GRAPH ---------- */
 
-export default function TermGraph({ terms, expandedTerm, balance, actualBalance, balanceStartDate, overdraft, events = [], hiddenEventTypes = [], balanceHiddenTypes = [], currentEventType, onEventClick, onBalanceClick, onOverdraftClick, onTermClick, footer, showDotsToggle, onToggleDots, showIncome, onToggleIncome, showExpenses, onToggleExpenses, graphHeight = 108, marginTop = 16, graphHeightRef, forceGreenDots = false, forceDotColor = null, hideDots = false, balanceHistory = [], showBalanceHistory = true, activeEventDot = null }) {
+export default function TermGraph({ terms, expandedTerm, balance, actualBalance, balanceStartDate, overdraft, events = [], hiddenEventTypes = [], balanceHiddenTypes = [], currentEventType, onEventClick, onBalanceClick, onOverdraftClick, onTermClick, footer, showDotsToggle, onToggleDots, showIncome, onToggleIncome, showExpenses, onToggleExpenses, graphHeight = 108, marginTop = 16, graphHeightRef, forceGreenDots = false, forceDotColor = null, hideDots = false, balanceHistory = [], showBalanceHistory = true, activeEventDot = null, onZeroDate, onOverdraftBreachDate, showHolidays = true, onZoomChange, zoomOutRef }) {
     const today = new Date()
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate())
     const todayNoon = new Date(todayMidnight.getTime() + 12 * 60 * 60 * 1000)
@@ -427,6 +416,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         // --- Walk FORWARDS from balAtStart at signup date for post-signup events ---
         let bal = balAtStart
         let prevX = balStartX
+        // Track (x, balance) for zero/overdraft crossing detection
+        const balPoints = [{ x: balStartX, bal: balAtStart }]
 
         let insertedToday = false
         for (const evt of postSignup) {
@@ -436,6 +427,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                 const spent = weeklySpendBetween(prevX, todayPct)
                 if (spent > 0) { bal -= spent }
                 points.push({ x: todayPct, y: toTopPct(bal) })
+                balPoints.push({ x: todayPct, bal })
                 insertedToday = true
                 prevX = todayPct
             }
@@ -444,14 +436,17 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             if (spent > 0) {
                 bal -= spent
                 points.push({ x, y: toTopPct(bal) })
+                balPoints.push({ x, bal })
             }
             // Horizontal line to this event's x
             points.push({ x, y: toTopPct(bal) })
+            balPoints.push({ x, bal })
             // Step for the discrete event
             const yBefore = toTopPct(bal)
             bal += evt.type === 'income' ? evt.amount : -evt.amount
             const yAfter = toTopPct(bal)
             points.push({ x, y: yAfter })
+            balPoints.push({ x, bal })
             dots.push({ x, yBefore, yAfter, event: evt, balanceAfter: bal })
             prevX = x
         }
@@ -461,6 +456,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             const spent = weeklySpendBetween(prevX, todayPct)
             if (spent > 0) { bal -= spent }
             points.push({ x: todayPct, y: toTopPct(bal) })
+            balPoints.push({ x: todayPct, bal })
             prevX = todayPct
         }
 
@@ -468,6 +464,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         const remainingSpend = weeklySpendBetween(prevX, 100)
         bal -= remainingSpend
         points.push({ x: 100, y: toTopPct(bal) })
+        balPoints.push({ x: 100, bal })
 
         const startX = points[0].x
 
@@ -482,9 +479,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         let futureFillPath = null
 
         if (startX < todayPct && todayIdx > 0) {
-            // Find the y value at todayPct by interpolating or using exact match
             const pastPts = points.slice(0, todayIdx + 1)
-            // If todayPct isn't exactly in points, the point at todayIdx is >= todayPct
             pastLinePath = pastPts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
             pastFillPath = pastLinePath + ` L ${pastPts[pastPts.length - 1].x} 100 L ${startX} 100 Z`
 
@@ -496,8 +491,64 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             futureFillPath = fillPath
         }
 
-        return { linePath, fillPath, dots, points, pastLinePath, pastFillPath, futureLinePath, futureFillPath }
+        // Detect zero and overdraft crossings from balPoints
+        let zeroCrossX = null
+        let odCrossX = null
+        const od = overdraft || 0
+        for (let i = 1; i < balPoints.length; i++) {
+            const prev = balPoints[i - 1]
+            const cur = balPoints[i]
+            if (zeroCrossX === null && cur.bal <= 0 && prev.bal > 0) {
+                // Interpolate x position of zero crossing
+                if (cur.x !== prev.x && cur.bal !== prev.bal) {
+                    const ratio = prev.bal / (prev.bal - cur.bal)
+                    zeroCrossX = prev.x + ratio * (cur.x - prev.x)
+                } else {
+                    zeroCrossX = cur.x
+                }
+            } else if (zeroCrossX === null && cur.bal <= 0) {
+                zeroCrossX = cur.x
+            }
+            if (od > 0 && odCrossX === null && cur.bal < -od && prev.bal >= -od) {
+                if (cur.x !== prev.x && cur.bal !== prev.bal) {
+                    const target = -od
+                    const ratio = (prev.bal - target) / (prev.bal - cur.bal)
+                    odCrossX = prev.x + ratio * (cur.x - prev.x)
+                } else {
+                    odCrossX = cur.x
+                }
+            } else if (od > 0 && odCrossX === null && cur.bal < -od) {
+                odCrossX = cur.x
+            }
+        }
+
+        const toLocalDate = (d) => {
+            const y = d.getFullYear()
+            const m = String(d.getMonth() + 1).padStart(2, '0')
+            const day = String(d.getDate()).padStart(2, '0')
+            return `${y}-${m}-${day}`
+        }
+        const zeroDateStr = zeroCrossX !== null ? toLocalDate(pctToDate(zeroCrossX)) : null
+        const odDateStr = odCrossX !== null ? toLocalDate(pctToDate(odCrossX)) : null
+
+        return { linePath, fillPath, dots, points, pastLinePath, pastFillPath, futureLinePath, futureFillPath, zeroDate: zeroDateStr, overdraftBreachDate: odDateStr }
     })()
+
+    // Fire zero/overdraft date callbacks
+    const prevZeroDateRef = useRef(null)
+    const prevOdDateRef = useRef(null)
+    useEffect(() => {
+        const zd = steppedPath?.zeroDate ?? null
+        const od = steppedPath?.overdraftBreachDate ?? null
+        if (zd !== prevZeroDateRef.current) {
+            prevZeroDateRef.current = zd
+            onZeroDate?.(zd)
+        }
+        if (od !== prevOdDateRef.current) {
+            prevOdDateRef.current = od
+            onOverdraftBreachDate?.(od)
+        }
+    }, [steppedPath?.zeroDate, steppedPath?.overdraftBreachDate])
 
     // Build past events path (faded, leading up to where steppedPath begins)
     const pastPath = (() => {
@@ -669,6 +720,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
     const [isAnimatingZoom, setIsAnimatingZoom] = useState(false)
     const [isZoomingOut, setIsZoomingOut] = useState(false)
     const isZoomed = zoom > 1.05
+    useEffect(() => {
+        onZoomChange?.(isZoomed)
+    }, [isZoomed, onZoomChange])
 
     // Live refs — gesture handlers read/write these, React state syncs on gesture end
     const zoomRef = useRef(savedZoom)
@@ -789,6 +843,11 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
     const zoomEnabled = events.length > 0
     const zoomEnabledRef = useRef(zoomEnabled)
     zoomEnabledRef.current = zoomEnabled
+
+    // Expose zoom-out action to parent
+    useEffect(() => {
+        if (zoomOutRef) zoomOutRef.current = () => animateTo(1, 0, 300)
+    }, [zoomOutRef, animateTo])
 
     const handleTouchStart = useCallback((e) => {
         const s = scrubRef.current
@@ -1050,12 +1109,12 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
     const innerWidth = zoomRef.current * 100
 
     return (
-        <div style={{
-            margin: `${marginTop}px 19px 0`,
-            background: '#fff',
-            borderRadius: 20,
-            boxShadow: '0 0 15px rgba(0,0,0,0.1)',
-            padding: '10px 14px 4px 4px',
+        <div data-allow-zoom style={{
+            margin: `${marginTop}px 0 0`,
+            background: 'transparent',
+            borderRadius: 0,
+            boxShadow: 'none',
+            padding: '10px 14px 0px 4px',
             flexShrink: 0,
             overflow: 'hidden',
             position: 'relative',
@@ -1121,38 +1180,6 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                 </div>
             )}
 
-            {/* Zoom-out button — top right of graph card */}
-            <button
-                onClick={() => animateTo(1, 0, 300)}
-                style={{
-                    position: 'absolute',
-                    top: 12, right: 14,
-                    zIndex: 11,
-                    background: 'rgba(0,0,0,0.06)',
-                    border: 'none',
-                    borderRadius: 14,
-                    cursor: 'pointer',
-                    padding: '4px 10px 4px 7px',
-                    display: 'flex', alignItems: 'center', gap: 4,
-                    backdropFilter: 'blur(8px)',
-                    WebkitBackdropFilter: 'blur(8px)',
-                    opacity: isZoomed ? 1 : 0,
-                    pointerEvents: isZoomed ? 'auto' : 'none',
-                    transform: isZoomed ? 'scale(1)' : 'scale(0.85)',
-                    transition: 'opacity 0.3s ease, transform 0.3s ease',
-                }}
-            >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    <line x1="8" y1="11" x2="14" y2="11" />
-                </svg>
-                <span style={{
-                    fontSize: 9, fontWeight: 700,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: '#555',
-                }}>Zoom out</span>
-            </button>
 
             <div ref={(el) => { graphContainerRef.current = el; if (graphHeightRef) graphHeightRef.current = el }} style={{ display: 'flex', position: 'relative', height: graphHeight, overflowX: 'clip', overflowY: 'visible', willChange: 'height' }}>
                 {/* Y-axis — always reserves space so graph width is consistent */}
@@ -1164,7 +1191,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                         return (
                             <div key={tick} style={{
                                 position: 'absolute',
-                                right: 9,
+                                right: 4,
                                 top: `${toTopPct(tick)}%`,
                                 transform: 'translateY(-50%)',
                                 fontSize: 9,
@@ -1205,7 +1232,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             {/* Zero line — same strokeWidth as balance line */}
                             {hasBalance && yMin < 0 && yMax > 0 && (
                                 <line x1="0" y1={`${toTopPct(0)}%`} x2="100%" y2={`${toTopPct(0)}%`}
-                                    stroke={hasOverdraft ? 'rgba(160,160,160,0.55)' : 'rgba(224,100,112,0.7)'}
+                                    stroke="rgba(160,160,160,0.55)"
                                     strokeWidth="1.5" strokeDasharray="4 3"
                                     vectorEffect="non-scaling-stroke" />
                             )}
@@ -1268,15 +1295,16 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     style={{
                                         position: 'absolute',
                                         left: `${sp}%`, width: `${wp}%`,
-                                        top: `${topTickPct}%`, bottom: -2,
-                                        background: isExpanded ? 'rgba(227,242,241,0.45)' : 'rgba(227,242,241,0.2)',
-                                        borderLeft: '0.5px solid #e3f2f1',
-                                        borderRight: '0.5px solid #e3f2f1',
+                                        top: 0, bottom: -2,
+                                        background: isExpanded
+                                            ? 'linear-gradient(to bottom, rgba(20,123,117,0) 0%, rgba(20,123,117,0.06) 40%, rgba(20,123,117,0.06) 60%, rgba(20,123,117,0) 100%)'
+                                            : 'linear-gradient(to bottom, rgba(20,123,117,0) 0%, rgba(20,123,117,0.035) 40%, rgba(20,123,117,0.035) 60%, rgba(20,123,117,0) 100%)',
+                                        border: 'none',
                                         transition: hasBalance ? undefined : 'left 0.35s ease, width 0.35s ease, background 0.3s ease',
                                         overflow: 'hidden',
                                         cursor: 'pointer',
                                     }}>
-                                    {term.breaks.map((brk, j) => {
+                                    {showHolidays && term.breaks.map((brk, j) => {
                                         const bsp = datePct(brk.start)
                                         const bep = datePctEnd(brk.end)
                                         const bl = ((bsp - sp) / wp) * 100
@@ -1372,8 +1400,10 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                             <div style={{
                                                 width: isActive ? 14 : (isDimmed ? 8 : 10), height: isActive ? 14 : (isDimmed ? 8 : 10),
                                                 borderRadius: '50%',
-                                                background: bg,
-                                                border: isActive ? '2px solid white' : (isCurrent ? '1px solid white' : '0.75px solid white'),
+                                                background: dot.event.flex ? 'transparent' : bg,
+                                                border: dot.event.flex
+                                                    ? `2px solid ${bg}`
+                                                    : isActive ? '2px solid white' : (isCurrent ? '1px solid white' : '0.75px solid white'),
                                                 boxShadow: isActive
                                                     ? `0 0 8px ${isIncome ? 'rgba(20,123,117,0.7)' : 'rgba(224,100,112,0.7)'}`
                                                     : 'none',
@@ -1458,8 +1488,10 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     <div style={{
                                         width: isActive ? 14 : (isCurrent ? 10 : 8), height: isActive ? 14 : (isCurrent ? 10 : 8),
                                         borderRadius: '50%',
-                                        background: color,
-                                        border: isActive ? '2px solid white' : (isCurrent ? '1px solid white' : '0.75px solid white'),
+                                        background: dot.event.flex ? 'transparent' : color,
+                                        border: dot.event.flex
+                                            ? `2px solid ${color}`
+                                            : isActive ? '2px solid white' : (isCurrent ? '1px solid white' : '0.75px solid white'),
                                         boxShadow: isActive
                                             ? `0 0 8px ${isIncome ? 'rgba(20,123,117,0.7)' : 'rgba(224,100,112,0.7)'}`
                                             : 'none',
@@ -1524,8 +1556,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                         style={{
                                             position: 'absolute',
                                             left: `clamp(0px, ${dot.x}%, 100%)`,
-                                            top: `${topY}%`,
-                                            height: `${height}%`,
+                                            top: `calc(${topY}% + 3px)`,
+                                            height: `calc(${height}% - 6px)`,
                                             width: 0,
                                             borderLeft: `1.5px dashed ${color}`,
                                             transform: undefined,
@@ -1606,15 +1638,6 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             )
                         })()}
 
-                        {/* Grey baseline through term pills */}
-                        <div style={{
-                            position: 'absolute',
-                            left: 0, right: 0, bottom: -2,
-                            height: 0,
-                            borderBottom: '1px solid #e4e4e4',
-                            pointerEvents: 'none',
-                            zIndex: 0,
-                        }} />
 
                         {/* Term labels at bottom — fade when zoomed, hide if clipped */}
                         {terms.map((term) => {
@@ -1632,7 +1655,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     key={`lbl-${term.id}`}
                                     onClick={(e) => { e.stopPropagation(); if (!isZoomed) onTermClick?.(term.id) }}
                                     style={{
-                                        position: 'absolute', left: `${mid}%`, bottom: -8,
+                                        position: 'absolute', left: `${mid}%`, bottom: -2,
                                         transform: 'translateX(-50%)',
                                         background: '#e3f2f1', color: '#4a928e',
                                         fontSize: 8, fontWeight: 700,
@@ -1715,6 +1738,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                         <path
                                             d={steppedPath.pastFillPath}
                                             fill="url(#pastStepGrad)"
+                                            shapeRendering="crispEdges"
                                             opacity={(eventsRevealed || isZoomed) ? 1 : 0}
                                             style={{ transition: 'opacity 0.5s ease 0.4s' }}
                                         />
@@ -1723,8 +1747,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                             fill="none"
                                             stroke="rgba(20,123,117,0.45)"
                                             strokeWidth="1.5"
-                                            strokeLinejoin="round"
+                                            strokeLinejoin="bevel"
                                             vectorEffect="non-scaling-stroke"
+                                            shapeRendering="crispEdges"
                                             opacity={(eventsRevealed || isZoomed) ? 1 : 0}
                                             style={{ transition: 'opacity 0.5s ease' }}
                                         />
@@ -1734,6 +1759,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 <path
                                     d={steppedPath.futureFillPath || steppedPath.fillPath}
                                     fill="url(#stepGrad)"
+                                    shapeRendering="crispEdges"
                                     opacity={(eventsRevealed || isZoomed) ? 1 : 0}
                                     style={{ transition: 'opacity 0.5s ease 0.4s' }}
                                 />
@@ -1742,8 +1768,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     fill="none"
                                     stroke="#147b75"
                                     strokeWidth="1.5"
-                                    strokeLinejoin="round"
+                                    strokeLinejoin="bevel"
                                     vectorEffect="non-scaling-stroke"
+                                    shapeRendering="crispEdges"
                                     opacity={(eventsRevealed || isZoomed) ? 1 : 0}
                                     style={{ transition: 'opacity 0.5s ease' }}
                                 />
@@ -1974,7 +2001,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                         position: 'absolute',
                                         left: `${Math.max(0, pct)}%`,
                                         transform: pct < 3 ? 'none' : 'translateX(-50%)',
-                                        fontSize: 9, fontWeight: 500,
+                                        fontSize: isNow ? 10 : 9, fontWeight: isNow ? 900 : 500,
                                         fontFamily: 'Nunito, sans-serif',
                                         color: isNow ? '#147b75' : '#8f8f8f',
                                         whiteSpace: 'nowrap',
@@ -2012,7 +2039,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                                 position: 'absolute',
                                                 left: `${Math.max(0, pct)}%`,
                                                 transform: pct < 3 ? 'none' : 'translateX(-50%)',
-                                                fontSize: 9, fontWeight: 500,
+                                                fontSize: isNow ? 10 : 9, fontWeight: isNow ? 900 : 500,
                                                 fontFamily: 'Nunito, sans-serif',
                                                 color: isNow ? '#147b75' : '#8f8f8f',
                                                 whiteSpace: 'nowrap',
@@ -2045,7 +2072,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     <span key={`d${pct.toFixed(2)}`} style={{
                                         position: 'absolute', left: `${pct}%`,
                                         transform: 'translateX(-50%)',
-                                        fontSize: 9, fontWeight: 500,
+                                        fontSize: isToday ? 10 : 9, fontWeight: isToday ? 900 : 500,
                                         fontFamily: 'Nunito, sans-serif',
                                         color: isToday ? '#EC8C17' : '#8f8f8f',
                                         whiteSpace: 'nowrap',
@@ -2123,13 +2150,13 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             if (d && terms?.length > 0) {
                                 for (const t of terms) {
                                     for (const b of (t.breaks || [])) {
-                                        if (d >= new Date(b.start + 'T00:00:00') && d <= new Date(b.end + 'T00:00:00')) {
+                                        if (d >= new Date(b.start + 'T00:00:00') && d <= new Date(b.end + 'T23:59:59')) {
                                             periodLabel = b.name || 'Reading Week'
                                         }
                                     }
                                 }
                                 if (!periodLabel) {
-                                    const inTerm = terms.some(t => d >= new Date(t.start + 'T00:00:00') && d <= new Date(t.end + 'T00:00:00'))
+                                    const inTerm = terms.some(t => d >= new Date(t.start + 'T00:00:00') && d <= new Date(t.end + 'T23:59:59'))
                                     periodLabel = inTerm ? 'Lectures' : 'Holiday'
                                 }
                             }

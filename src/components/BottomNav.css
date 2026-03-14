@@ -5,12 +5,11 @@
     right: 0;
     display: flex;
     justify-content: center;
-    z-index: 1000;
+    z-index: 1002;
     background: white;
-    border-top: 1px solid rgba(255, 255, 255, 0.6);
+    border-top: none;
     border-radius: 20px 20px 0 0;
-    box-shadow: 0 -6px 30px rgba(0, 0, 0, 0.1), 0 -2px 8px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.5);
-    padding: 8px 8px max(8px, env(safe-area-inset-bottom, 0px));
+    padding: 0 0 env(safe-area-inset-bottom, 0px);
 }
 
 .bottom-nav-pill {
@@ -19,6 +18,7 @@
     align-items: center;
     width: 100%;
     max-width: 480px;
+    padding: 0 16px;
 }
 
 .nav-tab {
@@ -27,60 +27,72 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    padding: 9px 16px;
-    gap: 2px;
+    padding: 4px 16px;
     position: relative;
-    border-radius: 18px;
-    width: 80px;
-    transition: all 0.25s ease;
+    transition: all 0.2s ease;
     background: transparent;
-}
-
-.nav-tab.active {
-    background: rgba(44, 120, 115, 0.1);
+    -webkit-tap-highlight-color: transparent;
 }
 
 .nav-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #8A9BAE;
-    transition: color 0.25s ease;
+    transition: color 0.2s ease;
 }
 
-.nav-tab.active .nav-icon {
-    color: #147b75;
+/* Center FAB */
+.nav-fab-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    z-index: 1002;
+    -webkit-tap-highlight-color: transparent;
+    width: 72px;
+    height: 56px;
+    flex-shrink: 0;
 }
 
-.nav-icon svg {
-    width: 22px;
-    height: 22px;
-    stroke-width: 1.8;
-}
-
-.nav-label {
-    font-size: 10px;
-    font-weight: 600;
-    font-family: 'Nunito', sans-serif;
-    color: #8A9BAE;
-    white-space: nowrap;
-    transition: color 0.25s ease;
-}
-
-.nav-tab.active .nav-label {
-    color: #147b75;
-}
-
-.nav-dot {
-    width: 4px;
-    height: 4px;
+.nav-fab {
+    width: 56px;
+    height: 56px;
     border-radius: 50%;
-    background: transparent;
-    transition: background 0.25s ease;
-    position: absolute;
-    bottom: 3px;
+    background: #147b75;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 4px rgba(20, 123, 117, 0.15);
+    transition: background 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+    margin-top: -20px;
 }
 
-.nav-tab.active .nav-dot {
-    background: #147b75;
+.nav-fab:active {
+    transform: none;
+}
+
+.nav-fab.open {
+    background: #d5d5d5;
+    box-shadow: 0 0 0 4px rgba(200, 200, 200, 0.25);
+    transform: none;
+    transition: background 0.5s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+}
+
+.nav-fab svg {
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.fab-source-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+@keyframes fabSourceIn {
+    from { opacity: 0; transform: translateY(8px) scale(0.8); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fabPickerIn {
+    from { opacity: 0; transform: translateX(-50%) scale(0.9); }
+    to { opacity: 1; transform: translateX(-50%) scale(1); }
 }

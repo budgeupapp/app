@@ -1,14 +1,11 @@
-import incomeLoan from '../assets/income-loan.svg'
-import incomeFamily from '../assets/income-family.svg'
-import incomeFriends from '../assets/income-friends.svg'
-import incomeWork from '../assets/income-work.svg'
-import iconOtherIncome from '../assets/icon-other-income.svg'
+import { SOURCE_ICONS } from './Dashboard'
+
 const INCOME_SOURCES = [
-    { id: 'maintenance_loan', label: 'Maintenance Loan', color: '#147b75', icon: incomeLoan, panelId: 'maintenanceLoan' },
-    { id: 'bursary', label: 'Bursary', color: '#EC8C17', icon: incomeFamily, panelId: 'bursary' },
-    { id: 'family_friends', label: 'Family & Friends', color: '#5b8def', icon: incomeFriends, panelId: 'familyFriends' },
-    { id: 'work', label: 'Work', color: '#e06470', icon: incomeWork, panelId: 'work' },
-    { id: 'other_income', label: 'Other', color: '#9b8ec4', icon: iconOtherIncome, panelId: 'otherIncome' },
+    { id: 'maintenance_loan', label: 'Maintenance Loan' },
+    { id: 'bursary', label: 'Bursary' },
+    { id: 'family_friends', label: 'Family & Friends' },
+    { id: 'work', label: 'Work' },
+    { id: 'other_income', label: 'Other' },
 ]
 
 function CheckIcon() {
@@ -19,7 +16,7 @@ function CheckIcon() {
     )
 }
 
-export default function RegularIncomeStep({ incomeSources = [], updateIncomeSources }) {
+export default function RegularIncomeStep({ incomeSources = [], updateIncomeSources, heading = 'Regular Income', subtitle = "Enter any income that you're almost certain you're going to receive." }) {
     const toggle = (id) => {
         const next = incomeSources.includes(id)
             ? incomeSources.filter(s => s !== id)
@@ -35,13 +32,13 @@ export default function RegularIncomeStep({ incomeSources = [], updateIncomeSour
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 8px', lineHeight: 1.3,
                 }}>
-                    Regular Income
+                    {heading}
                 </h2>
                 <p style={{
                     fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                    color: '#5e5e5e', margin: 0, lineHeight: 1.5,
+                    color: '#444', margin: 0, lineHeight: 1.5,
                 }}>
-                    Select any income you receive regularly, even if only during term time or holidays.
+                    {subtitle}
                 </p>
             </div>
 
@@ -50,8 +47,10 @@ export default function RegularIncomeStep({ incomeSources = [], updateIncomeSour
                 padding: '12px 19px 16px',
                 display: 'flex', flexDirection: 'column', gap: 10,
             }}>
-                {INCOME_SOURCES.map(({ id, label, color, icon, letter, panelId }) => {
+                {INCOME_SOURCES.map(({ id, label }) => {
                     const selected = incomeSources.includes(id)
+                    const sourceIcon = SOURCE_ICONS[id]
+                    const IconComponent = sourceIcon?.Icon
                     return (
                         <div
                             key={id}
@@ -62,27 +61,23 @@ export default function RegularIncomeStep({ incomeSources = [], updateIncomeSour
                                 border: selected ? '1.5px solid #147b75' : '1.5px solid #f3f3f3',
                                 borderRadius: 10,
                                 cursor: 'pointer',
-                                gap: 14,
-                                background: selected ? 'rgba(227,242,241,0.15)' : '#fff',
-                                transition: 'border-color 0.15s ease, background 0.15s ease',
+                                gap: 12,
+                                background: '#fff',
                             }}
                         >
-                            {/* Icon */}
+                            {/* Icon in circle */}
                             <div style={{
-                                width: 36, height: 36,
+                                width: 36, height: 36, borderRadius: '50%',
+                                background: 'rgba(20, 123, 117, 0.08)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0,
                             }}>
-                                {icon ? (
-                                    <img src={icon} alt="" style={{ width: 28, height: 28, objectFit: 'contain', opacity: 0.8 }} />
-                                ) : (
-                                    <span style={{ fontSize: 18, fontWeight: 700, color, fontFamily: 'Nunito, sans-serif' }}>{letter}</span>
-                                )}
+                                {IconComponent && <IconComponent size={20} color="#147b75" />}
                             </div>
 
                             {/* Label */}
                             <span style={{
-                                flex: 1, fontSize: 17, fontWeight: 600,
+                                flex: 1, fontSize: 14, fontWeight: 600,
                                 fontFamily: 'Nunito, sans-serif',
                                 color: '#000',
                             }}>
@@ -92,11 +87,11 @@ export default function RegularIncomeStep({ incomeSources = [], updateIncomeSour
                             {/* Checkbox */}
                             <div style={{
                                 width: 25, height: 25, borderRadius: 5,
-                                border: selected ? '1.5px solid #147b75' : '1.5px solid #f3f3f3',
+                                border: selected ? '1.5px solid #147b75' : '1.5px solid #ddd',
                                 background: selected ? '#147b75' : '#fff',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0,
-                                transition: 'background 0.15s ease',
+                                transition: 'background 0.15s ease, border-color 0.15s ease',
                             }}>
                                 {selected && <CheckIcon />}
                             </div>

@@ -15,7 +15,7 @@ function formatDisplay(raw) {
 
 /* ---------- MAIN ---------- */
 
-export default function BankBalanceStep({ balance, updateBalance }) {
+export default function BankBalanceStep({ balance, updateBalance, heading = 'Bank Balance', subtitle = "What's your current bank balance? Add up all your accounts \u2014 a rough estimate is fine!" }) {
     const [rawAmount, setRawAmount] = useState(() => {
         const n = parseFloat(String(balance || '').replace(/,/g, ''))
         return n ? String(n) : ''
@@ -55,13 +55,13 @@ export default function BankBalanceStep({ balance, updateBalance }) {
                 fontFamily: 'Nunito, sans-serif',
                 color: '#000', margin: '0 0 8px', lineHeight: 1.3,
             }}>
-                Bank Balance
+                {heading}
             </h2>
             <p style={{
                 fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                color: '#5e5e5e', margin: '0 0 24px', lineHeight: 1.5,
+                color: '#444', margin: '0 0 24px', lineHeight: 1.5,
             }}>
-                What's your current bank balance? Add up all your accounts — a rough estimate is fine.
+                {subtitle}
             </p>
 
             {/* Amount input */}
@@ -92,7 +92,7 @@ export default function BankBalanceStep({ balance, updateBalance }) {
                 }}>
                     <span style={{
                         fontSize: 20, fontWeight: 600,
-                        color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
+                        color: '#444', fontFamily: 'Nunito, sans-serif',
                     }}>{getCurrencySymbol()}</span>
 
                     <input

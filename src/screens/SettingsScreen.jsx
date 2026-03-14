@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
-import { Button, Typography, message } from 'antd'
+import { Typography, message } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { POLICY_URLS } from '../lib/policyVersions'
@@ -8,48 +8,10 @@ import { CURRENCIES, getCurrency, setCurrency, getGraphStart, setGraphStart, get
 import { fetchUserData, saveTermDates, saveUserFinances, saveCashflowForecast } from '../lib/api'
 import { INITIAL_FORM_DATA, UK_UNIVERSITIES, getTermDatesForUniversity, hasCustomTermDates } from '../config/onboardingConfig'
 import TermDatesStep from './TermDatesStep'
+import { User, Share2, DollarSign, Calendar, BookOpen, ChevronRight, LogOut, Trash2, RefreshCw, FileText, Shield, Mail, Copy, Globe, AlertCircle, CreditCard, Sliders, ExternalLink } from 'react-feather'
+import { PiCookie } from 'react-icons/pi'
 
-const { Title, Text } = Typography
-
-/* ── Custom select with chevron ── */
-function SettingsSelect({ value, onChange, children, style }) {
-  return (
-    <div style={{ position: 'relative', display: 'inline-block', ...style }}>
-      <select
-        value={value}
-        onChange={onChange}
-        style={{
-          appearance: 'none', WebkitAppearance: 'none',
-          border: '1px solid #e8e8e8',
-          borderRadius: 10,
-          padding: '0 32px 0 12px',
-          height: 40,
-          fontSize: 14,
-          fontFamily: 'Nunito, sans-serif',
-          fontWeight: 600,
-          background: '#fff',
-          color: '#1a1a1a',
-          cursor: 'pointer',
-          outline: 'none',
-          width: '100%',
-        }}
-      >
-        {children}
-      </select>
-      <svg
-        width="14" height="14" viewBox="0 0 14 14" fill="none"
-        style={{
-          position: 'absolute', right: 10, top: '50%',
-          transform: 'translateY(-50%)',
-          pointerEvents: 'none',
-        }}
-      >
-        <path d="M3.5 5.25L7 8.75L10.5 5.25" stroke="#9f9c9c"
-          strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
-  )
-}
+const { Text } = Typography
 
 /* ── Pulse loading skeleton ── */
 function LoadingSkeleton({ width = '100%', height = 44, borderRadius = 10, style }) {
@@ -72,16 +34,14 @@ function LoadingSkeleton({ width = '100%', height = 44, borderRadius = 10, style
 
 /* ── Custom confirmation modal ── */
 function ConfirmModal({ open, title, description, confirmText, cancelText = 'Cancel', danger, loading, onConfirm, onCancel }) {
-  const [visible, setVisible] = useState(false)   // controls mount
-  const [animating, setAnimating] = useState(false) // controls CSS class
+  const [visible, setVisible] = useState(false)
+  const [animating, setAnimating] = useState(false)
 
   useEffect(() => {
     if (open) {
       setVisible(true)
-      // trigger enter animation on next frame
       requestAnimationFrame(() => requestAnimationFrame(() => setAnimating(true)))
     } else if (visible) {
-      // trigger exit animation, then unmount
       setAnimating(false)
       const timer = setTimeout(() => setVisible(false), 250)
       return () => clearTimeout(timer)
@@ -92,21 +52,18 @@ function ConfirmModal({ open, title, description, confirmText, cancelText = 'Can
 
   return (
     <>
-      {/* Backdrop */}
       <div
         onClick={loading ? undefined : onCancel}
         style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
+          position: 'fixed', inset: 0, zIndex: 1100,
           background: 'rgba(0,0,0,0.35)',
           backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
           opacity: animating ? 1 : 0,
           transition: 'opacity 0.25s ease',
         }}
       />
-
-      {/* Dialog */}
       <div style={{
-        position: 'fixed', left: '50%', top: '50%', zIndex: 1001,
+        position: 'fixed', left: '50%', top: '50%', zIndex: 1101,
         transform: animating
           ? 'translate(-50%, -50%) scale(1)'
           : 'translate(-50%, -44%) scale(0.92)',
@@ -121,12 +78,10 @@ function ConfirmModal({ open, title, description, confirmText, cancelText = 'Can
           margin: '0 0 8px', fontSize: 19, fontWeight: 700,
           fontFamily: 'Nunito, sans-serif', textAlign: 'center', color: '#1a1a1a',
         }}>{title}</h3>
-
         <p style={{
           margin: '0 0 24px', fontSize: 15, lineHeight: 1.5,
           fontFamily: 'Nunito, sans-serif', textAlign: 'center', color: '#666',
         }}>{description}</p>
-
         <button
           disabled={loading}
           onClick={onConfirm}
@@ -140,9 +95,8 @@ function ConfirmModal({ open, title, description, confirmText, cancelText = 'Can
             color: '#fff', marginBottom: 10,
           }}
         >
-          {loading ? 'Please wait…' : confirmText}
+          {loading ? 'Please wait\u2026' : confirmText}
         </button>
-
         <button
           disabled={loading}
           onClick={onCancel}
@@ -156,6 +110,111 @@ function ConfirmModal({ open, title, description, confirmText, cancelText = 'Can
         </button>
       </div>
     </>
+  )
+}
+
+/* ── Row component for settings items ── */
+function SettingsRow({ icon, label, value, onClick, last, children, expanded }) {
+  const contentRef = useRef(null)
+  const [measuredHeight, setMeasuredHeight] = useState(0)
+  const [settled, setSettled] = useState(false)
+
+  useEffect(() => {
+    if (expanded) {
+      // Set a generous initial height immediately so content isn't clipped
+      setMeasuredHeight(500)
+      setSettled(false)
+      // Then measure actual height after layout
+      requestAnimationFrame(() => {
+        if (contentRef.current) {
+          setMeasuredHeight(contentRef.current.scrollHeight + 20)
+        }
+      })
+      const timer = setTimeout(() => setSettled(true), 350)
+      return () => clearTimeout(timer)
+    } else {
+      setSettled(false)
+      setMeasuredHeight(0)
+    }
+  }, [expanded])
+
+  // Re-measure if content changes while expanded
+  useEffect(() => {
+    if (!expanded || !contentRef.current) return
+    const ro = new ResizeObserver(() => {
+      if (contentRef.current) setMeasuredHeight(contentRef.current.scrollHeight + 10)
+    })
+    ro.observe(contentRef.current)
+    return () => ro.disconnect()
+  }, [expanded])
+
+  return (
+    <div>
+      <button
+        onClick={onClick}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+          padding: '15px 18px', background: 'transparent', border: 'none',
+          borderBottom: last ? 'none' : '1px solid',
+          borderBottomColor: expanded ? 'transparent' : '#f0f0f0',
+          cursor: onClick ? 'pointer' : 'default', textAlign: 'left',
+          transition: 'border-bottom-color 0.3s ease',
+        }}
+      >
+        {icon && <span style={{ color: '#888', flexShrink: 0, display: 'flex' }}>{icon}</span>}
+        <span style={{ flex: 1, fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+          {label}
+        </span>
+        {value && (
+          <span style={{ fontSize: 14, fontFamily: 'Nunito, sans-serif', color: '#888', marginRight: 4, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
+            {value}
+          </span>
+        )}
+        {onClick && <ChevronRight size={18} color="#ccc" style={{
+          transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
+          transition: 'transform 0.2s ease',
+        }} />}
+      </button>
+      <div style={{
+        display: 'grid',
+        gridTemplateRows: expanded ? '1fr' : '0fr',
+        opacity: expanded ? 1 : 0,
+        transition: 'grid-template-rows 0.3s ease, opacity 0.2s ease',
+      }}>
+        <div style={{ overflow: 'hidden' }}>
+        <div ref={contentRef} style={{
+          padding: '0 18px 16px',
+        }}>
+          {children}
+        </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Toggle component ── */
+function Toggle({ on, onChange, loading }) {
+  return (
+    <button
+      onClick={onChange}
+      style={{
+        width: 48, height: 26, borderRadius: 13,
+        background: on ? '#147b75' : '#e0e0e0',
+        border: 'none', cursor: 'pointer', padding: 0,
+        position: 'relative', flexShrink: 0,
+        opacity: loading ? 0.5 : 1,
+        transition: 'background 0.2s ease, opacity 0.2s ease',
+      }}
+    >
+      <div style={{
+        width: 22, height: 22, borderRadius: '50%',
+        background: '#fff', position: 'absolute', top: 2,
+        left: on ? 24 : 2,
+        transition: 'left 0.2s ease',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+      }} />
+    </button>
   )
 }
 
@@ -186,7 +245,7 @@ export default function SettingsScreen() {
     } catch { return '' }
   })
   const universitySaveTimerRef = useRef(null)
-  const [termDatesPrompt, setTermDatesPrompt] = useState(null) // { university, termDates }
+  const [termDatesPrompt, setTermDatesPrompt] = useState(null)
   const [overdraft, setOverdraft] = useState(() => {
     try {
       const saved = localStorage.getItem('budgeup_onboarding_state')
@@ -195,7 +254,14 @@ export default function SettingsScreen() {
     } catch { return '' }
   })
   const overdraftSaveTimerRef = useRef(null)
-  const [showOverdraftToggle, setShowOverdraftToggle] = useState(() => localStorage.getItem('budgeup_show_overdraft') !== 'false')
+  const [startingBalance, setStartingBalance] = useState(() => {
+    try {
+      const saved = localStorage.getItem('budgeup_onboarding_state')
+      const parsed = saved ? JSON.parse(saved) : {}
+      return parsed?.formData?.balance || ''
+    } catch { return '' }
+  })
+  const startingBalanceSaveTimerRef = useRef(null)
   const userIdRef = useRef(null)
   const termSaveTimerRef = useRef(null)
   const pendingTermDatesRef = useRef(null)
@@ -204,14 +270,16 @@ export default function SettingsScreen() {
     try {
       const saved = localStorage.getItem('budgeup_onboarding_state')
       const parsed = saved ? JSON.parse(saved) : {}
-      return parsed?.formData?.termDates?.terms?.[0]?.start || null
+      const terms = parsed?.formData?.termDates?.terms
+      if (!terms?.length) return null
+      return [...terms].sort((a, b) => a.start.localeCompare(b.start))[0].start
     } catch { return null }
   })()
   const [newsletterOn, setNewsletterOn] = useState(() => localStorage.getItem('budgeup_newsletter') !== 'false')
   const [newsletterLoading, setNewsletterLoading] = useState(false)
   const [messageApi, contextHolder] = message.useMessage({ maxCount: 1 })
   const [linkCopied, setLinkCopied] = useState(false)
-  const [toast, setToast] = useState(null) // { text, type: 'success'|'error' }
+  const [toast, setToast] = useState(null)
   const toastTimerRef = useRef(null)
   const settingsScrollRef = useRef(null)
   const showToast = (text, type = 'success', duration = 3000) => {
@@ -220,7 +288,11 @@ export default function SettingsScreen() {
     toastTimerRef.current = setTimeout(() => setToast(null), duration)
   }
 
-  // Restore scroll position from previous visit (layout effect to avoid flash)
+  // Expanded sections
+  const [expanded, setExpanded] = useState(null) // 'currency' | 'overdraft' | 'graphStart' | 'university' | 'termDates' | 'startingBalance'
+  const toggle = (key) => setExpanded(prev => prev === key ? null : key)
+
+  // Restore scroll position
   useLayoutEffect(() => {
     const saved = sessionStorage.getItem('budgeup_scroll_settings')
     if (saved && settingsScrollRef.current) {
@@ -239,20 +311,17 @@ export default function SettingsScreen() {
     return () => window.removeEventListener('nav-tap-again', handler)
   }, [])
 
-  // Scroll focused input into view when keyboard opens
+  // Scroll focused input into view
   useEffect(() => {
     const sc = settingsScrollRef.current
     if (!sc) return
     const onFocusIn = (e) => {
       const el = e.target
       if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return
-      // Skip inputs that handle their own scroll-into-view (e.g. term name inputs)
       if (el.dataset.scrollHandled) return
-      // Pin scroll to prevent keyboard-induced jump
       const pos = sc.scrollTop
       sc.style.overflowY = 'hidden'
       sc.scrollTop = pos
-      // After keyboard settles, unlock and scroll input into view
       setTimeout(() => {
         sc.style.overflowY = 'auto'
         const scRect = sc.getBoundingClientRect()
@@ -274,7 +343,7 @@ export default function SettingsScreen() {
     }
   }, [])
 
-  // Flush pending term dates save on unmount so Dashboard doesn't fetch stale data
+  // Flush pending term dates save on unmount
   useEffect(() => {
     return () => {
       if (termSaveTimerRef.current) clearTimeout(termSaveTimerRef.current)
@@ -284,7 +353,7 @@ export default function SettingsScreen() {
     }
   }, [])
 
-  // Track settings viewed and load user email + created_at
+  // Track settings viewed and load user data
   useEffect(() => {
     if (!trackedRef.current) {
       trackedRef.current = true
@@ -312,8 +381,11 @@ export default function SettingsScreen() {
           if (result.formData?.overdraft != null && result.formData.overdraft !== '') {
             setOverdraft(result.formData.overdraft)
           }
+          if (result.formData?.balance != null && result.formData.balance !== '') {
+            setStartingBalance(result.formData.balance)
+          }
         } catch (err) {
-          console.error('Failed to load term dates:', err)
+          console.error('Failed to load user data:', err)
         } finally {
           setTermDatesLoading(false)
         }
@@ -340,19 +412,16 @@ export default function SettingsScreen() {
   const clearAllAppData = async () => {
     localStorage.clear()
     sessionStorage.clear()
-    // Clear all Cache Storage entries
     if ('caches' in window) {
       const keys = await caches.keys()
       await Promise.all(keys.map((k) => caches.delete(k)))
     }
-    // Clear IndexedDB databases
     if (window.indexedDB?.databases) {
       try {
         const dbs = await window.indexedDB.databases()
         dbs.forEach((db) => { if (db.name) window.indexedDB.deleteDatabase(db.name) })
       } catch (_) { /* not supported in all browsers */ }
     }
-    // Unregister service workers
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations()
       await Promise.all(regs.map((r) => r.unregister()))
@@ -366,11 +435,9 @@ export default function SettingsScreen() {
 
   const confirmLogout = async () => {
     setLoggingOut(true)
-    // Track logout before signOut so it fires before analytics.reset() in SIGNED_OUT handler
     analytics.track(AUTH_EVENTS.LOGOUT)
     const { error } = await supabase.auth.signOut()
     setLoggingOut(false)
-
     if (error) {
       setShowLogoutModal(false)
       showToast('Failed to log out. Please try again.', 'error', 5000)
@@ -386,13 +453,9 @@ export default function SettingsScreen() {
 
   const confirmDeleteAccount = async () => {
     setDeletingAccount(true)
-
     try {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('No user found')
-
-      // Delete all user data from every table before deleting auth account
-      // (term_breaks cascade from term_dates via foreign key)
       const tables = ['cashflow_forecast', 'balance_history', 'term_dates', 'user_consents', 'user_profiles']
       for (const table of tables) {
         const { error } = await supabase
@@ -401,14 +464,10 @@ export default function SettingsScreen() {
           .eq('user_id', user.id)
         if (error) console.error(`Error deleting from ${table}:`, error)
       }
-
       const { error: authError } = await supabase.rpc('delete_own_account')
       if (authError) throw authError
-
-      // Track before signOut so it fires before analytics.reset() in SIGNED_OUT handler
       analytics.track(SETTINGS_EVENTS.ACCOUNT_DELETED)
       showToast('Account deleted successfully', 'success')
-
       await clearAllAppData()
       await supabase.auth.signOut()
     } catch (error) {
@@ -424,7 +483,6 @@ export default function SettingsScreen() {
   const confirmResetFinances = async () => {
     setResetting(true)
     try {
-      // Reset localStorage formData but keep termDates and university
       const saved = localStorage.getItem('budgeup_onboarding_state')
       const parsed = saved ? JSON.parse(saved) : {}
       const oldData = parsed.formData || {}
@@ -435,11 +493,7 @@ export default function SettingsScreen() {
       }
       parsed.formData = resetData
       localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
-
-      // Clear balance-related localStorage
       localStorage.removeItem('budgeup_balance_last_date')
-
-      // Reset graph start date to today
       const today = new Date()
       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       setGraphStart(todayStr)
@@ -447,20 +501,13 @@ export default function SettingsScreen() {
       graphStartRef.current = todayStr
       localStorage.setItem('budgeup_graph_start_mode', 'joined')
       setGraphStartMode('joined')
-
-      // Reset on Supabase if user is logged in
       if (userIdRef.current) {
-        await saveUserFinances(userIdRef.current, {
-          ...resetData,
-          onboardingCompleted: true,
-        })
-        // Save new graph start date
+        await saveUserFinances(userIdRef.current, { ...resetData, onboardingCompleted: true })
         await supabase
           .from('user_profiles')
           .update({ graph_start: todayStr, updated_at: new Date().toISOString() })
           .eq('user_id', userIdRef.current)
         await saveCashflowForecast(userIdRef.current, [])
-        // Delete all balance history records
         await supabase
           .from('balance_history')
           .delete()
@@ -483,17 +530,14 @@ export default function SettingsScreen() {
     localStorage.setItem('budgeup_newsletter', String(newVal))
     setNewsletterLoading(true)
     try {
-      // Check if a newsletter consent row already exists for this user
       const { data: existing } = await supabase.from('user_consents')
         .select('id')
         .eq('user_id', userIdRef.current)
         .eq('scope', 'newsletter')
         .limit(1)
         .maybeSingle()
-
       if (newVal) {
         if (existing) {
-          // Unrevoke: clear revoked_at and update granted_at
           await supabase.from('user_consents')
             .update({ revoked_at: null, granted_at: new Date().toISOString() })
             .eq('id', existing.id)
@@ -515,7 +559,6 @@ export default function SettingsScreen() {
       }
       showToast(newVal ? 'Subscribed to newsletter' : 'Unsubscribed from newsletter')
     } catch (err) {
-      // Revert on failure
       setNewsletterOn(!newVal)
       localStorage.setItem('budgeup_newsletter', String(!newVal))
       showToast('Failed to update newsletter preference', 'error')
@@ -530,35 +573,26 @@ export default function SettingsScreen() {
     }
   }
 
-  const handleInviteFriends = async () => {
-    // Track invite intent
+  const handleShare = async () => {
     analytics.track(SETTINGS_EVENTS.INVITE_FRIENDS_CLICKED)
-
     try {
       const { data: { user } } = await supabase.auth.getUser()
-
-      // Create invite link with referral code (user ID)
       const referralCode = user?.id ? user.id.substring(0, 8) : ''
       const inviteUrl = referralCode
         ? `${window.location.origin}/signup?ref=${referralCode}`
         : `${window.location.origin}/signup`
-
       const shareData = {
-        title: 'Join Budge Up 🎉',
-        text: `This app makes it way easier to manage student money ✨\n\nThought you'd find it useful — here's my invite link!`,
+        title: 'Join Budge Up',
+        text: 'This app makes it way easier to manage student money. Thought you\'d find it useful \u2014 here\'s my invite link!',
         url: inviteUrl
       }
-
-      // Try native share API first (canShare may not exist on all iOS versions)
       if (navigator.share) {
         await navigator.share(shareData)
         analytics.track(SETTINGS_EVENTS.INVITE_SHARED, { method: 'native_share' })
       } else {
-        // Fallback: copy to clipboard
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(inviteUrl)
         } else {
-          // Fallback for non-secure contexts / older browsers
           const textarea = document.createElement('textarea')
           textarea.value = inviteUrl
           textarea.style.position = 'fixed'
@@ -573,7 +607,6 @@ export default function SettingsScreen() {
         analytics.track(SETTINGS_EVENTS.INVITE_SHARED, { method: 'clipboard' })
       }
     } catch (error) {
-      // User cancelled share or clipboard failed
       if (error.name !== 'AbortError') {
         console.error('Share failed:', error)
         showToast('Failed to share invite link', 'error')
@@ -581,23 +614,70 @@ export default function SettingsScreen() {
     }
   }
 
+  const handleCopyLink = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const referralCode = user?.id ? user.id.substring(0, 8) : ''
+      const inviteUrl = referralCode
+        ? `${window.location.origin}/signup?ref=${referralCode}`
+        : `${window.location.origin}/signup`
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(inviteUrl)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = inviteUrl
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2500)
+      analytics.track(SETTINGS_EVENTS.INVITE_SHARED, { method: 'clipboard' })
+    } catch (error) {
+      showToast('Failed to copy link', 'error')
+    }
+  }
+
+  const [qrUrl, setQrUrl] = useState(null)
+  const [showQr, setShowQr] = useState(false)
+
+  const handleShowQr = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const referralCode = user?.id ? user.id.substring(0, 8) : ''
+      const inviteUrl = referralCode
+        ? `${window.location.origin}/signup?ref=${referralCode}`
+        : `${window.location.origin}/signup`
+      // Use Google Charts QR API
+      const qr = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(inviteUrl)}`
+      setQrUrl(qr)
+      setShowQr(true)
+    } catch {
+      showToast('Failed to generate QR code', 'error')
+    }
+  }
+
   const policyLinks = [
-    { label: 'Privacy Policy', url: POLICY_URLS.privacy },
-    { label: 'Terms of Service', url: POLICY_URLS.terms },
-    { label: 'Cookie Policy', url: POLICY_URLS.cookies }
+    { label: 'Privacy Policy', url: POLICY_URLS.privacy, icon: <Shield size={18} /> },
+    { label: 'Terms of Service', url: POLICY_URLS.terms, icon: <FileText size={18} /> },
+    { label: 'Cookie Policy', url: POLICY_URLS.cookies, icon: <PiCookie size={18} /> },
   ]
 
+  const currencyLabel = CURRENCIES.find(c => c.code === currency)?.label || currency
 
   return (
     <div style={{
       height: '100vh',
       display: 'flex',
       flexDirection: 'column',
-      background: '#fff'
+      background: '#efefef',
     }}>
       {contextHolder}
 
-      {/* Invite link copied toast */}
+      {/* Toasts */}
       <div style={{
         position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
         background: '#1a1a1a', color: '#fff', borderRadius: 20,
@@ -609,8 +689,6 @@ export default function SettingsScreen() {
       }}>
         Invite link copied!
       </div>
-
-      {/* General toast */}
       <div style={{
         position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
         background: toast?.type === 'error' ? '#c0392b' : '#1a1a1a',
@@ -624,6 +702,7 @@ export default function SettingsScreen() {
         {toast?.text}
       </div>
 
+      {/* Modals */}
       <ConfirmModal
         open={showLogoutModal}
         title="Log out?"
@@ -633,7 +712,6 @@ export default function SettingsScreen() {
         onConfirm={confirmLogout}
         onCancel={() => setShowLogoutModal(false)}
       />
-
       <ConfirmModal
         open={showDeleteModal}
         title="Delete account?"
@@ -644,7 +722,6 @@ export default function SettingsScreen() {
         onConfirm={confirmDeleteAccount}
         onCancel={() => setShowDeleteModal(false)}
       />
-
       <ConfirmModal
         open={showResetModal}
         title="Reset all data?"
@@ -656,7 +733,57 @@ export default function SettingsScreen() {
         onCancel={() => setShowResetModal(false)}
       />
 
-      {/* CONTENT WRAPPER */}
+      {/* QR Code modal */}
+      {showQr && (
+        <div
+          onClick={() => setShowQr(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1100,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.35)',
+            backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#fff', borderRadius: 20, padding: '28px 24px',
+              width: 'calc(100% - 48px)', maxWidth: 300,
+              boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
+              textAlign: 'center',
+              animation: 'fadeIn 0.2s ease',
+            }}
+          >
+            <h3 style={{
+              margin: '0 0 4px', fontSize: 18, fontWeight: 700,
+              fontFamily: 'Nunito, sans-serif', color: '#1a1a1a',
+            }}>Invite a friend</h3>
+            <p style={{
+              margin: '0 0 20px', fontSize: 13, fontFamily: 'Nunito, sans-serif', color: '#888',
+            }}>Scan this QR code to sign up</p>
+            {qrUrl && (
+              <img
+                src={qrUrl}
+                alt="QR Code"
+                style={{ width: 180, height: 180, borderRadius: 12, margin: '0 auto 16px' }}
+              />
+            )}
+            <button
+              onClick={() => setShowQr(false)}
+              style={{
+                width: '100%', height: 44, borderRadius: 99, border: 'none',
+                fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                cursor: 'pointer', background: '#F3F3F3', color: '#1a1a1a',
+              }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SCROLLABLE CONTENT */}
       <div ref={settingsScrollRef} onScroll={() => {
         if (settingsScrollRef.current) sessionStorage.setItem('budgeup_scroll_settings', String(settingsScrollRef.current.scrollTop))
       }} style={{
@@ -664,111 +791,105 @@ export default function SettingsScreen() {
         overflowY: 'auto',
         overflowX: 'hidden',
         WebkitOverflowScrolling: 'touch',
-        padding: '30px 20px 0',
-        paddingBottom: 'calc(250px + env(safe-area-inset-bottom))'
+        padding: '20px 16px 0',
+        paddingBottom: 'calc(160px + env(safe-area-inset-bottom))',
       }}>
 
-        {/* INVITE FRIENDS */}
-        <div style={{ marginBottom: 40 }}>
+        {/* ACCOUNT HEADER */}
+        <div style={{
+          background: '#fff',
+          borderRadius: 16,
+          padding: '22px 20px',
+          marginBottom: 20,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #147B75, #1E9C94)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <User size={24} color="#fff" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 17, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {userEmail || 'Loading...'}
+              </div>
+              {userCreatedAt && (
+                <div style={{ fontSize: 13, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 2 }}>
+                  Joined {new Date(userCreatedAt + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                </div>
+              )}
+            </div>
+          </div>
 
-          <Button
-            type="default"
-            size="large"
-            block
-            onClick={handleInviteFriends}
-            style={{
-              borderRadius: 999,
-              height: 52,
-              background: 'linear-gradient(135deg,#147B75,#1E9C94)',
-              border: 'none',
-              color: '#fff',
-              fontSize: 16,
-              fontWeight: 600,
-              fontFamily: 'Nunito, sans-serif',
-              letterSpacing: 0.2,
-              boxShadow: '0 8px 18px rgba(20,123,117,0.28)',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8
-            }}
-          >
-            Invite Your Friends 🚀
-          </Button>
+          {/* Share actions */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={handleShare}
+              style={{
+                flex: 1, height: 42, borderRadius: 10,
+                background: '#147B75', border: 'none',
+                color: '#fff', fontSize: 14, fontWeight: 700,
+                fontFamily: 'Nunito, sans-serif', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              <Share2 size={16} /> Invite friends
+            </button>
+            <button
+              onClick={handleCopyLink}
+              style={{
+                width: 42, height: 42, borderRadius: 10,
+                background: '#f3f3f3', border: 'none',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Copy size={16} color="#666" />
+            </button>
+            <button
+              onClick={handleShowQr}
+              style={{
+                width: 42, height: 42, borderRadius: 10,
+                background: '#f3f3f3', border: 'none',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 18,
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="2" width="8" height="8" rx="1" />
+                <rect x="14" y="2" width="8" height="8" rx="1" />
+                <rect x="2" y="14" width="8" height="8" rx="1" />
+                <rect x="14" y="14" width="4" height="4" />
+                <rect x="20" y="14" width="2" height="2" />
+                <rect x="14" y="20" width="2" height="2" />
+                <rect x="20" y="20" width="2" height="2" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        {/* PREFERENCES */}
-        <div style={{ marginBottom: 32 }}>
-          <Title level={4} style={{ marginBottom: 16, fontSize: 16 }}>
-            Preferences
-          </Title>
-
+        {/* FINANCIAL */}
+        <div style={{ marginBottom: 16 }}>
           <div style={{
-            background: '#fafafa',
-            borderRadius: 12,
-            border: '1px solid #f0f0f0',
-          }}>
-            {/* University */}
-            <div style={{
-              padding: '14px 20px',
-              borderBottom: '1px solid #f0f0f0',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <Text style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>University</Text>
-                <SettingsSelect
-                  value={university}
-                  onChange={(e) => {
-                    const val = e.target.value
-                    setUniversity(val)
-                    try {
-                      const raw = localStorage.getItem('budgeup_onboarding_state')
-                      const parsed = raw ? JSON.parse(raw) : {}
-                      if (parsed.formData) {
-                        parsed.formData.university = val
-                        localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
-                      }
-                    } catch { }
-                    if (universitySaveTimerRef.current) clearTimeout(universitySaveTimerRef.current)
-                    universitySaveTimerRef.current = setTimeout(async () => {
-                      if (!userIdRef.current) return
-                      try {
-                        const raw = localStorage.getItem('budgeup_onboarding_state')
-                        const parsed = raw ? JSON.parse(raw) : {}
-                        await saveUserFinances(userIdRef.current, { ...parsed.formData, onboardingCompleted: true })
-                      } catch (err) {
-                        console.error('Failed to save university:', err)
-                      }
-                    }, 1500)
-                    if (hasCustomTermDates(val)) {
-                      const custom = getTermDatesForUniversity(val)
-                      // Only prompt if current term dates differ from the university's defaults
-                      const currentTerms = termDates?.terms || []
-                      const customTerms = custom.terms || []
-                      const alreadySet = currentTerms.length === customTerms.length &&
-                        customTerms.every((ct, i) => currentTerms[i]?.start === ct.start && currentTerms[i]?.end === ct.end)
-                      if (!alreadySet) {
-                        setTermDatesPrompt({ university: val, termDates: custom })
-                      }
-                    }
-                  }}
-                  style={{ width: 180 }}
-                >
-                  {UK_UNIVERSITIES.map(uni => (
-                    <option key={uni} value={uni}>{uni}</option>
-                  ))}
-                </SettingsSelect>
-              </div>
-            </div>
-
-            {/* Currency */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '14px 20px',
-              borderBottom: '1px solid #f0f0f0',
-            }}>
-              <Text style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif' }}>Currency</Text>
-              <SettingsSelect
+            fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+            color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+            padding: '0 6px', marginBottom: 8,
+          }}>Financial</div>
+          <div style={{ background: '#fff', borderRadius: 16 }}>
+            <SettingsRow
+              icon={<Globe size={18} />}
+              label="Currency"
+              value={currencyLabel}
+              onClick={() => toggle('currency')}
+              expanded={expanded === 'currency'}
+            >
+              <select
                 value={currency}
                 onChange={(e) => {
                   const code = e.target.value
@@ -778,26 +899,33 @@ export default function SettingsScreen() {
                   if (userIdRef.current) {
                     supabase.from('user_profiles').update({ currency: code, updated_at: new Date().toISOString() }).eq('user_id', userIdRef.current).then()
                   }
+                  setExpanded(null)
                 }}
-                style={{ width: 180 }}
+                style={{
+                  width: '100%', appearance: 'none', WebkitAppearance: 'none',
+                  border: '1px solid #e8e8e8', borderRadius: 10, padding: '10px 14px',
+                  fontSize: 15, fontFamily: 'Nunito, sans-serif', fontWeight: 600,
+                  background: '#fafafa', color: '#1a1a1a', cursor: 'pointer',
+                }}
               >
                 {CURRENCIES.map(c => (
                   <option key={c.code} value={c.code}>{c.label}</option>
                 ))}
-              </SettingsSelect>
-            </div>
+              </select>
+            </SettingsRow>
 
-            {/* Overdraft limit */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '14px 20px', borderBottom: '1px solid #f0f0f0',
-            }}>
-              <Text style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif' }}>Overdraft limit</Text>
+            <SettingsRow
+              icon={<AlertCircle size={18} />}
+              label="Overdraft limit"
+              value={overdraft ? `${getCurrencySymbol(currency)}${Number(overdraft).toLocaleString()}` : 'Not set'}
+              onClick={() => toggle('overdraft')}
+              expanded={expanded === 'overdraft'}
+            >
               <div style={{
-                display: 'inline-flex', alignItems: 'center',
+                display: 'flex', alignItems: 'center',
                 border: '1px solid #e8e8e8', borderRadius: 10,
-                padding: '0 14px', height: 40, gap: 6, width: 180,
-                background: '#fff',
+                padding: '0 14px', height: 44, gap: 6,
+                background: '#fafafa',
               }}>
                 <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>
                   {getCurrencySymbol(currency)}
@@ -844,84 +972,146 @@ export default function SettingsScreen() {
                   }}
                 />
               </div>
-            </div>
+            </SettingsRow>
 
-            {/* Show overdraft toggle */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '14px 20px', borderBottom: '1px solid #f0f0f0',
-            }}>
-              <Text style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif' }}>Show overdraft on graph</Text>
-              <button
-                onClick={() => {
-                  const current = localStorage.getItem('budgeup_show_overdraft') !== 'false'
-                  localStorage.setItem('budgeup_show_overdraft', String(!current))
-                  setShowOverdraftToggle(!current)
-                }}
-                style={{
-                  width: 48, height: 26, borderRadius: 13,
-                  background: showOverdraftToggle ? '#147b75' : '#e0e0e0',
-                  border: 'none', cursor: 'pointer', padding: 0,
-                  position: 'relative', flexShrink: 0,
-                  transition: 'background 0.2s ease',
-                }}
-              >
-                <div style={{
-                  width: 22, height: 22, borderRadius: '50%',
-                  background: '#fff', position: 'absolute', top: 2,
-                  left: showOverdraftToggle ? 24 : 2,
-                  transition: 'left 0.2s ease',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-                }} />
-              </button>
-            </div>
-
-            {/* Graph start date */}
-            <div style={{
-              padding: '14px 20px',
-              borderBottom: (termDates || termDatesLoading) ? '1px solid #f0f0f0' : 'none',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <Text style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>Graph starts from</Text>
-                <SettingsSelect
-                  value={graphStartMode}
+            <SettingsRow
+              icon={<DollarSign size={18} />}
+              label="Starting balance"
+              value={startingBalance ? `${getCurrencySymbol(currency)}${Number(startingBalance).toLocaleString()}` : 'Not set'}
+              onClick={() => toggle('startingBalance')}
+              expanded={expanded === 'startingBalance'}
+            >
+              <p style={{ fontSize: 12, color: '#999', fontFamily: 'Nunito, sans-serif', margin: '0 0 8px' }}>
+                Your bank balance when you started using the app
+              </p>
+              <div style={{
+                display: 'flex', alignItems: 'center',
+                border: '1px solid #e8e8e8', borderRadius: 10,
+                padding: '0 14px', height: 44, gap: 6,
+                background: '#fafafa',
+              }}>
+                <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>
+                  {getCurrencySymbol(currency)}
+                </span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={(() => {
+                    if (!startingBalance) return ''
+                    const [whole, ...rest] = String(startingBalance).split('.')
+                    const formatted = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+                    return rest.length ? `${formatted}.${rest.join('.')}` : formatted
+                  })()}
+                  placeholder="0.00"
                   onChange={(e) => {
-                    const mode = e.target.value
-                    setGraphStartMode(mode)
-                    localStorage.setItem('budgeup_graph_start_mode', mode)
-                    let newDate = null
-                    if (mode === 'joined') {
-                      newDate = graphStartRef.current || getGraphStart()
-                    } else if (mode === 'first_term' && firstTermStart) {
-                      newDate = firstTermStart
-                    }
-                    if (newDate) {
-                      setGraphStartState(newDate)
-                      graphStartRef.current = newDate
-                      setGraphStart(newDate)
-                      if (userIdRef.current) {
-                        supabase.from('user_profiles').update({ graph_start: newDate, updated_at: new Date().toISOString() }).eq('user_id', userIdRef.current).then()
+                    let val = e.target.value.replace(/[^0-9.]/g, '')
+                    const parts = val.split('.')
+                    if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('')
+                    setStartingBalance(val)
+                    try {
+                      const raw = localStorage.getItem('budgeup_onboarding_state')
+                      const parsed = raw ? JSON.parse(raw) : {}
+                      if (!parsed.formData) parsed.formData = {}
+                      parsed.formData.balance = val
+                      localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
+                    } catch { }
+                    if (startingBalanceSaveTimerRef.current) clearTimeout(startingBalanceSaveTimerRef.current)
+                    startingBalanceSaveTimerRef.current = setTimeout(async () => {
+                      if (!userIdRef.current) return
+                      try {
+                        await supabase
+                          .from('user_profiles')
+                          .update({ balance: Number(val.replace(/,/g, '')) || 0, updated_at: new Date().toISOString() })
+                          .eq('user_id', userIdRef.current)
+                      } catch (err) {
+                        console.error('Failed to save starting balance:', err)
                       }
-                    }
+                    }, 1500)
                   }}
-                  style={{ width: 180 }}
-                >
-                  {firstTermStart && <option value="first_term">Start of first term</option>}
-                  <option value="joined">When I joined</option>
-                  <option value="custom">Custom date</option>
-                </SettingsSelect>
+                  style={{
+                    flex: 1, border: 'none', background: 'transparent',
+                    fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
+                    color: '#000', outline: 'none', padding: 0,
+                  }}
+                />
               </div>
-              {graphStartMode === 'custom' && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ position: 'relative', display: 'inline-block' }}>
-                    <span style={{
-                      fontSize: 13, fontWeight: 600, color: '#147b75',
-                      borderBottom: '1px dotted rgba(20,123,117,0.45)',
-                      paddingBottom: 1, fontFamily: 'Nunito, sans-serif',
-                      pointerEvents: 'none',
+            </SettingsRow>
+
+            <SettingsRow
+              icon={<Calendar size={18} />}
+              label="Graph starts from"
+              value={
+                graphStartMode === 'first_term' ? 'First term' :
+                  graphStartMode === 'custom' ? new Date(graphStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) :
+                    'When I joined'
+              }
+              onClick={() => toggle('graphStart')}
+              expanded={expanded === 'graphStart'}
+              last
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[
+                  ...(firstTermStart ? [{ key: 'first_term', label: 'Start of first term', sub: new Date(firstTermStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) }] : []),
+                  { key: 'joined', label: 'When I joined', sub: userCreatedAt ? new Date(userCreatedAt + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null },
+                  { key: 'custom', label: 'Custom date', sub: null },
+                ].map(opt => (
+                  <button
+                    key={opt.key}
+                    onClick={() => {
+                      setGraphStartMode(opt.key)
+                      localStorage.setItem('budgeup_graph_start_mode', opt.key)
+                      let newDate = null
+                      if (opt.key === 'joined' && userCreatedAt) {
+                        newDate = userCreatedAt
+                      } else if (opt.key === 'first_term' && firstTermStart) {
+                        newDate = firstTermStart
+                      }
+                      if (newDate) {
+                        setGraphStartState(newDate)
+                        graphStartRef.current = newDate
+                        setGraphStart(newDate)
+                        if (userIdRef.current) {
+                          supabase.from('user_profiles').update({ graph_start: newDate, updated_at: new Date().toISOString() }).eq('user_id', userIdRef.current).then()
+                        }
+                      }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      width: '100%', padding: '10px 14px', border: 'none',
+                      borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                      background: graphStartMode === opt.key ? '#f0faf9' : '#fafafa',
+                      border: graphStartMode === opt.key ? '2px solid #147b75' : '1.5px solid #e8e8e8',
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                        {opt.label}
+                      </div>
+                      {opt.sub && (
+                        <div style={{ fontSize: 12, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 1 }}>
+                          {opt.sub}
+                        </div>
+                      )}
+                    </div>
+                    {graphStartMode === opt.key && (
+                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#147b75', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5L4.2 7.5L8 2.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      </div>
+                    )}
+                  </button>
+                ))}
+                {graphStartMode === 'custom' && (
+                  <div style={{ position: 'relative', marginTop: 4 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 14px', borderRadius: 10,
+                      border: '1px solid #e8e8e8', background: '#fafafa',
                     }}>
-                      {new Date(graphStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </span>
+                      <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>
+                        {new Date(graphStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                      <span style={{ fontSize: 12, color: '#999', fontFamily: 'Nunito, sans-serif' }}>Tap to change</span>
+                    </div>
                     <input
                       type="date"
                       value={graphStart}
@@ -948,37 +1138,100 @@ export default function SettingsScreen() {
                       }}
                     />
                   </div>
-                </div>
-              )}
-              {graphStartMode === 'joined' && (
-                <span style={{ fontSize: 13, color: '#888', fontFamily: 'Nunito, sans-serif', display: 'block', marginTop: 8 }}>
-                  {new Date(graphStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </span>
-              )}
-              {graphStartMode === 'first_term' && (
-                firstTermStart ? (
-                  <span style={{ fontSize: 13, color: '#888', fontFamily: 'Nunito, sans-serif', display: 'block', marginTop: 8 }}>
-                    {new Date(firstTermStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </span>
-                ) : (
-                  <LoadingSkeleton width={140} height={16} borderRadius={8} style={{ marginTop: 8 }} />
-                )
-              )}
-            </div>
+                )}
+              </div>
+            </SettingsRow>
+          </div>
+        </div>
 
-            {/* Term dates */}
-            <div style={{ padding: '14px 16px' }}>
-              <span style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', display: 'block', marginBottom: 10 }}>Term dates</span>
+        {/* UNIVERSITY & TERMS */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{
+            fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+            color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+            padding: '0 6px', marginBottom: 8,
+          }}>University & Terms</div>
+          <div style={{ background: '#fff', borderRadius: 16 }}>
+            <SettingsRow
+              icon={<BookOpen size={18} />}
+              label="University"
+              value={university || 'Not set'}
+              onClick={() => toggle('university')}
+              expanded={expanded === 'university'}
+            >
+              <div style={{ position: 'relative' }}>
+                <select
+                  value={university}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setUniversity(val)
+                    try {
+                      const raw = localStorage.getItem('budgeup_onboarding_state')
+                      const parsed = raw ? JSON.parse(raw) : {}
+                      if (parsed.formData) {
+                        parsed.formData.university = val
+                        localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
+                      }
+                    } catch { }
+                    if (universitySaveTimerRef.current) clearTimeout(universitySaveTimerRef.current)
+                    universitySaveTimerRef.current = setTimeout(async () => {
+                      if (!userIdRef.current) return
+                      try {
+                        const raw = localStorage.getItem('budgeup_onboarding_state')
+                        const parsed = raw ? JSON.parse(raw) : {}
+                        await saveUserFinances(userIdRef.current, { ...parsed.formData, onboardingCompleted: true })
+                      } catch (err) {
+                        console.error('Failed to save university:', err)
+                      }
+                    }, 1500)
+                    if (hasCustomTermDates(val)) {
+                      const custom = getTermDatesForUniversity(val)
+                      const currentTerms = termDates?.terms || []
+                      const customTerms = custom.terms || []
+                      const alreadySet = currentTerms.length === customTerms.length &&
+                        customTerms.every((ct, i) => currentTerms[i]?.start === ct.start && currentTerms[i]?.end === ct.end)
+                      if (!alreadySet) {
+                        setTermDatesPrompt({ university: val, termDates: custom })
+                      }
+                    }
+                  }}
+                  style={{
+                    width: '100%', appearance: 'none', WebkitAppearance: 'none',
+                    border: '1.5px solid #e0e0e0', borderRadius: 10, padding: '10px 38px 10px 14px',
+                    fontSize: 15, fontFamily: 'Nunito, sans-serif', fontWeight: 600,
+                    background: '#f5f5f5', color: '#1a1a1a', cursor: 'pointer',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  {UK_UNIVERSITIES.map(uni => (
+                    <option key={uni} value={uni}>{uni}</option>
+                  ))}
+                </select>
+                <ChevronRight size={16} color="#999" style={{
+                  position: 'absolute', right: 12, top: '50%',
+                  transform: 'translateY(-50%) rotate(90deg)',
+                  pointerEvents: 'none',
+                }} />
+              </div>
+            </SettingsRow>
+
+            <SettingsRow
+              icon={<Calendar size={18} />}
+              label="Term dates"
+              onClick={() => toggle('termDates')}
+              expanded={expanded === 'termDates'}
+              last
+            >
               {termDatesLoading ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <LoadingSkeleton height={58} style={{ opacity: 0, animation: 'fadeIn 0.3s ease 0s forwards' }} />
                   <LoadingSkeleton height={58} style={{ opacity: 0, animation: 'fadeIn 0.3s ease 0.1s forwards' }} />
-                  <LoadingSkeleton height={58} style={{ opacity: 0, animation: 'fadeIn 0.3s ease 0.2s forwards' }} />
                 </div>
               ) : termDates ? (
                 <div style={{ animation: 'fadeIn 0.35s ease' }}>
                   <TermDatesStep
                     compact
+                    noAutoScroll
                     termData={termDates}
                     updateTermDates={(updated) => {
                       setTermDates(updated)
@@ -1011,139 +1264,116 @@ export default function SettingsScreen() {
                   No term dates found
                 </span>
               )}
-            </div>
+            </SettingsRow>
           </div>
         </div>
 
-        {/* LEGAL */}
-        <Title level={4} style={{ marginBottom: 16, fontSize: 16 }}>
-          Legal & Privacy
-        </Title>
-
-        <div style={{
-          background: '#fafafa',
-          borderRadius: 12,
-          overflow: 'hidden',
-          border: '1px solid #f0f0f0',
-          marginBottom: 32
-        }}>
-          {policyLinks.map((link, index) => (
-            <a
-              key={link.label}
-              href={link.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'block',
-                padding: '16px 20px',
-                color: '#262626',
-                textDecoration: 'none',
-                borderBottom: index < policyLinks.length - 1 ? '1px solid #f0f0f0' : 'none'
-              }}
-            >
-              <Text>{link.label}</Text>
-              <span style={{ float: 'right', color: '#8c8c8c' }}>→</span>
-            </a>
-          ))}
-
-          <button
-            onClick={handleCookiePreferences}
-            style={{
-              width: '100%',
-              display: 'block',
-              padding: '16px 20px',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: '1px solid #f0f0f0',
-              textAlign: 'left',
-              cursor: 'pointer'
-            }}
-          >
-            <Text>Cookie Preferences</Text>
-            <span style={{ float: 'right', color: '#8c8c8c' }}>→</span>
-          </button>
-
-          {/* Newsletter toggle */}
+        {/* LEGAL & PRIVACY */}
+        <div style={{ marginBottom: 16 }}>
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '14px 20px',
-          }}>
-            <Text style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif' }}>Weekly newsletter</Text>
+            fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+            color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+            padding: '0 6px', marginBottom: 8,
+          }}>Legal & Privacy</div>
+          <div style={{ background: '#fff', borderRadius: 16 }}>
+            {policyLinks.map((link, i) => (
+              <a
+                key={link.label}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 14,
+                  padding: '15px 18px', textDecoration: 'none',
+                  borderBottom: i < policyLinks.length - 1 ? '1px solid #f0f0f0' : 'none',
+                }}
+              >
+                <span style={{ color: '#888', flexShrink: 0, display: 'flex' }}>{link.icon}</span>
+                <span style={{ flex: 1, fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                  {link.label}
+                </span>
+                <ExternalLink size={15} color="#ccc" />
+              </a>
+            ))}
+
             <button
-              onClick={handleNewsletterToggle}
+              onClick={handleCookiePreferences}
               style={{
-                width: 48, height: 26, borderRadius: 13,
-                background: newsletterOn ? '#147b75' : '#e0e0e0',
-                border: 'none', cursor: 'pointer', padding: 0,
-                position: 'relative', flexShrink: 0,
-                opacity: newsletterLoading ? 0.5 : 1,
-                transition: 'background 0.2s ease, opacity 0.2s ease',
+                width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+                padding: '15px 18px', background: 'transparent', border: 'none',
+                borderBottom: '1px solid #f0f0f0',
+                cursor: 'pointer', textAlign: 'left',
               }}
             >
-              <div style={{
-                width: 22, height: 22, borderRadius: '50%',
-                background: '#fff', position: 'absolute', top: 2,
-                left: newsletterOn ? 24 : 2,
-                transition: 'left 0.2s ease',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
-              }} />
+              <span style={{ color: '#888', flexShrink: 0, display: 'flex' }}><Sliders size={18} /></span>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                Cookie Preferences
+              </span>
+              <ChevronRight size={18} color="#ccc" />
+            </button>
+
+          </div>
+        </div>
+
+        {/* ACCOUNT ACTIONS */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{
+            fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+            color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+            padding: '0 6px', marginBottom: 8,
+          }}>Account</div>
+          <div style={{ background: '#fff', borderRadius: 16 }}>
+            <button
+              onClick={() => setShowResetModal(true)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+                padding: '15px 18px', background: 'transparent', border: 'none',
+                borderBottom: '1px solid #f0f0f0',
+                cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <span style={{ color: '#888', flexShrink: 0, display: 'flex' }}><RefreshCw size={18} /></span>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                Reset all data
+              </span>
+              <ChevronRight size={18} color="#ccc" />
+            </button>
+
+            <button
+              onClick={handleLogout}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+                padding: '15px 18px', background: 'transparent', border: 'none',
+                borderBottom: '1px solid #f0f0f0',
+                cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <span style={{ color: '#888', flexShrink: 0, display: 'flex' }}><LogOut size={18} /></span>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                Log out
+              </span>
+              <ChevronRight size={18} color="#ccc" />
+            </button>
+
+            <button
+              onClick={handleDeleteAccount}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+                padding: '15px 18px', background: 'transparent', border: 'none',
+                cursor: 'pointer', textAlign: 'left',
+              }}
+            >
+              <span style={{ color: '#E5484D', flexShrink: 0, display: 'flex' }}><Trash2 size={18} /></span>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#E5484D' }}>
+                Delete account
+              </span>
+              <ChevronRight size={18} color="#ccc" />
             </button>
           </div>
         </div>
 
-
-        {/* ACCOUNT ACTIONS */}
-        <div style={{ marginBottom: 40 }}>
-          <Title level={4} style={{ marginBottom: 16, fontSize: 16 }}>
-            Account
-          </Title>
-
-          {/* User Email */}
-          {(
-            <div style={{
-              background: '#fafafa',
-              borderRadius: 12,
-              padding: '16px 20px',
-              marginBottom: 16,
-              border: '1px solid #f0f0f0'
-            }}>
-
-              <Text style={{ fontSize: 15 }}>
-                {userEmail || 'Loading...'}
-              </Text>
-            </div>
-          )}
-
-          <Button
-            block
-            onClick={() => setShowResetModal(true)}
-            style={{ borderRadius: 8, height: 48, marginBottom: 12 }}
-          >
-            Reset all data
-          </Button>
-
-          <Button
-            block
-            loading={loggingOut}
-            onClick={handleLogout}
-            style={{ borderRadius: 8, height: 48, marginBottom: 12 }}
-          >
-            Log out
-          </Button>
-
-          <Button
-            danger
-            block
-            loading={deletingAccount}
-            onClick={handleDeleteAccount}
-            style={{ borderRadius: 8, height: 48 }}
-          >
-            Delete account
-          </Button>
-        </div>
-
         {/* APP INFO */}
-        <div style={{ textAlign: 'center', marginTop: 40 }}>
+        <div style={{ textAlign: 'center', marginTop: 24, marginBottom: 20 }}>
           <Text type="secondary" style={{ fontSize: 13 }}>
             Budge Up v0.2.0
           </Text>
@@ -1154,67 +1384,70 @@ export default function SettingsScreen() {
       {/* Term dates auto-set prompt */}
       {termDatesPrompt && (
         <div style={{
-          position: 'fixed', inset: 0, zIndex: 1000,
+          position: 'fixed', inset: 0, zIndex: 1100,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: 'rgba(0,0,0,0.35)',
+          backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
           animation: 'fadeIn 0.2s ease',
         }}
           onClick={() => setTermDatesPrompt(null)}
         >
           <div
             style={{
-              background: '#fff', borderRadius: 16, padding: '24px 22px 20px',
+              background: '#fff', borderRadius: 20, padding: '28px 24px 20px',
               width: 'calc(100% - 48px)', maxWidth: 340,
-              boxShadow: '0 8px 30px rgba(0,0,0,0.18)',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
               animation: 'fadeIn 0.2s ease',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontSize: 16, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', marginBottom: 8 }}>
-              Update term dates?
-            </div>
-            <div style={{ fontSize: 13, fontFamily: 'Nunito, sans-serif', color: '#666', lineHeight: 1.5, marginBottom: 20 }}>
+            <h3 style={{
+              margin: '0 0 8px', fontSize: 19, fontWeight: 700,
+              fontFamily: 'Nunito, sans-serif', textAlign: 'center', color: '#1a1a1a',
+            }}>Update term dates?</h3>
+            <p style={{
+              margin: '0 0 24px', fontSize: 15, lineHeight: 1.5,
+              fontFamily: 'Nunito, sans-serif', textAlign: 'center', color: '#666',
+            }}>
               We have term dates for {termDatesPrompt.university}. Would you like to auto-set them? This will replace your current term dates.
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setTermDatesPrompt(null)}
-                style={{
-                  flex: 1, height: 40, border: '1px solid #e0e0e0', borderRadius: 10,
-                  background: '#fff', fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                  color: '#666', cursor: 'pointer',
-                }}
-              >
-                No thanks
-              </button>
-              <button
-                onClick={() => {
-                  const td = termDatesPrompt.termDates
-                  setTermDates(td)
-                  try {
-                    const raw = localStorage.getItem('budgeup_onboarding_state')
-                    const parsed = raw ? JSON.parse(raw) : {}
-                    if (parsed.formData) {
-                      parsed.formData.termDates = td
-                      localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
-                    }
-                  } catch { }
-                  if (userIdRef.current) {
-                    saveTermDates(userIdRef.current, td).catch(err =>
-                      console.error('Failed to save term dates:', err)
-                    )
+            </p>
+            <button
+              onClick={() => {
+                const td = termDatesPrompt.termDates
+                setTermDates(td)
+                try {
+                  const raw = localStorage.getItem('budgeup_onboarding_state')
+                  const parsed = raw ? JSON.parse(raw) : {}
+                  if (parsed.formData) {
+                    parsed.formData.termDates = td
+                    localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
                   }
-                  setTermDatesPrompt(null)
-                }}
-                style={{
-                  flex: 1, height: 40, border: 'none', borderRadius: 10,
-                  background: '#147b75', fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                  color: '#fff', cursor: 'pointer',
-                }}
-              >
-                Yes, update
-              </button>
-            </div>
+                } catch { }
+                if (userIdRef.current) {
+                  saveTermDates(userIdRef.current, td).catch(err =>
+                    console.error('Failed to save term dates:', err)
+                  )
+                }
+                setTermDatesPrompt(null)
+              }}
+              style={{
+                width: '100%', height: 48, borderRadius: 99, border: 'none',
+                fontSize: 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                cursor: 'pointer', background: '#147B75', color: '#fff', marginBottom: 10,
+              }}
+            >
+              Yes, update
+            </button>
+            <button
+              onClick={() => setTermDatesPrompt(null)}
+              style={{
+                width: '100%', height: 48, borderRadius: 99, border: 'none',
+                fontSize: 16, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                cursor: 'pointer', background: '#F3F3F3', color: '#1a1a1a',
+              }}
+            >
+              No thanks
+            </button>
           </div>
         </div>
       )}

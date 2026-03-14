@@ -8,7 +8,12 @@ function formatDisplay(raw) {
     return rest.length ? `${formatted}.${rest.join('.')}` : formatted
 }
 
-export default function OverdraftStep({ overdraft, updateOverdraft }) {
+export default function OverdraftStep({
+    overdraft,
+    updateOverdraft,
+    heading = 'Overdraft Limit',
+    subtitle = "Leave blank if you don't have one.",
+}) {
     const [rawAmount, setRawAmount] = useState(() => {
         const n = parseFloat(String(overdraft || '').replace(/,/g, ''))
         return n ? String(n) : ''
@@ -34,13 +39,13 @@ export default function OverdraftStep({ overdraft, updateOverdraft }) {
                 fontFamily: 'Nunito, sans-serif',
                 color: '#000', margin: '0 0 8px', lineHeight: 1.3,
             }}>
-                Overdraft Limit
+                {heading}
             </h2>
             <p style={{
                 fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                color: '#5e5e5e', margin: '0 0 24px', lineHeight: 1.5,
+                color: '#444', margin: '0 0 24px', lineHeight: 1.5,
             }}>
-                What’s your overdraft limit? Leave blank if you don’t have one.
+                {subtitle}
             </p>
 
             <div style={{
@@ -51,7 +56,7 @@ export default function OverdraftStep({ overdraft, updateOverdraft }) {
             }}>
                 <span style={{
                     fontSize: 20, fontWeight: 600,
-                    color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
+                    color: '#444', fontFamily: 'Nunito, sans-serif',
                 }}>{getCurrencySymbol()}</span>
 
                 <input

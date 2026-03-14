@@ -85,6 +85,8 @@ export default function BursaryStep({
     bursaryInstalmentAmounts,
     updateBursaryInstalmentAmounts,
     compact = false,
+    heading = 'Bursary',
+    subtitle = "Scholarships, grants, or uni bursaries you've been awarded.",
 }) {
     const [tab, setTab] = useState('yearly')
     const [rawAmount, setRawAmount] = useState(() => {
@@ -262,13 +264,13 @@ export default function BursaryStep({
                         fontFamily: 'Nunito, sans-serif',
                         color: '#000', margin: '0 0 8px', lineHeight: 1.3,
                     }}>
-                        Bursary
+                        {heading}
                     </h2>
                     <p style={{
                         fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                        color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5,
+                        color: '#444', margin: '0 0 16px', lineHeight: 1.5,
                     }}>
-                        Scholarships, grants, or uni bursaries you've been awarded.
+                        {subtitle}
                     </p>
                 </div>
             )}
@@ -281,62 +283,74 @@ export default function BursaryStep({
                 minHeight: 0,
             }} ref={scrollRef}>
                 {/* Tab switcher */}
-                <div style={{
-                    background: '#f3f3f3', borderRadius: 10,
-                    padding: 3, display: 'flex', gap: 0,
-                    marginBottom: 20, flexShrink: 0,
-                }}>
-                    {[
+                {(() => {
+                    const tabs = [
                         { id: 'yearly', label: 'Year Total' },
                         { id: 'instalment', label: 'Per Instalment' },
-                    ].map(({ id, label }) => (
-                        <button
-                            key={id}
-                            onClick={() => {
-                                const ms = (bursaryMonths || DEFAULT_BURSARY_MONTHS)
-                                    .slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
-                                if (id === 'instalment' && tab !== 'instalment') {
-                                    // Split yearly total equally among selected months
-                                    const yearlyVal = parseFloat(String(bursaryAmount || '').replace(/,/g, ''))
-                                    if (yearlyVal > 0 && ms.length > 0) {
-                                        const amounts = splitEvenly(yearlyVal, ms.length)
-                                        const newInstalments = {}
-                                        const newRaw = {}
-                                        ms.forEach((m, i) => {
-                                            newInstalments[m] = String(amounts[i])
-                                            newRaw[m] = String(amounts[i])
-                                        })
-                                        updateBursaryInstalmentAmounts(newInstalments)
-                                        setRawInstalments(newRaw)
-                                    }
-                                }
-                                if (id === 'yearly' && tab !== 'yearly') {
-                                    // Sum instalment amounts into yearly total
-                                    const total = ms.reduce((sum, m) => {
-                                        return sum + (parseFloat(String(bursaryInstalmentAmounts?.[m] || '').replace(/,/g, '')) || 0)
-                                    }, 0)
-                                    if (total > 0) {
-                                        const rounded = Math.round(total * 100) / 100
-                                        setRawAmount(String(rounded))
-                                        updateBursaryAmount(String(rounded))
-                                    }
-                                }
-                                setTab(id)
-                            }}
-                            style={{
-                                flex: 1, height: 36, border: 'none',
-                                borderRadius: 10, cursor: 'pointer',
-                                background: tab === id ? '#fff' : 'transparent',
-                                color: tab === id ? '#000' : '#838383',
-                                fontSize: 14, fontWeight: 700,
-                                fontFamily: 'Nunito, sans-serif',
-                                transition: 'background 0.2s ease, color 0.2s ease',
-                            }}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                </div>
+                    ]
+                    const activeIndex = tabs.findIndex(t => t.id === tab)
+                    return (
+                        <div style={{
+                            display: 'flex', width: '100%', position: 'relative',
+                            background: '#fff', borderRadius: 50, padding: 3,
+                            marginBottom: 20, flexShrink: 0,
+                            border: '1px solid #f0f0f0',
+                        }}>
+                            <div style={{
+                                position: 'absolute', top: 3, bottom: 3,
+                                left: `calc(${(activeIndex / 2) * 100}% + 3px)`,
+                                width: `calc(50% - 4px)`,
+                                background: '#147b75', borderRadius: 50,
+                                transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            }} />
+                            {tabs.map(({ id, label }) => (
+                                <div
+                                    key={id}
+                                    onClick={() => {
+                                        const ms = (bursaryMonths || DEFAULT_BURSARY_MONTHS)
+                                            .slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
+                                        if (id === 'instalment' && tab !== 'instalment') {
+                                            const yearlyVal = parseFloat(String(bursaryAmount || '').replace(/,/g, ''))
+                                            if (yearlyVal > 0 && ms.length > 0) {
+                                                const amounts = splitEvenly(yearlyVal, ms.length)
+                                                const newInstalments = {}
+                                                const newRaw = {}
+                                                ms.forEach((m, i) => {
+                                                    newInstalments[m] = String(amounts[i])
+                                                    newRaw[m] = String(amounts[i])
+                                                })
+                                                updateBursaryInstalmentAmounts(newInstalments)
+                                                setRawInstalments(newRaw)
+                                            }
+                                        }
+                                        if (id === 'yearly' && tab !== 'yearly') {
+                                            const total = ms.reduce((sum, m) => {
+                                                return sum + (parseFloat(String(bursaryInstalmentAmounts?.[m] || '').replace(/,/g, '')) || 0)
+                                            }, 0)
+                                            if (total > 0) {
+                                                const rounded = Math.round(total * 100) / 100
+                                                setRawAmount(String(rounded))
+                                                updateBursaryAmount(String(rounded))
+                                            }
+                                        }
+                                        setTab(id)
+                                    }}
+                                    style={{
+                                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        padding: '8px 0', borderRadius: 50, cursor: 'pointer',
+                                        position: 'relative', zIndex: 1,
+                                        color: tab === id ? '#fff' : '#1a1a1a',
+                                        fontSize: 13, fontWeight: 700,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        transition: tab === id ? 'color 0.12s ease 0.12s' : 'color 0.15s ease 0.15s',
+                                    }}
+                                >
+                                    {label}
+                                </div>
+                            ))}
+                        </div>
+                    )
+                })()}
 
                 {/* Year Total */}
                 {tab === 'yearly' && (
@@ -356,7 +370,7 @@ export default function BursaryStep({
                         }}>
                             <span style={{
                                 fontSize: 16, fontWeight: 600,
-                                color: '#5e5e5e', fontFamily: 'Nunito, sans-serif',
+                                color: '#444', fontFamily: 'Nunito, sans-serif',
                             }}>{getCurrencySymbol()}</span>
                             <input
                                 ref={amountInputRef}
@@ -396,7 +410,7 @@ export default function BursaryStep({
                     marginBottom: 16,
                 }}>
                     <div style={{
-                        display: 'flex', flexWrap: 'wrap', gap: 6,
+                        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
                         padding: '10px 12px',
                     }}>
                         {ALL_MONTH_KEYS.map(m => {
@@ -406,14 +420,16 @@ export default function BursaryStep({
                                     key={m}
                                     onClick={() => toggleMonth(m)}
                                     style={{
-                                        background: selected ? '#147b75' : '#f5f5f5',
-                                        color: selected ? '#fff' : '#aaa',
-                                        border: 'none', borderRadius: 8,
-                                        padding: '6px 12px',
+                                        background: selected ? '#147b75' : '#fff',
+                                        color: selected ? '#fff' : '#999',
+                                        border: selected ? '1.5px solid #147b75' : '1.5px solid #e8e8e8',
+                                        borderRadius: 50,
+                                        padding: '8px 0',
                                         fontSize: 12, fontWeight: 700,
                                         fontFamily: 'Nunito, sans-serif',
                                         cursor: 'pointer',
-                                        transition: 'background 0.15s ease, color 0.15s ease',
+                                        transition: 'all 0.2s ease',
+                                        boxShadow: selected ? '0 2px 8px rgba(20,123,117,0.2)' : 'none',
                                     }}
                                 >
                                     {SHORT_MONTH[m]}
@@ -435,7 +451,7 @@ export default function BursaryStep({
                                 <span style={{
                                     fontSize: 13, fontWeight: 600,
                                     fontFamily: 'Nunito, sans-serif',
-                                    color: '#5e5e5e',
+                                    color: '#444',
                                 }}>
                                     {SHORT_MONTH[m]}
                                 </span>
@@ -511,7 +527,7 @@ export default function BursaryStep({
                                 <p style={{
                                     fontSize: 10, fontWeight: 500,
                                     fontFamily: 'Nunito, sans-serif',
-                                    color: '#5e5e5e', margin: '2px 0 0',
+                                    color: '#444', margin: '2px 0 0',
                                 }}>
                                     Optional – helps us forecast your budget more accurately
                                 </p>

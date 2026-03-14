@@ -1,9 +1,29 @@
 // DEV: set to 'onboarding' or 'dashboard' to bypass login and jump to that view. Set to null for normal behaviour.
 const DEV_VIEW = null
 
-import { useEffect, useRef, useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { supabase } from './lib/supabaseClient'
+
+function setThemeColor(color) {
+    // Remove and re-insert the meta tag to force iOS Safari to re-read it
+    // (Safari ignores setAttribute changes intermittently)
+    const existing = document.querySelector('meta[name="theme-color"]')
+    if (existing) existing.remove()
+    const meta = document.createElement('meta')
+    meta.name = 'theme-color'
+    meta.content = color
+    document.head.appendChild(meta)
+}
+
+function ThemeColorSync({ color }) {
+    const location = useLocation()
+    const resolved = color || (location.pathname === '/dashboard' ? '#efefef' : '#ffffff')
+    useLayoutEffect(() => {
+        setThemeColor(resolved)
+    }, [resolved])
+    return null
+}
 
 // Detect magic link callback before React processes/clears the URL
 const authCallbackPending =
@@ -175,9 +195,16 @@ export default function App() {
         }
     }, [session?.user?.id])
 
+    // Keep theme-color in sync for non-router states (loading, onboarding, auth)
+    const isMainApp = session && !passwordRecovery && hasCompletedOnboarding === true && DEV_VIEW !== 'onboarding'
+    const isLoading = loading || onboardingLoading || processingSignup || (session?.user?.id && hasCompletedOnboarding === null)
+    useLayoutEffect(() => {
+        if (!isMainApp) setThemeColor(isLoading ? '#efefef' : '#ffffff')
+    }, [isMainApp, isLoading])
+
     /* ---------------- LOADING STATE ---------------- */
 
-    if (loading || onboardingLoading || processingSignup || (session?.user?.id && hasCompletedOnboarding === null)) {
+    if (!DEV_VIEW && (loading || onboardingLoading || processingSignup || (session?.user?.id && hasCompletedOnboarding === null))) {
         return (
             <div
                 style={{
@@ -185,7 +212,7 @@ export default function App() {
                     height: '80vh',
                     display: 'grid',
                     placeItems: 'center',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: '#efefef',
                 }}
             >
                 <Spin size="large" />
@@ -196,9 +223,10 @@ export default function App() {
 
     /* ---------------- NOT AUTHENTICATED / PASSWORD RECOVERY ---------------- */
 
-    if (!session || passwordRecovery) {
+    if (!DEV_VIEW && (!session || passwordRecovery)) {
         return (
             <BrowserRouter>
+                <ThemeColorSync color="#ffffff" />
                 <Routes>
                     <Route element={<AuthContainer />}>
                         <Route path="/login" element={<LoginForm />} />
@@ -218,6 +246,10 @@ export default function App() {
 
     /* ---------------- ONBOARDING NOT COMPLETE ---------------- */
 
+    if (DEV_VIEW === 'onboarding') {
+        // Reset to university step in dev mode
+        localStorage.removeItem('budgeup_onboarding_state')
+    }
     if (DEV_VIEW === 'onboarding' || hasCompletedOnboarding === false) {
         if (showLoadingScreen) {
             return (
@@ -242,6 +274,7 @@ export default function App() {
 
     return (
         <BrowserRouter>
+            <ThemeColorSync />
             <Routes>
                 {/* Valid app routes with bottom navigation */}
                 <Route path="/dashboard" element={

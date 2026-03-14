@@ -10,7 +10,7 @@ const PERIOD_OPTIONS = [
     { id: 'quarterly', label: 'Quarterly' }, { id: 'termly', label: 'Per Term' }, { id: 'yearly', label: 'Yearly' },
 ]
 const FREQ_PILL_OPTIONS = [
-    { id: 'weekly', label: 'Weekly' }, { id: 'monthly', label: 'Monthly' },
+    { id: 'weekly', label: 'Weekly' }, { id: 'fortnightly', label: 'Fortnightly' }, { id: 'monthly', label: 'Monthly' },
     { id: 'quarterly', label: 'Quarterly' }, { id: 'termly', label: 'Per Term' }, { id: 'yearly', label: 'Yearly' },
 ]
 const QUARTER_LABELS = ['Q1', 'Q2', 'Q3', 'Q4']
@@ -48,6 +48,8 @@ export default function UniFeesStep({
     uniFeesVariesByTerm, updateUniFeesVariesByTerm,
     uniFeesNonTermAmount, updateUniFeesNonTermAmount,
     compact = false,
+    heading = 'University Fees',
+    subtitle = 'Tuition or course fees you pay yourself.',
 }) {
     const amountPeriod = uniFeesAmountPeriod || uniFeesFrequency || 'yearly'
     const freq = amountPeriod === 'yearly' ? (uniFeesFrequency || 'monthly') : amountPeriod
@@ -150,8 +152,8 @@ export default function UniFeesStep({
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             {!compact && (
                 <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                    <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>University Fees</h2>
-                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>Tuition or course fees you pay yourself.</p>
+                    <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>{heading}</h2>
+                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>{subtitle}</p>
                 </div>
             )}
             <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
@@ -176,7 +178,7 @@ export default function UniFeesStep({
                                             width: showDual ? 52 : 0, opacity: showDual ? 1 : 0,
                                             transition: 'width 0.3s ease, opacity 0.2s ease',
                                         }}>Term time</span>
-                                        <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                        <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                                         <input type="text" inputMode="decimal" placeholder="9,250"
                                             value={formatDisplay(rawAmount)} onChange={handleAmountChange}
                                             onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd} onFocus={scrollInputToTop} onBlur={handleInputBlur}
@@ -192,7 +194,7 @@ export default function UniFeesStep({
                                             borderRadius: '0 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
                                         }}>
                                             <span style={{ fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Holidays</span>
-                                            <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                            <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                                             <input type="text" inputMode="decimal" placeholder="0.00"
                                                 value={formatDisplay(rawNonTermAmount)} onChange={handleNonTermAmountChange}
                                                 onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd} onFocus={scrollInputToTop} onBlur={handleInputBlur}
@@ -219,7 +221,7 @@ export default function UniFeesStep({
                         <div style={{ width: 36, height: 20, borderRadius: 10, background: uniFeesVariesByTerm ? '#e06470' : '#e0e0e0', transition: 'background 0.2s ease', position: 'relative', flexShrink: 0 }}>
                             <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: uniFeesVariesByTerm ? 18 : 2, transition: 'left 0.2s ease' }} />
                         </div>
-                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Different amount during holidays</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#444' }}>Different amount during holidays</span>
                     </button>
                 )}
 
@@ -248,14 +250,14 @@ export default function UniFeesStep({
                                     <div style={{ width: 36, height: 20, borderRadius: 10, background: uniFeesVariesByTerm ? '#e06470' : 'rgba(224,100,112,0.25)', transition: 'background 0.2s ease', position: 'relative', flexShrink: 0 }}>
                                         <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: uniFeesVariesByTerm ? 18 : 2, transition: 'left 0.2s ease' }} />
                                     </div>
-                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Only during term time</span>
+                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#444' }}>Only during term time</span>
                                 </button>
                                 <div ref={nextDateBoxRef} onClick={() => { const next = !datesExpanded; setDatesExpanded(next); if (next) scrollBoxIntoView(nextDateBoxRef) }}
                                     style={{ cursor: 'pointer', paddingTop: 4 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <div>
                                             <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
-                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
+                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
                                         </div>
                                         <Chevron open={datesExpanded} />
                                     </div>
@@ -278,7 +280,7 @@ export default function UniFeesStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {(terms || []).map(term => (
                                         <DateRow key={term.id} label={term.name} value={uniFeesTermDates?.[term.id] || term.start}
@@ -300,7 +302,7 @@ export default function UniFeesStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {QUARTER_LABELS.map((label, i) => (
                                         <DateRow key={i} label={label} value={uniFeesQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}
@@ -334,7 +336,7 @@ export default function UniFeesStep({
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <div>
                                         <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know my next payment date</p>
-                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast your budget more accurately</p>
+                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – helps us forecast your budget more accurately</p>
                                     </div>
                                     <Chevron open={datesExpanded} />
                                 </div>
@@ -354,7 +356,7 @@ export default function UniFeesStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {(terms || []).map(t => <DateRow key={t.id} label={t.name} value={uniFeesTermDates?.[t.id] || t.start} onChange={(v) => updateUniFeesTermDates({ ...uniFeesTermDates, [t.id]: v })} onDateTap={(a) => { dateActiveRef.current = a }} scrollRef={scrollRef} />)}
                                 </div>
@@ -372,7 +374,7 @@ export default function UniFeesStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {QUARTER_LABELS.map((l, i) => <DateRow key={i} label={l} value={uniFeesQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]} onChange={(v) => updateUniFeesQuarterlyDates({ ...uniFeesQuarterlyDates, [i]: v })} onDateTap={(a) => { dateActiveRef.current = a }} scrollRef={scrollRef} />)}
                                 </div>

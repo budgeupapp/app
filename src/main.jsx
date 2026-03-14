@@ -9,12 +9,13 @@ import posthog from 'posthog-js'
 import 'posthog-js/dist/surveys'
 import { supabase } from './lib/supabaseClient'
 
-// Prevent pinch-to-zoom on iOS (Safari ignores viewport meta)
-document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false })
-document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false })
-document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false })
+// Prevent pinch-to-zoom on iOS (Safari ignores viewport meta) — except on the term graph
+const isInsideGraph = (e) => e.target?.closest?.('[data-allow-zoom]')
+document.addEventListener('gesturestart', (e) => { if (!isInsideGraph(e)) e.preventDefault() }, { passive: false })
+document.addEventListener('gesturechange', (e) => { if (!isInsideGraph(e)) e.preventDefault() }, { passive: false })
+document.addEventListener('gestureend', (e) => { if (!isInsideGraph(e)) e.preventDefault() }, { passive: false })
 document.addEventListener('touchmove', (e) => {
-  if (e.touches.length > 1) e.preventDefault()
+  if (e.touches.length > 1 && !isInsideGraph(e)) e.preventDefault()
 }, { passive: false })
 
 // Clear saved scroll positions and tab state on fresh page load
@@ -39,28 +40,6 @@ posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_KEY, {
   opt_in_site_apps: true,
 })
 
-// Prevent page-level scrolling on iOS — only allow scroll inside scrollable containers
-document.addEventListener('touchmove', (e) => {
-  // Block pinch-to-zoom (multi-touch) at the page level
-  if (e.touches.length > 1) {
-    e.preventDefault()
-    return
-  }
-  let el = e.target
-  while (el && el !== document.body) {
-    const style = window.getComputedStyle(el)
-    const overflowY = style.getPropertyValue('overflow-y')
-    if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
-      return // allow scroll inside this container
-    }
-    el = el.parentElement
-  }
-  e.preventDefault()
-}, { passive: false })
-
-// Prevent Safari gesturestart/gesturechange zoom
-document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false })
-document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false })
 
 // Prevent iOS Safari from scrolling the whole page when focusing inputs.
 // iOS ignores preventScroll:true and scrolls the document to keep the input

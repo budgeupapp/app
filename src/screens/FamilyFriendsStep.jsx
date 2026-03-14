@@ -100,6 +100,8 @@ export default function FamilyFriendsStep({
     familyVariesByTerm, updateFamilyVariesByTerm,
     familyNonTermAmount, updateFamilyNonTermAmount,
     compact = false,
+    heading = 'Family & Friends',
+    subtitle = 'Regular money from parents, family, or friends.',
 }) {
     const amountPeriod = familyAmountPeriod || familyFrequency || 'monthly'
     // When amountPeriod is not yearly, frequency always matches amountPeriod
@@ -226,10 +228,10 @@ export default function FamilyFriendsStep({
             {!compact && (
                 <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
                     <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>
-                        Family & Friends
+                        {heading}
                     </h2>
-                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 16px', lineHeight: 1.5 }}>
-                        Regular money from parents, family, or friends.
+                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>
+                        {subtitle}
                     </p>
                 </div>
             )}
@@ -256,7 +258,7 @@ export default function FamilyFriendsStep({
                                             width: showDual ? 52 : 0, opacity: showDual ? 1 : 0,
                                             transition: 'width 0.3s ease, opacity 0.2s ease',
                                         }}>Term time</span>
-                                        <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                        <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                                         <input type="text" inputMode="decimal" placeholder="0.00"
                                             value={formatDisplay(rawAmount)} onChange={handleAmountChange}
                                             onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd} onFocus={scrollInputToTop} onBlur={handleInputBlur}
@@ -272,7 +274,7 @@ export default function FamilyFriendsStep({
                                             borderRadius: '0 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
                                         }}>
                                             <span style={{ fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Holidays</span>
-                                            <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                            <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                                             <input type="text" inputMode="decimal" placeholder="0.00"
                                                 value={formatDisplay(rawNonTermAmount)} onChange={handleNonTermAmountChange}
                                                 onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd} onFocus={scrollInputToTop} onBlur={handleInputBlur}
@@ -299,7 +301,7 @@ export default function FamilyFriendsStep({
                         <div style={{ width: 36, height: 20, borderRadius: 10, background: familyVariesByTerm ? '#147b75' : '#e0e0e0', transition: 'background 0.2s ease', position: 'relative', flexShrink: 0 }}>
                             <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: familyVariesByTerm ? 18 : 2, transition: 'left 0.2s ease' }} />
                         </div>
-                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Different amount during holidays</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#444' }}>Different amount during holidays</span>
                     </button>
                 )}
 
@@ -328,14 +330,14 @@ export default function FamilyFriendsStep({
                                     <div style={{ width: 36, height: 20, borderRadius: 10, background: familyVariesByTerm ? '#147b75' : 'rgba(20,123,117,0.25)', transition: 'background 0.2s ease', position: 'relative', flexShrink: 0 }}>
                                         <div style={{ width: 16, height: 16, borderRadius: 8, background: '#fff', position: 'absolute', top: 2, left: familyVariesByTerm ? 18 : 2, transition: 'left 0.2s ease' }} />
                                     </div>
-                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e' }}>Only during term time</span>
+                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#444' }}>Only during term time</span>
                                 </button>
                                 <div ref={nextDateBoxRef} onClick={() => { const next = !datesExpanded; setDatesExpanded(next); if (next) scrollBoxIntoView(nextDateBoxRef) }}
                                     style={{ cursor: 'pointer', paddingTop: 4 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <div>
                                             <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know when I next get paid</p>
-                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
+                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
                                         </div>
                                         <Chevron open={datesExpanded} />
                                     </div>
@@ -358,7 +360,7 @@ export default function FamilyFriendsStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {(terms || []).map(term => (
                                         <DateRow key={term.id} label={term.name} value={familyTermDates?.[term.id] || term.start}
@@ -380,7 +382,7 @@ export default function FamilyFriendsStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {QUARTER_LABELS.map((label, i) => (
                                         <DateRow key={i} label={label} value={familyQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}
@@ -414,7 +416,7 @@ export default function FamilyFriendsStep({
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <div>
                                         <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know when I next get paid</p>
-                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '2px 0 0' }}>Optional – helps us forecast your budget more accurately</p>
+                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – helps us forecast your budget more accurately</p>
                                     </div>
                                     <Chevron open={datesExpanded} />
                                 </div>
@@ -436,7 +438,7 @@ export default function FamilyFriendsStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>Defaults to your term start dates — tap to change</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {(terms || []).map(term => (
                                         <DateRow key={term.id} label={term.name} value={familyTermDates?.[term.id] || term.start}
@@ -458,7 +460,7 @@ export default function FamilyFriendsStep({
                                         </button>
                                     )}
                                 </div>
-                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#5e5e5e', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
+                                <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 8px' }}>When is each quarterly payment due?</p>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     {QUARTER_LABELS.map((label, i) => (
                                         <DateRow key={i} label={label} value={familyQuarterlyDates?.[i] || QUARTER_DEFAULTS[i]}

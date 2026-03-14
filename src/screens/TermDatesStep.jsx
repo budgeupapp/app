@@ -67,7 +67,7 @@ function Chevron({ open }) {
 
 /* ---------- TERM ACCORDION ---------- */
 
-function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete }) {
+function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete, noAutoScroll }) {
     const ref = useRef(null)
     const headerRef = useRef(null)
     const contentRef = useRef(null)
@@ -88,7 +88,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
             requestAnimationFrame(measure)
 
             // Scroll the accordion header to top of container after expand animation
-            if (!prevExpanded.current && headerRef.current) {
+            if (!noAutoScroll && !prevExpanded.current && headerRef.current) {
                 setTimeout(() => {
                     if (headerRef.current) {
                         headerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -105,7 +105,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
     const weeks = weeksBetween(term.start, term.end)
 
     const updateDate = (field, v) => {
-        const updated = { ...term, [field]: v }
+        const updated = { ...term, [field]: v, _changedField: field }
         // If end is before start, move the other date to match
         if (updated.end < updated.start) {
             if (field === 'start') updated.end = v
@@ -165,10 +165,12 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
         }
 
         // Scroll new holiday into view after render
-        setTimeout(() => {
-            const el = document.querySelector(`[data-break-id="${newId}"]`)
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 150)
+        if (!noAutoScroll) {
+            setTimeout(() => {
+                const el = document.querySelector(`[data-break-id="${newId}"]`)
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }, 150)
+        }
     }
 
     const removeBreak = (i) => {
@@ -210,7 +212,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                 </div>
                 <div style={{ marginTop: 3 }}>
                     <span style={{
-                        fontSize: 9, color: '#5e5e5e',
+                        fontSize: 9, color: '#444',
                         fontFamily: 'Nunito, sans-serif',
                     }}>{fmt(term.start)} - {fmt(term.end)}</span>
                 </div>
@@ -329,32 +331,94 @@ export default function TermDatesStep({
     termData, updateTermDates,
     expandedTerm, onExpandedTermChange,
     compact = false,
+    noAutoScroll = false,
+    heading = 'University Term Dates',
+    subtitle = "If we've got anything wrong, tap on the date to edit it.",
 }) {
     const updateTerm = (updated) => {
-        const terms = termData.terms
+        const DAY = 24 * 60 * 60 * 1000
+        const toMs = (d) => new Date(d + 'T00:00:00').getTime()
+        const toStr = (ms) => new Date(ms).toISOString().slice(0, 10)
+        const shiftDate = (dateStr, days) => toStr(toMs(dateStr) + days * DAY)
+
+        const terms = [...termData.terms]
         const idx = terms.findIndex(t => t.id === updated.id)
-        // Clamp to prevent overlap with adjacent terms
-        const prevTerm = idx > 0 ? terms[idx - 1] : null
-        const nextTerm = idx < terms.length - 1 ? terms[idx + 1] : null
-        const dayBefore = (dateStr) => {
-            const d = new Date(dateStr + 'T00:00:00')
-            d.setDate(d.getDate() - 1)
-            return d.toISOString().slice(0, 10)
+        const old = terms[idx]
+        const changedField = updated._changedField || null
+
+        // Clean up internal marker
+        const { _changedField, ...cleanUpdated } = updated
+
+        // Shift breaks when term dates change
+        if (changedField === 'start') {
+            // Start changed — shift entire term (end + breaks) by the delta
+            const delta = Math.round((toMs(cleanUpdated.start) - toMs(old.start)) / DAY)
+            if (delta !== 0) {
+                cleanUpdated.end = shiftDate(old.end, delta)
+                cleanUpdated.breaks = (old.breaks || []).map(b => ({
+                    ...b,
+                    start: shiftDate(b.start, delta),
+                    end: shiftDate(b.end, delta),
+                }))
+            }
+        } else if (changedField === 'end') {
+            // End changed — keep start fixed, shift breaks that fall after the new end back
+            cleanUpdated.breaks = (old.breaks || []).map(b => {
+                if (b.end > cleanUpdated.end) {
+                    // Clamp break to fit within term
+                    const clampedEnd = cleanUpdated.end < b.start ? b.start : cleanUpdated.end
+                    return { ...b, end: clampedEnd > cleanUpdated.end ? cleanUpdated.end : clampedEnd, start: b.start > cleanUpdated.end ? cleanUpdated.end : b.start }
+                }
+                return { ...b }
+            }).filter(b => b.start <= cleanUpdated.end)
         }
-        const dayAfter = (dateStr) => {
-            const d = new Date(dateStr + 'T00:00:00')
-            d.setDate(d.getDate() + 1)
-            return d.toISOString().slice(0, 10)
+
+        const newTerms = terms.map(t => t.id === cleanUpdated.id ? cleanUpdated : { ...t })
+
+        // Push subsequent terms forward, preserving gaps and durations
+        for (let i = idx + 1; i < newTerms.length; i++) {
+            const prev = newTerms[i - 1]
+            const curr = newTerms[i]
+            const origGap = Math.round((toMs(terms[i].start) - toMs(terms[i - 1].end)) / DAY)
+            const gap = Math.max(1, origGap) // at least 1 day gap
+            const expectedStart = shiftDate(prev.end, gap)
+
+            if (expectedStart !== curr.start) {
+                const delta = Math.round((toMs(expectedStart) - toMs(curr.start)) / DAY)
+                const duration = Math.round((toMs(curr.end) - toMs(curr.start)) / DAY)
+                curr.start = expectedStart
+                curr.end = shiftDate(curr.start, duration)
+                // Shift breaks too
+                curr.breaks = (curr.breaks || []).map(b => ({
+                    ...b,
+                    start: shiftDate(b.start, delta),
+                    end: shiftDate(b.end, delta),
+                }))
+            }
         }
-        if (prevTerm && updated.start <= prevTerm.end) {
-            updated = { ...updated, start: dayAfter(prevTerm.end) }
-            if (updated.end < updated.start) updated.end = updated.start
+
+        // Push previous terms backward, preserving gaps and durations
+        for (let i = idx - 1; i >= 0; i--) {
+            const next = newTerms[i + 1]
+            const curr = newTerms[i]
+            const origGap = Math.round((toMs(terms[i + 1].start) - toMs(terms[i].end)) / DAY)
+            const gap = Math.max(1, origGap)
+            const expectedEnd = shiftDate(next.start, -gap)
+
+            if (expectedEnd !== curr.end) {
+                const delta = Math.round((toMs(expectedEnd) - toMs(curr.end)) / DAY)
+                const duration = Math.round((toMs(curr.end) - toMs(curr.start)) / DAY)
+                curr.end = expectedEnd
+                curr.start = shiftDate(curr.end, -duration)
+                // Shift breaks too
+                curr.breaks = (curr.breaks || []).map(b => ({
+                    ...b,
+                    start: shiftDate(b.start, delta),
+                    end: shiftDate(b.end, delta),
+                }))
+            }
         }
-        if (nextTerm && updated.end >= nextTerm.start) {
-            updated = { ...updated, end: dayBefore(nextTerm.start) }
-            if (updated.start > updated.end) updated.start = updated.end
-        }
-        const newTerms = terms.map(t => t.id === updated.id ? updated : t)
+
         updateTermDates({ ...termData, terms: newTerms })
     }
 
@@ -433,6 +497,7 @@ export default function TermDatesStep({
                                 onUpdate={updateTerm}
                                 onDelete={() => deleteTerm(term.id)}
                                 canDelete={terms.length > 1}
+                                noAutoScroll={noAutoScroll}
                             />
                         </div>
                     )
@@ -468,13 +533,13 @@ export default function TermDatesStep({
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 8px', lineHeight: 1.3,
                 }}>
-                    University Term Dates
+                    {heading}
                 </h2>
                 <p style={{
                     fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                    color: '#5e5e5e', margin: 0, lineHeight: 1.5,
+                    color: '#444', margin: 0, lineHeight: 1.5,
                 }}>
-                    If we've got anything wrong, tap on the date to edit it.
+                    {subtitle}
                 </p>
             </div>
 
@@ -513,6 +578,7 @@ export default function TermDatesStep({
                                 onUpdate={updateTerm}
                                 onDelete={() => deleteTerm(term.id)}
                                 canDelete={terms.length > 1}
+                                noAutoScroll={noAutoScroll}
                             />
                         </div>
                     )
