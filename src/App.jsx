@@ -18,7 +18,7 @@ function setThemeColor(color) {
 
 function ThemeColorSync({ color }) {
     const location = useLocation()
-    const resolved = color || (location.pathname === '/dashboard' ? '#efefef' : '#ffffff')
+    const resolved = color || '#ffffff'
     useLayoutEffect(() => {
         setThemeColor(resolved)
     }, [resolved])
@@ -199,7 +199,7 @@ export default function App() {
     const isMainApp = session && !passwordRecovery && hasCompletedOnboarding === true && DEV_VIEW !== 'onboarding'
     const isLoading = loading || onboardingLoading || processingSignup || (session?.user?.id && hasCompletedOnboarding === null)
     useLayoutEffect(() => {
-        if (!isMainApp) setThemeColor(isLoading ? '#efefef' : '#ffffff')
+        if (!isMainApp) setThemeColor('#ffffff')
     }, [isMainApp, isLoading])
 
     /* ---------------- LOADING STATE ---------------- */
@@ -212,10 +212,15 @@ export default function App() {
                     height: '80vh',
                     display: 'grid',
                     placeItems: 'center',
-                    backgroundColor: '#efefef',
+                    backgroundColor: '#ffffff',
                 }}
             >
-                <Spin size="large" />
+                <div style={{
+                    width: 28, height: 28, borderRadius: '50%',
+                    border: '2.5px solid #e8e8e8', borderTopColor: '#147b75',
+                    animation: 'spin 0.7s linear infinite',
+                }} />
+                <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
             </div>
         )
     }

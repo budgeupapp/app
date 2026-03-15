@@ -71,14 +71,14 @@ function ResourceCard({ icon: Icon, iconColor, title, description, href, onClick
             style={{
                 display: 'flex', alignItems: 'center', gap: 14,
                 padding: '16px 18px',
-                background: '#fff', borderRadius: 14,
+                background: '#f0f4f4', borderRadius: 14,
                 textDecoration: 'none', cursor: 'pointer',
                 marginBottom: 10,
                 transition: 'transform 0.1s ease',
             }}
         >
             <div style={{
-                width: 36, height: 36, borderRadius: '50%',
+                width: 36, height: 36, borderRadius: 10,
                 background: `${iconColor}12`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,
@@ -93,7 +93,7 @@ function ResourceCard({ icon: Icon, iconColor, title, description, href, onClick
                     {description}
                 </div>
             </div>
-            <ExternalLink size={14} color="#ccc" style={{ flexShrink: 0, marginTop: 4 }} />
+            <ExternalLink size={14} color="#bbb" style={{ flexShrink: 0, marginTop: 4 }} />
         </a>
     )
 }
@@ -124,7 +124,7 @@ function getBristolResources(situation) {
     const urgent = [
         {
             icon: PiWarning,
-            iconColor: '#c0392b',
+            iconColor: '#e06470',
             title: 'Emergency £50 Food Voucher',
             description: 'If you have less than £100 right now, get a free food voucher by tomorrow.',
             href: 'https://forms.office.com/pages/responsepage.aspx?id=MH_ksn3NTkql2rGM8aQVG3okPmcberBHt-iwi1k7fYJUQTYzT1FPR01NVVBPTFVPNUo4S0tENFg4RiQlQCN0PWcu&route=shorturl',
@@ -159,7 +159,7 @@ function getBristolResources(situation) {
         },
         {
             icon: PiShieldCheck,
-            iconColor: '#1a9e97',
+            iconColor: '#147b75',
             title: 'IT Equipment Support — £250',
             description: 'If you apply for the Financial Assistance Fund, you can also get £250 for IT equipment.',
             href: 'https://www.bristol.ac.uk/students/support/finances/advice/',
@@ -167,7 +167,7 @@ function getBristolResources(situation) {
         },
         {
             icon: PiHeart,
-            iconColor: '#EC8C17',
+            iconColor: '#147b75',
             title: 'SU Activity Hardship Fund — up to £200',
             description: 'Support towards SU activities. Check the deadlines!',
             href: 'https://www.bristolsu.org.uk/support-centre/support-for-committees/group-finance/activity-hardship-fund',
@@ -175,7 +175,7 @@ function getBristolResources(situation) {
         },
         {
             icon: PiBriefcase,
-            iconColor: '#5a7c4f',
+            iconColor: '#147b75',
             title: 'Find Part-Time Work',
             description: 'The careers service has advice on finding part-time work alongside your studies.',
             href: 'https://mycareer.bristol.ac.uk/student/svc/cms.html#/content/article/fa8664f7-a43f-4973-9a26-07dec1b3670e',
@@ -183,9 +183,9 @@ function getBristolResources(situation) {
         },
         {
             icon: Mail,
-            iconColor: '#3b82a0',
+            iconColor: '#147b75',
             title: 'Email Money Advice',
-            description: 'Get in touch directly at money-advice@bristol.ac.uk',
+            description: <>Get in touch directly at <span style={{ color: '#147b75', textDecoration: 'underline' }}>money-advice@bristol.ac.uk</span></>,
             href: 'mailto:money-advice@bristol.ac.uk',
             priority: 5,
         },
@@ -207,7 +207,7 @@ const GENERIC_RESOURCES = [
     },
     {
         icon: PiMoney,
-        iconColor: '#EC8C17',
+        iconColor: '#147b75',
         title: 'UCAS — Student Finance Guide',
         description: 'Official guidance on student finance, bursaries, and managing money at uni.',
         href: 'https://www.ucas.com/finance',
@@ -221,7 +221,7 @@ const GENERIC_RESOURCES = [
     },
     {
         icon: PiHeart,
-        iconColor: '#1a9e97',
+        iconColor: '#e06470',
         title: 'StepChange — Debt Advice',
         description: 'Free, confidential debt advice if you\'re worried about money.',
         href: 'https://www.stepchange.org/',
@@ -310,13 +310,13 @@ export default function MoneyAdviceScreen() {
     return (
         <div style={{
             height: '100%', display: 'flex', flexDirection: 'column',
-            background: '#efefef',
+            background: '#fff',
         }}>
             {/* Header */}
             <div style={{
                 paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
                 padding: 'calc(env(safe-area-inset-top, 0px) + 16px) 20px 12px',
-                background: '#efefef',
+                background: '#fff',
             }}>
                 <h1 style={{
                     fontSize: 24, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
@@ -334,7 +334,7 @@ export default function MoneyAdviceScreen() {
                 {/* Financial situation picker — Bristol only */}
                 {isBristol && (
                     <div style={{
-                        background: '#fff', borderRadius: 14, padding: '18px 18px 14px',
+                        background: '#f0f4f4', borderRadius: 14, padding: '18px 18px 14px',
                         marginBottom: 12,
                     }}>
                         <p style={{
@@ -349,7 +349,7 @@ export default function MoneyAdviceScreen() {
                         {/* Mood face picker */}
                         <div style={{
                             display: 'flex', alignItems: 'center',
-                            background: '#f5f5f5', borderRadius: 50,
+                            background: '#fff', borderRadius: 50,
                             padding: 4, position: 'relative',
                             height: 52,
                         }}>
@@ -417,8 +417,8 @@ export default function MoneyAdviceScreen() {
                 {isBristol && (
                     <>
                         <p style={{
-                            fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                            color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+                            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                            color: '#1a1a1a',
                             padding: '0 6px', marginBottom: 8, marginTop: 4,
                         }}>
                             {university} Support
@@ -452,8 +452,8 @@ export default function MoneyAdviceScreen() {
 
                 {/* Generic resources for all students */}
                 <p style={{
-                    fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                    color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+                    fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                    color: '#1a1a1a',
                     padding: '0 6px', marginBottom: 8, marginTop: isBristol ? 16 : 4,
                 }}>
                     General Resources
@@ -465,11 +465,18 @@ export default function MoneyAdviceScreen() {
 
                 {/* Newsletter signup */}
                 <div style={{
-                    background: '#fff', borderRadius: 14, padding: '16px 18px',
+                    background: '#f0f4f4', borderRadius: 14, padding: '16px 18px',
                     marginTop: 16, marginBottom: 12,
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        <Mail size={18} color="#888" style={{ flexShrink: 0 }} />
+                        <div style={{
+                            width: 36, height: 36, borderRadius: 10,
+                            background: '#147b7512',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            flexShrink: 0,
+                        }}>
+                            <Mail size={18} color="#147b75" />
+                        </div>
                         <div style={{ flex: 1 }}>
                             <p style={{
                                 fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif',

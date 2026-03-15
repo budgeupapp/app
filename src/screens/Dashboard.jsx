@@ -110,14 +110,12 @@ const FLEX_INCOME_SOURCES = [
 
 const FLEX_EXPENSE_SOURCES = [
     { id: 'flex_travel', label: 'Travel & Holidays', defaultFreq: 'one-off' },
-    { id: 'flex_subscriptions', label: 'Subscriptions', defaultFreq: 'monthly' },
-    { id: 'flex_memberships', label: 'Memberships', defaultFreq: 'monthly' },
-    { id: 'flex_events', label: 'Events & Nights Out', defaultFreq: 'weekly' },
+    { id: 'flex_events', label: 'Events & Nights Out', defaultFreq: 'one-off' },
     { id: 'flex_gifts', label: 'Gifts', defaultFreq: 'one-off' },
     { id: 'flex_tech', label: 'Tech & Gadgets', defaultFreq: 'one-off' },
-    { id: 'flex_clothing', label: 'Clothing', defaultFreq: 'monthly' },
-    { id: 'flex_health', label: 'Health & Wellbeing', defaultFreq: 'monthly' },
-    { id: 'flex_course_materials', label: 'Course Materials', defaultFreq: 'termly' },
+    { id: 'flex_clothing', label: 'Clothing', defaultFreq: 'one-off' },
+    { id: 'flex_health', label: 'Health & Wellbeing', defaultFreq: 'one-off' },
+    { id: 'flex_course_materials', label: 'Course Materials', defaultFreq: 'one-off' },
     { id: 'flex_other_expense', label: 'Other Expense', defaultFreq: 'monthly' },
 ]
 
@@ -1164,7 +1162,7 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
     )
 }
 
-function BalancePillInline({ value, sym, onSave, onCancel }) {
+function BalancePillInline({ value, sym, onSave, onCancel, compact }) {
     const [raw, setRaw] = useState(() => {
         const n = parseFloat(String(value || '').replace(/,/g, ''))
         return isNaN(n) ? '' : new Intl.NumberFormat('en-GB').format(Math.abs(n))
@@ -1189,62 +1187,70 @@ function BalancePillInline({ value, sym, onSave, onCancel }) {
         onSave(String(isNegative ? -Math.abs(n) : Math.abs(n)))
     }
 
+    const sz = compact ? 28 : 40
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ display: 'flex', flexDirection: compact ? 'row' : 'column', alignItems: compact ? 'center' : 'stretch', gap: compact ? 10 : 0 }}>
+            {/* Number input row */}
             <div style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                background: '#f5f5f5', borderRadius: 12, padding: '0 10px', height: 48,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: compact ? '4px 0' : '8px 0 24px', gap: compact ? 6 : 10,
+                flex: compact ? 1 : undefined,
             }}>
                 <button
                     onClick={() => setIsNegative(n => !n)}
                     style={{
-                        width: 28, height: 28, borderRadius: 8,
+                        width: compact ? 24 : 28, height: compact ? 34 : 44, borderRadius: compact ? 6 : 8,
                         cursor: 'pointer', background: isNegative ? '#e06470' : '#147b75',
                         border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#fff', fontSize: 18, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                        flexShrink: 0,
+                        color: '#fff', fontSize: compact ? 18 : 22, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                        flexShrink: 0, transition: 'background 0.2s ease',
                     }}
                 >
                     {isNegative ? '\u2212' : '+'}
                 </button>
-                <span style={{ fontSize: 18, fontWeight: 700, color: '#888', fontFamily: 'Nunito, sans-serif' }}>{sym}</span>
-                <input
-                    ref={inputRef}
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={raw}
-                    onChange={handleChange}
-                    onKeyDown={e => e.key === 'Enter' && handleConfirm()}
-                    style={{
-                        flex: 1, border: 'none', background: 'transparent',
-                        fontSize: 22, fontWeight: 800, color: '#1a1a1a',
-                        fontFamily: 'Nunito, sans-serif', outline: 'none', padding: 0,
-                    }}
-                    placeholder="0.00"
-                />
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                    <span style={{
+                        fontSize: sz, fontWeight: 800, color: '#1a1a1a',
+                        fontFamily: 'Nunito, sans-serif',
+                    }}>{sym}</span>
+                    <input
+                        ref={inputRef}
+                        type="text"
+                        inputMode="decimal"
+                        value={raw}
+                        onChange={handleChange}
+                        onKeyDown={e => e.key === 'Enter' && handleConfirm()}
+                        style={{
+                            border: 'none', background: 'transparent',
+                            fontSize: sz, fontWeight: 800, color: '#1a1a1a',
+                            fontFamily: 'Nunito, sans-serif', outline: 'none', padding: 0,
+                            width: Math.max(compact ? 50 : 60, (raw || '0.00').length * (compact ? 16 : 22)),
+                            textAlign: 'left',
+                        }}
+                        placeholder="0.00"
+                    />
+                </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                    onClick={onCancel}
-                    style={{
-                        flex: 1, height: 42, borderRadius: 10,
-                        border: '1px solid #e0e0e0', background: '#fff',
-                        fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                        color: '#888', cursor: 'pointer',
-                    }}
-                >Cancel</button>
-                <button
-                    onClick={handleConfirm}
-                    style={{
-                        flex: 1, height: 42, borderRadius: 10,
-                        border: 'none', background: 'linear-gradient(135deg, #EC8C17, #F5A64A)',
-                        fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                        color: '#fff', cursor: 'pointer',
-                        boxShadow: '0 3px 8px rgba(236,140,23,0.3)',
-                    }}
-                >Update</button>
-            </div>
+
+            {/* Save button */}
+            <button
+                onClick={handleConfirm}
+                style={{
+                    width: compact ? 40 : '100%', height: compact ? 40 : 48,
+                    borderRadius: compact ? 12 : 14,
+                    border: 'none', background: '#EC8C17',
+                    fontSize: compact ? 14 : 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                    color: '#fff', cursor: 'pointer', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+            >
+                {compact ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                        <path d="M5 12L10 17L19 7" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                ) : 'Save'}
+            </button>
         </div>
     )
 }
@@ -1259,6 +1265,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
     const [settled, setSettled] = useState(!!expanded)
     const mountExpandedRef = useRef(!!expanded)
     const [deleting, setDeleting] = useState(false)
+    const [naturalHeight, setNaturalHeight] = useState(null)
     const [amountFlash, setAmountFlash] = useState(false)
     const prevAmountRef = useRef(yearlyAmount)
     useEffect(() => {
@@ -1305,33 +1312,6 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
         return () => ro.disconnect()
     }, [expanded])
 
-    // Smooth scroll restoration when keyboard dismisses (input blur)
-    useEffect(() => {
-        if (!expanded) return
-        const row = rowRef.current
-        if (!row) return
-        const onFocusOut = (e) => {
-            // Only handle when focus leaves to nothing (keyboard dismissing)
-            if (e.relatedTarget) return
-            const sc = scrollContainerRef?.current
-            if (!sc) return
-            const scrollBefore = sc.scrollTop
-            const prevOverflow = sc.style.overflow
-            sc.style.overflow = 'hidden'
-            const start = performance.now()
-            const pin = () => {
-                sc.scrollTop = scrollBefore
-                if (performance.now() - start < 400) {
-                    requestAnimationFrame(pin)
-                } else {
-                    sc.style.overflow = prevOverflow
-                }
-            }
-            requestAnimationFrame(pin)
-        }
-        row.addEventListener('focusout', onFocusOut)
-        return () => row.removeEventListener('focusout', onFocusOut)
-    }, [expanded, scrollContainerRef])
 
 
     return (
@@ -1340,12 +1320,12 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
             borderRadius: 10,
             background: isInactive ? '#f0f0f0' : '#f5f5f5',
             overflow: 'hidden',
-            maxHeight: deleting ? 0 : 1000,
-            opacity: deleting ? 0 : 1,
+            maxHeight: deleting ? 0 : naturalHeight != null ? naturalHeight : 1000,
+            opacity: deleting ? 0 : isInactive ? 0.55 : 1,
             marginBottom: deleting ? 0 : 6,
             transition: deleting
-                ? 'max-height 0.45s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease, margin-bottom 0.45s cubic-bezier(0.22, 0.61, 0.36, 1)'
-                : undefined,
+                ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.25s ease, margin-bottom 0.4s cubic-bezier(0.22, 0.61, 0.36, 1)'
+                : 'opacity 0.25s ease, background 0.25s ease',
         }}>
             {/* Tappable row */}
             <div
@@ -1425,15 +1405,22 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                 <button
                     onClick={(e) => { e.stopPropagation(); onToggle() }}
                     style={{
-                        background: 'none', border: 'none', padding: 4,
+                        background: 'none', border: 'none', padding: '4px 8px 4px 4px',
                         cursor: 'pointer', display: 'flex', alignItems: 'center',
-                        flexShrink: 0,
+                        flexShrink: 0, marginRight: -4,
                     }}
                 >
-                    {active
-                        ? <Eye size={16} strokeWidth={1.8} color={isExpense ? '#e06470' : '#147b75'} />
-                        : <EyeOff size={16} strokeWidth={1.8} color="#ccc" />
-                    }
+                    <div style={{
+                        transition: 'transform 0.2s ease, opacity 0.2s ease',
+                        transform: active ? 'scale(1)' : 'scale(0.85)',
+                        opacity: active ? 1 : 0.5,
+                        display: 'flex', alignItems: 'center',
+                    }}>
+                        {active
+                            ? <Eye size={16} strokeWidth={1.8} color={isExpense ? '#e06470' : '#147b75'} />
+                            : <EyeOff size={16} strokeWidth={1.8} color="#ccc" />
+                        }
+                    </div>
                 </button>
                 <ChevronRight size={16} color={isInactive ? '#bbb' : '#ccc'} style={{
                     flexShrink: 0,
@@ -1453,7 +1440,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
             }}>
                 <div ref={innerRef}>
                     {children && (
-                        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 8, background: '#fafafa' }}>
+                        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 14, background: '#fafafa' }}>
                             {children}
                         </div>
                     )}
@@ -1463,8 +1450,12 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     if (deleting) return
-                                    setDeleting(true)
-                                    onDelete()
+                                    // Capture actual height before collapsing
+                                    if (rowRef.current) setNaturalHeight(rowRef.current.offsetHeight)
+                                    requestAnimationFrame(() => {
+                                        setDeleting(true)
+                                        onDelete()
+                                    })
                                 }}
                                 style={{
                                     fontSize: 10, fontWeight: 600,
@@ -1631,7 +1622,7 @@ export default function Dashboard() {
                         spacer.style.transition = 'height 0.4s ease'
                         spacer.style.height = '0px'
                         const maxScroll = el.scrollHeight - spacer.offsetHeight - el.clientHeight
-                        const dest = Math.max(SHRINK_DIST, Math.min(el.scrollTop, maxScroll))
+                        const dest = Math.max(0, Math.min(el.scrollTop, maxScroll))
                         if (Math.abs(el.scrollTop - dest) > 2) {
                             el.scrollTo({ top: dest, behavior: 'smooth' })
                         }
@@ -1658,11 +1649,10 @@ export default function Dashboard() {
             return next
         })
 
-        // When expanding, scroll row to top (collapsing graph in the same motion if needed)
+        // When expanding, scroll row into view (without collapsing the graph)
         if (!wasExpanded) {
             isAnimatingRef.current = true
             if (snapTimerRef.current) { clearTimeout(snapTimerRef.current); snapTimerRef.current = null }
-            // Wait briefly for row to start expanding, then one smooth scroll
             setTimeout(() => {
                 const el = scrollRef.current
                 if (!el) { isAnimatingRef.current = false; return }
@@ -1670,12 +1660,10 @@ export default function Dashboard() {
                 if (!row) { isAnimatingRef.current = false; return }
                 const stickyHeader = el.querySelector('[data-sticky-header]')
                 const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
-                const currentOffset = Math.min(el.scrollTop, SHRINK_DIST)
                 const target = row.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 5
-                const dest = Math.max(SHRINK_DIST, target + (SHRINK_DIST - currentOffset))
+                const dest = Math.max(el.scrollTop, target)
                 const dist = Math.abs(el.scrollTop - dest)
                 if (dist > 2) {
-                    // Longer duration for bigger distances, smooth custom easing
                     const duration = Math.max(400, Math.min(700, dist * 3))
                     const start = el.scrollTop
                     const diff = dest - start
@@ -1701,6 +1689,8 @@ export default function Dashboard() {
     const [activeTab, setActiveTabRaw] = useState(() => sessionStorage.getItem('budgeup_active_tab') || 'goals')
     const setActiveTab = (tab) => { sessionStorage.setItem('budgeup_active_tab', tab); setActiveTabRaw(tab) }
     const [goalsShowMore, setGoalsShowMore] = useState(false)
+    const [warningMinimised, setWarningMinimised] = useState(false)
+    const [tappedSegment, setTappedSegment] = useState(null) // { label, amt, color }
     const [showAllIncome, setShowAllIncome] = useState(false)
     const [showAllExpenses, setShowAllExpenses] = useState(false)
     const goalsMoreRef = useRef(null)
@@ -1714,15 +1704,32 @@ export default function Dashboard() {
         const el = scrollRef.current
         if (!el) return
 
-        // Tapping the already-active tab — toggle graph
+        // Tapping the already-active tab — toggle between expanded and collapsed
         if (tab === activeTab) {
-            if (el.scrollTop < SHRINK_DIST - 1) {
-                animateScroll(el, SHRINK_DIST)
+            const gc = graphCardRef.current
+            const graphEl = graphContainerRef.current
+            const heroEl = heroHeaderRef.current
+            if (!gc || !graphEl) return
+            const currentH = graphEl.offsetHeight
+            const isExpanded = currentH > MIN_H + 10
+            const t = '0.35s cubic-bezier(0.4, 0, 0.2, 1)'
+            gc.style.transition = `height ${t}`
+            graphEl.style.transition = `height ${t}`
+            if (heroEl) heroEl.style.transition = `opacity 0.3s ease, max-height ${t}, padding ${t}`
+            if (isExpanded) {
+                graphEl.style.height = `${MIN_H}px`
+                if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
             } else {
-                // Expanding graph — collapse all dropdowns after graph expands
-                animateScroll(el, 0)
-                setTimeout(() => { setExpandedSources(new Set()) }, 400)
+                graphEl.style.height = `${MAX_H}px`
+                gc.style.height = ''
+                if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
+                if (graphCovered) {
+                    setGraphCovered(false)
+                    setThemeColor('#ffffff')
+                    themeColorRef.current = '#ffffff'
+                }
             }
+            setTimeout(() => { gc.style.transition = ''; graphEl.style.transition = ''; if (heroEl) heroEl.style.transition = '' }, 400)
             return
         }
 
@@ -1739,8 +1746,10 @@ export default function Dashboard() {
             (formData.oneOffItems || []).filter(i => i.amount && i.name).length === 0
         const isTabEmpty = isFixedEmpty || isFlexEmpty
 
-        // Empty tab: expand graph. Otherwise: keep current scroll position.
-        const targetScroll = isTabEmpty ? 0 : el.scrollTop
+        // Save current tab's scroll, restore target tab's saved scroll
+        sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTab, String(el.scrollTop))
+        const savedScroll = parseInt(sessionStorage.getItem('budgeup_scroll_dashboard_' + tab) || '0', 10)
+        const targetScroll = isTabEmpty ? 0 : savedScroll
 
         isTabSwitchingRef.current = true
         isAnimatingRef.current = true
@@ -1800,12 +1809,23 @@ export default function Dashboard() {
     const openFabBalance = () => {
         setFabBalanceOpen(true)
         setThemeColor('#b3b3b3')
+        window.dispatchEvent(new CustomEvent('nav-fab-balance', { detail: { open: true } }))
     }
     const closeFabBalance = () => {
         setFabBalanceClosing(true)
-        setThemeColor('#efefef')
-        setTimeout(() => { setFabBalanceOpen(false); setFabBalanceClosing(false) }, 250)
+        setThemeColor('#ffffff')
+        window.dispatchEvent(new CustomEvent('nav-fab-balance', { detail: { open: false } }))
+        setTimeout(() => {
+            setFabBalanceOpen(false)
+            setFabBalanceClosing(false)
+        }, 300)
     }
+    // Listen for FAB button tap to close balance popup
+    useEffect(() => {
+        const handler = () => closeFabBalance()
+        window.addEventListener('nav-fab-close-balance', handler)
+        return () => window.removeEventListener('nav-fab-close-balance', handler)
+    }, [])
     const [editingBalance, setEditingBalance] = useState(false)
     const [editBalanceValue, setEditBalanceValue] = useState('')
     const balanceInputRef = useRef(null)
@@ -1887,6 +1907,7 @@ export default function Dashboard() {
     const [dbLoaded, setDbLoaded] = useState(false)
     const saveTimerRef = useRef(null)
     const userIdRef = useRef(null)
+    const [userJoinDate, setUserJoinDate] = useState(null)
 
     // Refresh graph start date on mount (picks up changes from Settings)
     useEffect(() => {
@@ -1941,29 +1962,41 @@ export default function Dashboard() {
                     if (!user || cancelled) return
                     userIdRef.current = user.id
                     if (user.email) setUserEmail(user.email)
+                    if (user.created_at) {
+                        const d = new Date(user.created_at)
+                        setUserJoinDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`)
+                    }
 
                     const result = await fetchUserData(user.id)
 
                     // Sync graph start from database, respecting the user's chosen mode
                     const mode = localStorage.getItem('budgeup_graph_start_mode')
+                    const joinDateStr = user.created_at
+                        ? (() => { const d = new Date(user.created_at); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
+                        : null
                     if (mode === 'first_term') {
                         // Will be handled by the termDates useEffect below
                     } else if (mode === 'custom' && localStorage.getItem('budgeup_graph_start')) {
                         // Custom mode — keep whatever the user set locally
+                    } else if (mode === 'joined' && joinDateStr) {
+                        // Always use actual join date
+                        setGraphStart(joinDateStr)
+                        refreshAY()
+                        setGraphKey(k => k + 1)
                     } else if (result.profile?.graph_start) {
                         setGraphStart(result.profile.graph_start)
                         if (!mode) {
                             localStorage.setItem('budgeup_graph_start_mode', 'joined')
                         }
                         refreshAY()
-                    } else if (!localStorage.getItem('budgeup_graph_start') && user.created_at) {
-                        const d = new Date(user.created_at)
-                        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-                        setGraphStart(dateStr)
+                        setGraphKey(k => k + 1)
+                    } else if (joinDateStr) {
+                        setGraphStart(joinDateStr)
                         if (!mode) {
                             localStorage.setItem('budgeup_graph_start_mode', 'joined')
                         }
                         refreshAY()
+                        setGraphKey(k => k + 1)
                     }
                     if (cancelled) return
                     if (result.formData) {
@@ -2046,27 +2079,19 @@ export default function Dashboard() {
     const graphContainerRef = useRef(null)
     const contentWrapRef = useRef(null)
     const stickyHeaderRef = useRef(null)
+    const themeColorRef = useRef('#ffffff')
+    const [graphCovered, setGraphCoveredRaw] = useState(() => sessionStorage.getItem('budgeup_graph_covered') === 'true')
+    const setGraphCovered = (v) => { sessionStorage.setItem('budgeup_graph_covered', String(v)); setGraphCoveredRaw(v) }
     const graphCardRef = useRef(null)
     const heroHeaderRef = useRef(null)
     const rafRef = useRef(null)
     const MAX_H = 220
     const MIN_H = 115
     const SHRINK_DIST = MAX_H - MIN_H
+    const HIDE_DIST = MIN_H // additional scroll to fully hide graph
 
-    // Keep graphHeight in state for TermGraph prop (initial only matters)
-    // Initialize from saved scroll position so graph doesn't flash expanded then collapse
-    const [graphHeight, setGraphHeight] = useState(() => {
-        const saved = sessionStorage.getItem('budgeup_scroll_dashboard_' + (sessionStorage.getItem('budgeup_active_tab') || 'goals'))
-        if (saved) {
-            const pos = parseInt(saved, 10)
-            if (pos > 0) {
-                const t = Math.min(1, pos / (MAX_H - MIN_H))
-                const ct = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
-                return MAX_H - ct * (MAX_H - MIN_H)
-            }
-        }
-        return MAX_H
-    })
+    // Graph height — always MAX_H. Drag handler controls height via refs only.
+    const graphHeight = MAX_H
     const cardDetailsRef = useRef(null)
     const footerRef = useRef(null)
 
@@ -2095,32 +2120,187 @@ export default function Dashboard() {
     const ease = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
     const easeOut = (t) => 1 - Math.pow(1 - t, 3)
 
-    const applyScrollStyles = useCallback((s) => {
-        const t = Math.min(1, s / SHRINK_DIST)
-        const ct = ease(t)
-        const h = MAX_H - ct * (MAX_H - MIN_H)
-        const offset = Math.min(s, SHRINK_DIST)
+    const applyScrollStyles = useCallback(() => { }, [])
 
-        if (graphContainerRef.current) {
-            graphContainerRef.current.style.height = `${h}px`
+    // Animate graph to collapsed state (midway)
+    const collapseGraph = useCallback(() => {
+        const gc = graphCardRef.current
+        const graphEl = graphContainerRef.current
+        const heroEl = heroHeaderRef.current
+        if (!gc || !graphEl) return
+        if (graphEl.offsetHeight <= MIN_H + 5) return // already collapsed
+        const t = '0.35s cubic-bezier(0.4, 0, 0.2, 1)'
+        gc.style.transition = `height ${t}`
+        graphEl.style.transition = `height ${t}`
+        if (heroEl) heroEl.style.transition = `opacity 0.3s ease, max-height ${t}, padding ${t}`
+        graphEl.style.height = `${MIN_H}px`
+        gc.style.height = ''
+        if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+        setTimeout(() => {
+            gc.style.transition = ''
+            graphEl.style.transition = ''
+            if (heroEl) heroEl.style.transition = ''
+        }, 400)
+    }, [])
+
+    // Drag on tabs/handle: Phase 1 = shrink graph, Phase 2 = cover collapsed graph
+    const onHandlePointerDown = useCallback((e) => {
+        const gc = graphCardRef.current
+        const graphEl = graphContainerRef.current
+        const heroEl = heroHeaderRef.current
+        if (!gc) return
+
+        const startY = e.clientY
+        let moved = false
+        let rafId = null
+        let lastPos = 0
+        const easeLocal = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+
+        // Work out where we're starting from
+        const currentGraphH = graphEl ? graphEl.offsetHeight : MAX_H
+        let startPos
+        let maxDragPos // limit how far this gesture can go
+        if (graphCovered) {
+            // Covered — drag down stops at collapsed
+            startPos = MAX_H
+            maxDragPos = MAX_H
+        } else if (currentGraphH <= MIN_H + 10) {
+            // Already collapsed — this gesture covers the graph
+            startPos = SHRINK_DIST
+            maxDragPos = MAX_H
+        } else {
+            // Expanded — this gesture only collapses, stops at SHRINK_DIST
+            startPos = 0
+            maxDragPos = SHRINK_DIST
         }
-        if (contentWrapRef.current) {
-            contentWrapRef.current.style.transform = `translate3d(0,${offset}px,0)`
+
+        const applyPos = (pos) => {
+            const p = Math.max(0, Math.min(MAX_H, pos))
+
+            if (p <= SHRINK_DIST) {
+                // Phase 1: shrink graph, no clipping
+                const t = p / SHRINK_DIST
+                const ct = easeLocal(t)
+                if (graphEl) graphEl.style.height = `${MAX_H - ct * SHRINK_DIST}px`
+                gc.style.height = ''
+                gc.style.marginTop = '0px'
+                if (heroEl) {
+                    const f = easeLocal(Math.min(1, t * 2.5))
+                    heroEl.style.opacity = `${1 - f}`
+                    heroEl.style.maxHeight = `${(1 - f) * 80}px`
+                    heroEl.style.paddingTop = `${(1 - f) * 4}px`
+                    heroEl.style.paddingBottom = `${(1 - f) * 6}px`
+                }
+            } else {
+                // Phase 2: graph at MIN_H, shrink card height to hide it
+                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                const cover = (p - SHRINK_DIST) / MIN_H
+                const cardH = MIN_H * (1 - cover)
+                gc.style.height = `${Math.max(0, cardH)}px`
+                gc.style.marginTop = '0px'
+                if (heroEl) {
+                    heroEl.style.opacity = '0'
+                    heroEl.style.maxHeight = '0px'
+                    heroEl.style.paddingTop = '0px'
+                    heroEl.style.paddingBottom = '0px'
+                }
+            }
         }
-        const fadeT = Math.min(1, t * 2.5)
-        const heroCollapse = ease(fadeT)
-        if (heroHeaderRef.current) {
-            heroHeaderRef.current.style.opacity = 1 - heroCollapse
-            heroHeaderRef.current.style.maxHeight = `${(1 - heroCollapse) * 80}px`
-            heroHeaderRef.current.style.paddingTop = `${(1 - heroCollapse) * 16}px`
-            heroHeaderRef.current.style.paddingBottom = `${(1 - heroCollapse) * 10}px`
-            heroHeaderRef.current.style.overflow = 'hidden'
-            heroHeaderRef.current.style.pointerEvents = heroCollapse > 0.9 ? 'none' : 'auto'
+
+        const onMove = (ev) => {
+            const dy = ev.clientY - startY
+            if (!moved && Math.abs(dy) < 8) return
+            if (!moved && dy > 0 && startPos <= 0) {
+                // Already expanded, pulling down — abort
+                window.removeEventListener('pointermove', onMove)
+                window.removeEventListener('pointerup', onUp)
+                return
+            }
+            if (!moved) {
+                // First move — remove transitions for direct manipulation
+                gc.style.transition = 'none'
+                if (graphEl) graphEl.style.transition = 'none'
+                if (heroEl) heroEl.style.transition = 'none'
+            }
+            moved = true
+            lastPos = Math.max(0, Math.min(maxDragPos, startPos - dy))
+            if (rafId) cancelAnimationFrame(rafId)
+            rafId = requestAnimationFrame(() => applyPos(lastPos))
         }
-        if (stickyHeaderRef.current) {
-            stickyHeaderRef.current.style.boxShadow = 'none'
+
+        const snapTo = (state) => {
+            const t = '0.35s cubic-bezier(0.4, 0, 0.2, 1)'
+            gc.style.transition = `height ${t}, margin-top ${t}`
+            if (graphEl) graphEl.style.transition = `height ${t}`
+            if (heroEl) heroEl.style.transition = `opacity 0.3s ease, max-height ${t}, padding ${t}`
+
+            if (state === 'expanded') {
+                if (graphEl) graphEl.style.height = `${MAX_H}px`
+                gc.style.height = ''
+                gc.style.marginTop = '0px'
+                if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
+            } else if (state === 'collapsed') {
+                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                gc.style.height = ''
+                gc.style.marginTop = '0px'
+                if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+            } else {
+                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                gc.style.height = '0px'
+                gc.style.marginTop = '0px'
+                if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+            }
+
+            const isCovered = state === 'covered'
+
+            // When expanding, lock scroll and reset to top so graph stays visible
+
+            setTimeout(() => {
+                gc.style.transition = ''
+                if (graphEl) graphEl.style.transition = ''
+                if (heroEl) heroEl.style.transition = ''
+                // Always restore scroll
+                const el = scrollRef.current
+                if (el) {
+                    el.style.overflow = ''
+                    el.style.overflowY = 'auto'
+                }
+                isAnimatingRef.current = false
+            }, 400)
+
+            setGraphCovered(isCovered)
+            setThemeColor(isCovered ? '#f0f4f4' : '#ffffff')
+            themeColorRef.current = isCovered ? '#f0f4f4' : '#ffffff'
         }
-    }, [getCachedNodes])
+
+        const onUp = () => {
+            window.removeEventListener('pointermove', onMove)
+            window.removeEventListener('pointerup', onUp)
+            if (rafId) cancelAnimationFrame(rafId)
+
+            if (!moved) {
+                // Tap — do nothing, let tab onClick handle it
+                return
+            }
+
+            // Snap to nearest state
+            const p = Math.max(0, Math.min(MAX_H, lastPos))
+            if (graphCovered) {
+                if (p < SHRINK_DIST + MIN_H * 0.75) snapTo('collapsed')
+                else snapTo('covered')
+            } else if (startPos === 0) {
+                if (p > SHRINK_DIST * 0.2) snapTo('collapsed')
+                else snapTo('expanded')
+            } else {
+                if (p > SHRINK_DIST + MIN_H * 0.2) snapTo('covered')
+                else if (p < SHRINK_DIST * 0.8) snapTo('expanded')
+                else snapTo('collapsed')
+            }
+        }
+
+        window.addEventListener('pointermove', onMove)
+        window.addEventListener('pointerup', onUp)
+    }, [graphCovered])
 
     const animateScroll = useCallback((el, target, durationOverride, onComplete) => {
         if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
@@ -2169,14 +2349,6 @@ export default function Dashboard() {
         }
         const el = scrollRef.current
         if (!el) return
-        // Prevent scroll when Regular tab is empty (skip during animation)
-        if (!isAnimatingRef.current && activeTab === 'fixed' &&
-            INCOME_SOURCES.filter(s => isSourceVisible(s.id, formData.incomeSources)).length === 0 &&
-            EXPENSE_SOURCES.filter(s => isSourceVisible(s.id, formData.expenseSources)).length === 0) {
-            el.scrollTop = 0
-            applyScrollStyles(0)
-            return
-        }
         applyScrollStyles(el.scrollTop)
         sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTab, String(el.scrollTop))
 
@@ -2229,100 +2401,33 @@ export default function Dashboard() {
     }, [dbLoaded])
 
 
-    // Lock scroll via DOM when Regular tab is empty (avoids React re-render which breaks iOS status bar)
+
+
+
+    // Pin scroll when keyboard dismisses (any input blur)
     useEffect(() => {
         const el = scrollRef.current
         if (!el) return
-        const isFixedEmpty = activeTab === 'fixed' &&
-            INCOME_SOURCES.filter(s => isSourceVisible(s.id, formData.incomeSources)).length === 0 &&
-            EXPENSE_SOURCES.filter(s => isSourceVisible(s.id, formData.expenseSources)).length === 0
-        const isFlexEmpty = activeTab === 'variable' &&
-            (formData.flexIncomeSources || []).length === 0 &&
-            (formData.flexExpenseSources || []).length === 0 &&
-            (formData.oneOffItems || []).filter(i => i.amount && i.name).length === 0
-        const isEmpty = isFixedEmpty || isFlexEmpty
-        if (isEmpty) {
-            if (!isAnimatingRef.current && el.scrollTop > 0) {
-                animateScroll(el, 0, 400)
-            } else if (!isAnimatingRef.current) {
-                applyScrollStyles(0)
-            }
-            el.style.touchAction = 'none'
-        } else {
-            el.style.touchAction = ''
-        }
-        return () => { el.style.touchAction = '' }
-    }, [activeTab, formData.incomeSources, formData.expenseSources])
-
-    // Prevent scroll when swiping on graph — use touch-action CSS instead of JS preventDefault
-    // (non-passive touchmove handlers can block iOS Safari scrolling for the entire container)
-
-    // Snap graph to expanded or collapsed when scroll stops in the shrink zone
-    useEffect(() => {
-        const el = scrollRef.current
-        if (!el) return
-        let isTouching = false
-        const snap = () => {
-            if (isTouching || isSnappingRef.current || isAnimatingRef.current || isTabSwitchingRef.current) return
-            const s = el.scrollTop
-            if (s > 3 && s < SHRINK_DIST - 3) {
-                const snapTo = s < SHRINK_DIST * 0.4 ? 0 : SHRINK_DIST
-                animateScroll(el, snapTo)
-            }
-        }
-        let wasAtShrink = false
-        const onTouchStart = (e) => {
-            isTouching = true
-            wasAtShrink = el.scrollTop >= SHRINK_DIST - 3
-            const header = stickyHeaderRef.current
-            touchOnGraphRef.current = header && header.contains(e.target)
-            if (animFrameRef.current) { cancelAnimationFrame(animFrameRef.current); animFrameRef.current = null }
-            isAnimatingRef.current = false
-            isSnappingRef.current = false
-        }
-        let lastScrollTop = 0
-        let lastScrollTime = 0
-        const onTouchMove = () => {
-            lastScrollTop = el.scrollTop
-            lastScrollTime = performance.now()
-        }
-        const onTouchEnd = () => {
-            isTouching = false
-            touchOnGraphRef.current = false
-            const s = el.scrollTop
-            if (s > 3 && s < SHRINK_DIST - 3) {
-                const timeSinceScroll = performance.now() - lastScrollTime
-                if (timeSinceScroll > 50) {
-                    const snapTo = s < SHRINK_DIST * 0.4 ? 0 : SHRINK_DIST
-                    animateScroll(el, snapTo)
-                    return
+        const onFocusOut = (e) => {
+            if (e.relatedTarget) return
+            const scrollBefore = el.scrollTop
+            const savedOverflow = el.style.overflowY
+            el.style.overflowY = 'hidden'
+            el.scrollTop = scrollBefore
+            const start = performance.now()
+            const pin = () => {
+                el.scrollTop = scrollBefore
+                if (performance.now() - start < 500) {
+                    requestAnimationFrame(pin)
+                } else {
+                    el.style.overflowY = savedOverflow || 'auto'
                 }
             }
-            if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
-            snapTimerRef.current = setTimeout(snap, 120)
+            requestAnimationFrame(pin)
         }
-        const onScroll = () => {
-            if (isTouching || isSnappingRef.current || isAnimatingRef.current || isTabSwitchingRef.current) return
-            if (wasAtShrink && el.scrollTop < SHRINK_DIST && el.scrollTop > 3) {
-                const snapTo = el.scrollTop < SHRINK_DIST * 0.4 ? 0 : SHRINK_DIST
-                animateScroll(el, snapTo)
-                return
-            }
-            if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
-            snapTimerRef.current = setTimeout(snap, 100)
-        }
-        el.addEventListener('touchstart', onTouchStart, { passive: true })
-        el.addEventListener('touchmove', onTouchMove, { passive: true })
-        el.addEventListener('touchend', onTouchEnd, { passive: true })
-        el.addEventListener('scroll', onScroll, { passive: true })
-        return () => {
-            el.removeEventListener('touchstart', onTouchStart)
-            el.removeEventListener('touchmove', onTouchMove)
-            el.removeEventListener('touchend', onTouchEnd)
-            el.removeEventListener('scroll', onScroll)
-            if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
-        }
-    }, [activeTab])
+        el.addEventListener('focusout', onFocusOut)
+        return () => el.removeEventListener('focusout', onFocusOut)
+    }, [])
 
     // Tap Home while already on Home → scroll to top to expand graph
     useEffect(() => {
@@ -2349,9 +2454,9 @@ export default function Dashboard() {
                     const stickyHeader = el.querySelector('[data-sticky-header]')
                     const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
                     const target = section.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH
-                    animateScroll(el, Math.max(SHRINK_DIST, target + 200), 350)
+                    animateScroll(el, Math.max(0, target + 200), 350)
                 } else {
-                    animateScroll(el, SHRINK_DIST, 350)
+                    animateScroll(el, 0, 350)
                 }
             }, 50)
         }
@@ -2375,14 +2480,15 @@ export default function Dashboard() {
                 const [, sourceId, type] = action.split(':')
                 const isExp = type === 'expense'
                 const el = scrollRef.current
-                const wasCollapsed = el && el.scrollTop >= SHRINK_DIST - 1
-                // Step 1: switch to regular tab if needed
+                const savedScroll = el ? el.scrollTop : 0
+                // Step 1: switch to regular tab if needed, collapse graph
                 if (activeTab !== 'fixed') setActiveTab('fixed')
-                // Lock graph during reflow
-                if (wasCollapsed) {
+                collapseGraph()
+                // Lock scroll during reflow
+                if (el) {
                     isAnimatingRef.current = true
-                    el.scrollTop = SHRINK_DIST
-                    applyScrollStyles(SHRINK_DIST)
+                    el.scrollTop = savedScroll
+                    applyScrollStyles(savedScroll)
                 }
                 // Step 2: add source — use addSource for other_income/other_expense (creates instances)
                 if (sourceId === 'other_income' || sourceId === 'other_expense') {
@@ -2397,35 +2503,22 @@ export default function Dashboard() {
                     }
                     setExpandedSources(prev => new Set(prev).add(sourceId))
                 }
-                requestAnimationFrame(() => {
-                    // Pin scroll during first frame of reflow
-                    if (wasCollapsed && el) {
-                        el.scrollTop = SHRINK_DIST
-                        applyScrollStyles(SHRINK_DIST)
+                // Wait for render + collapse animation, then scroll to row
+                setTimeout(() => {
+                    if (!el) return
+                    const stickyHeader = el.querySelector('[data-sticky-header]')
+                    const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
+                    const sectionAttr = isExp ? 'expenses' : 'income'
+                    const sectionSources = isExp ? formData.expenseSources : formData.incomeSources
+                    const isFirstInSection = (sectionSources || []).filter(s => s !== sourceId).length === 0
+                    const scrollTarget = isFirstInSection
+                        ? el.querySelector(`[data-section="${sectionAttr}"]`)
+                        : el.querySelector(`[data-source-id="${sourceId}"]`)
+                    if (scrollTarget) {
+                        const target = scrollTarget.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
+                        el.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
                     }
-                    requestAnimationFrame(() => {
-                        if (!el) return
-                        if (wasCollapsed) {
-                            el.scrollTop = SHRINK_DIST
-                            applyScrollStyles(SHRINK_DIST)
-                        }
-                        const stickyHeader = el.querySelector('[data-sticky-header]')
-                        const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
-                        // If first item in section, scroll to section card top; otherwise scroll to row
-                        const sectionAttr = isExp ? 'expenses' : 'income'
-                        const sectionSources = isExp ? formData.expenseSources : formData.incomeSources
-                        const isFirstInSection = (sectionSources || []).filter(s => s !== sourceId).length === 0
-                        const scrollTarget = isFirstInSection
-                            ? el.querySelector(`[data-section="${sectionAttr}"]`)
-                            : el.querySelector(`[data-source-id="${sourceId}"]`)
-                        if (scrollTarget) {
-                            const target = scrollTarget.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
-                            animateScroll(el, Math.max(SHRINK_DIST, target), 500)
-                        } else {
-                            isAnimatingRef.current = false
-                        }
-                    })
-                })
+                }, 400)
                 return
             }
 
@@ -2433,6 +2526,7 @@ export default function Dashboard() {
                 const [, sourceId, type] = action.split(':')
                 const isExp = type === 'expense'
                 if (activeTab !== 'variable') setActiveTab('variable')
+                collapseGraph()
                 const flexSrc = isExp ? FLEX_EXPENSE_SOURCES : FLEX_INCOME_SOURCES
                 const srcDef = flexSrc.find(s => s.id === sourceId)
                 setFormData(prev => {
@@ -2455,7 +2549,7 @@ export default function Dashboard() {
                         const stickyHeader = el.querySelector('[data-sticky-header]')
                         const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
                         const target = row.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
-                        el.scrollTo({ top: Math.max(SHRINK_DIST, target), behavior: 'smooth' })
+                        el.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
                     }
                 }, 300)
                 return
@@ -2466,7 +2560,7 @@ export default function Dashboard() {
 
             if (action === 'add-oneoff-income' || action === 'add-income' ||
                 action === 'add-oneoff-expense' || action === 'add-expense') {
-                handleTabChange('variable', SHRINK_DIST)
+                handleTabChange('variable')
             }
         }
 
@@ -2663,12 +2757,7 @@ export default function Dashboard() {
             })
         }
 
-        // Find the row above the deleted one (before state removal)
-        const rows = el ? Array.from(el.querySelectorAll(`[data-section="${sectionAttr}"] [data-source-row]`)) : []
-        const deletedIdx = rows.findIndex(r => r.dataset.sourceId === sourceId)
-        const prevRowId = deletedIdx > 0 ? rows[deletedIdx - 1]?.dataset?.sourceId : null
-
-        // Delay state removal so the row swipe animation plays out
+        // Delay state removal so the row collapse animation plays out
         const removeFromState = () => {
             setHiddenSources(prev => {
                 if (!prev.has(sourceId)) return prev
@@ -2721,33 +2810,6 @@ export default function Dashboard() {
                         return next
                     })
                 }, 400)
-            }
-            // If section still has rows, scroll to the row above the deleted one
-            if (!willBeEmpty && !sectionWillBeEmpty) {
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        if (!el) return
-                        const stickyHeader = el.querySelector('[data-sticky-header]')
-                        const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
-                        // Try to find the previous row
-                        const prevRow = prevRowId ? el.querySelector(`[data-source-id="${prevRowId}"]`) : null
-                        if (prevRow) {
-                            const target = prevRow.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
-                            if (Math.abs(el.scrollTop - Math.max(SHRINK_DIST, target)) > 2) {
-                                animateScroll(el, Math.max(SHRINK_DIST, target), 300)
-                            }
-                        } else {
-                            // Deleted the first row — scroll section card to top
-                            const sectionEl = el.querySelector(`[data-section="${sectionAttr}"]`)
-                            if (sectionEl) {
-                                const target = sectionEl.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH + 4
-                                if (el.scrollTop > Math.max(SHRINK_DIST, target) + 2) {
-                                    animateScroll(el, Math.max(SHRINK_DIST, target), 300)
-                                }
-                            }
-                        }
-                    })
-                })
             }
         }, 500)
     }
@@ -2912,7 +2974,7 @@ export default function Dashboard() {
     return (
         <div style={{
             display: 'flex', flexDirection: 'column',
-            height: '100%', background: '#efefef',
+            height: '100%', background: '#fff', overflowX: 'hidden',
             fontFamily: 'Nunito, sans-serif',
         }}>
             {/* Scrollable content */}
@@ -2925,18 +2987,18 @@ export default function Dashboard() {
                     overflowX: 'hidden',
                     WebkitOverflowScrolling: 'touch',
                     overscrollBehavior: 'none',
-                    paddingBottom: 'calc(260px + env(safe-area-inset-bottom))',
+                    paddingBottom: 'calc(120px + env(safe-area-inset-bottom))',
+                    background: '#f0f4f4',
                 }}
             >
                 {/* Graph + tabs — sticky, shrinks on scroll */}
-                <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#efefef', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4px)', paddingBottom: 2, transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}>
+                <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 0, transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}>
 
-                    {/* White card wrapping balance + graph */}
-                    <div ref={graphCardRef} style={{
-                        margin: '0 20px',
-                        background: '#fff',
-                        borderRadius: 18,
+                    {/* Graph area — clips when covered, blocks scroll */}
+                    <div ref={graphCardRef} onTouchMove={e => e.preventDefault()} style={{
+                        margin: '0 8px',
                         overflow: 'hidden',
+                        touchAction: 'none',
                     }}>
 
                         {/* Balance entry banner — shown when no balance in user_profiles */}
@@ -3070,7 +3132,7 @@ export default function Dashboard() {
 
                         {/* Balance hero header */}
                         <div ref={heroHeaderRef} style={{
-                            padding: '16px 18px 10px',
+                            padding: '4px 18px 6px',
                             opacity: showInitialBalancePopup ? 0.35 : 1,
                             pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
                         }}>
@@ -3107,7 +3169,7 @@ export default function Dashboard() {
                                     <button
                                         onClick={() => zoomOutRef.current?.()}
                                         style={{
-                                            background: '#f5f5f5',
+                                            background: '#f0f4f4',
                                             border: 'none',
                                             borderRadius: '50%', cursor: 'pointer',
                                             width: 34, height: 34,
@@ -3215,93 +3277,99 @@ export default function Dashboard() {
                                 footer={<div ref={footerRef} style={{ height: 0 }} />}
                             />
                         </div>
-                    </div>{/* end white card */}
+                    </div>{/* end graph card */}
 
-                    {/* Segmented tab bar — below graph, inside sticky header */}
-                    <div ref={cardDetailsRef} style={{
-                        padding: '10px 20px 0',
-                        opacity: showInitialBalancePopup ? 0.35 : 1,
-                        pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
-                        transform: 'translateZ(0)',
-                    }}>
-                        {(() => {
-                            const tabs = [
-                                { key: 'fixed', label: 'Regular', Icon: PiCalendarBlank, ActiveIcon: PiCalendarBlankFill },
-                                { key: 'goals', label: 'Insights', Icon: PiLightbulb, ActiveIcon: PiLightbulbFill },
-                                { key: 'variable', label: 'Flexible', Icon: PiShuffle, ActiveIcon: PiShuffleBold },
-                            ]
-                            const activeIndex = tabs.findIndex(t => t.key === activeTab)
-                            return (
-                                <div style={{
-                                    display: 'flex', width: '100%', position: 'relative',
-                                    background: '#fff', borderRadius: 50, padding: 3,
-                                }}>
-                                    {/* Sliding green pill */}
+                    {/* Handle + tabs — inside sticky header so they stick */}
+                    <div style={{ background: '#f0f4f4', borderRadius: '20px 20px 0 0', padding: '0 10px 0', marginBottom: -1 }}>
+                        {/* Drag handle line — drag to collapse/cover graph */}
+                        <div
+                            onPointerDown={onHandlePointerDown}
+                            style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px', cursor: 'pointer', touchAction: 'none' }}
+                        >
+                            <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d0d0d0' }} />
+                        </div>
+                        <div ref={cardDetailsRef} onPointerDown={onHandlePointerDown} style={{
+                            padding: '0 6px 6px',
+                            zIndex: 12,
+                            background: '#f0f4f4',
+                            touchAction: 'none',
+                            opacity: showInitialBalancePopup ? 0.35 : 1,
+                            pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
+                        }}>
+                            {(() => {
+                                const tabs = [
+                                    { key: 'fixed', label: 'Regular', Icon: PiCalendarBlank, ActiveIcon: PiCalendarBlankFill },
+                                    { key: 'goals', label: 'Insights', Icon: PiLightbulb, ActiveIcon: PiLightbulbFill },
+                                    { key: 'variable', label: 'Flexible', Icon: PiShuffle, ActiveIcon: PiShuffleBold },
+                                ]
+                                const activeIndex = tabs.findIndex(t => t.key === activeTab)
+                                return (
                                     <div style={{
-                                        position: 'absolute', top: 3, bottom: 3,
-                                        left: `calc(${(activeIndex / 3) * 100}% + 3px)`,
-                                        width: `calc(${100 / 3}% - 4px)`,
-                                        background: '#147b75', borderRadius: 50,
-                                        transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                        boxShadow: 'none',
-                                    }} />
-                                    {tabs.map(tab => {
-                                        const isActive = activeTab === tab.key
-                                        return (
-                                            <div
-                                                key={tab.key}
-                                                onClick={() => handleTabChange(tab.key)}
-                                                style={{
-                                                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    padding: '8px 0', borderRadius: 10, cursor: 'pointer',
-                                                    position: 'relative', zIndex: 1,
-                                                    color: isActive ? '#fff' : '#1a1a1a',
-                                                    transition: isActive ? 'color 0.12s ease 0.12s' : 'color 0.15s ease 0.15s',
-                                                }}
-                                            >
-                                                <tab.Icon size={15} style={{ flexShrink: 0 }} />
-                                                <span style={{
-                                                    fontSize: 14, fontWeight: 700,
-                                                    fontFamily: 'Nunito, sans-serif', marginLeft: 5,
-                                                }}>{tab.label}</span>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            )
-                        })()}
-                    </div>
-                </div>
+                                        display: 'flex', width: '100%', position: 'relative',
+                                        background: '#fff', borderRadius: 50, padding: 3,
+                                    }}>
+                                        <div style={{
+                                            position: 'absolute', top: 3, bottom: 3,
+                                            left: `calc(${(activeIndex / 3) * 100}% + 3px)`,
+                                            width: `calc(${100 / 3}% - 4px)`,
+                                            background: '#147b75', borderRadius: 50,
+                                            transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        }} />
+                                        {tabs.map(tab => {
+                                            const isActive = activeTab === tab.key
+                                            return (
+                                                <div
+                                                    key={tab.key}
+                                                    onClick={() => handleTabChange(tab.key)}
+                                                    style={{
+                                                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        padding: '8px 0', borderRadius: 50, cursor: 'pointer',
+                                                        position: 'relative', zIndex: 1,
+                                                        color: isActive ? '#fff' : '#1a1a1a',
+                                                        transition: isActive ? 'color 0.12s ease 0.12s' : 'color 0.15s ease 0.15s',
+                                                    }}
+                                                >
+                                                    <tab.Icon size={15} style={{ flexShrink: 0 }} />
+                                                    <span style={{
+                                                        fontSize: 14, fontWeight: 700,
+                                                        fontFamily: 'Nunito, sans-serif', marginLeft: 5,
+                                                    }}>{tab.label}</span>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )
+                            })()}
+                        </div>
+                    </div>{/* end handle area */}
+                </div>{/* end sticky header */}
 
-                {/* Content below — held in place during graph shrink */}
+                {/* Content below */}
                 <div ref={contentWrapRef} style={{
-                    willChange: 'transform',
-                    minHeight: `calc(100% - ${MIN_H + 110}px + ${SHRINK_DIST}px)`,
+                    minHeight: '60vh',
                     opacity: showInitialBalancePopup ? 0.35 : 1,
                     pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
                 }}>
-                    <div>
+                    <div style={{
+                        background: '#f0f4f4',
+                        padding: '8px 16px 16px',
+                        minHeight: '50vh',
+                    }}>
 
                         {activeTab === 'fixed' && (<div style={{ paddingBottom: 40 }}>
                             {/* Income vs Spend summary card */}
                             {(() => {
                                 const inc = Math.round(yearlyIncome * freqMultiplier[freqView])
-                                const exp = Math.round((yearlyExpense + weeklySpendTotal) * freqMultiplier[freqView])
+                                const exp = Math.round(yearlyExpense * freqMultiplier[freqView])
                                 const total = inc + exp
                                 const spendPct = total > 0 ? Math.round((exp / total) * 100) : 50
                                 return (
-                                    <div style={{
-                                        margin: '10px 20px 4px',
-                                        padding: '14px 16px',
-                                        background: '#fff',
-                                        borderRadius: 14,
-                                        animation: 'tabFadeIn 0.2s ease',
-                                    }}>
+                                    <div style={{ padding: '16px 16px', background: '#fff', borderRadius: 14, marginBottom: 10 }}>
                                         {/* Title row */}
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                                            <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: 0 }}>
                                                 Regular Spending Overview
-                                            </span>
+                                            </p>
                                             <span style={{
                                                 fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
                                                 color: (inc - exp) >= 0 ? '#147b75' : '#e06470',
@@ -3310,19 +3378,11 @@ export default function Dashboard() {
                                             </span>
                                         </div>
                                         {/* Progress bar — red (spend) to green (income) */}
-                                        <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: '#f0f0f0', marginBottom: 10 }}>
-                                            <div style={{
-                                                height: '100%',
-                                                width: `${spendPct}%`,
-                                                background: '#e06470',
-                                                borderRadius: spendPct >= 100 ? 4 : '4px 0 0 4px',
-                                                transition: 'width 0.4s ease',
-                                            }} />
+                                        <div style={{ height: 16, borderRadius: 8, overflow: 'hidden', background: '#e06470', marginBottom: 10 }}>
                                             <div style={{
                                                 height: '100%',
                                                 width: `${100 - spendPct}%`,
                                                 background: '#147b75',
-                                                borderRadius: spendPct <= 0 ? 4 : '0 4px 4px 0',
                                                 transition: 'width 0.4s ease',
                                             }} />
                                         </div>
@@ -3338,28 +3398,6 @@ export default function Dashboard() {
                                     </div>
                                 )
                             })()}
-
-                            {/* Weekly Spend Card */}
-                            <div style={{
-                                margin: '8px 20px 0', background: '#fff', borderRadius: 14, padding: '16px 16px 8px',
-                            }}>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
-                                        Weekly Spend
-                                    </span>
-                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                        {getCurrencySymbol()}{Math.round(weeklySpendTotal).toLocaleString()}/yr
-                                    </span>
-                                </div>
-                                <WeeklySpendStep compact
-                                    weeklySpend={formData.weeklySpend}
-                                    updateWeeklySpend={(val) => updateField('weeklySpend', val)}
-                                    weeklySpendNonTerm={formData.weeklySpendNonTerm}
-                                    updateWeeklySpendNonTerm={(val) => updateField('weeklySpendNonTerm', val)}
-                                    weeklySpendVariesByTerm={formData.weeklySpendVariesByTerm}
-                                    updateWeeklySpendVariesByTerm={(val) => updateField('weeklySpendVariesByTerm', val)}
-                                />
-                            </div>
 
                             {/* Empty state when no regular sources */}
                             {INCOME_SOURCES.filter(s => isSourceVisible(s.id, formData.incomeSources)).length === 0 &&
@@ -3380,7 +3418,7 @@ export default function Dashboard() {
                             {/* Regular Income Section */}
                             {(INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).length > 0 || addingSourceType === 'income' || collapsingSections.has('income')) && (
                                 <div data-section="income" style={{
-                                    margin: collapsingSections.has('income') ? '0 20px' : '8px 20px 0',
+                                    margin: collapsingSections.has('income') ? '0' : '0 0 10px',
                                     background: '#fff', borderRadius: 14,
                                     padding: collapsingSections.has('income') ? 0 : '0 0 8px',
                                     overflow: 'hidden',
@@ -3392,7 +3430,7 @@ export default function Dashboard() {
                                 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
                                         <span style={{
-                                            fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a',
+                                            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a',
                                         }}>Regular Income</span>
                                         {INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).length > 4 && (
                                             <span
@@ -3571,7 +3609,7 @@ export default function Dashboard() {
                             {/* Regular Expenses Section */}
                             {(EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).length > 0 || addingSourceType === 'expense' || collapsingSections.has('expenses')) && (
                                 <div data-section="expenses" style={{
-                                    margin: collapsingSections.has('expenses') ? '0 20px' : '8px 20px 0',
+                                    margin: collapsingSections.has('expenses') ? '0' : '0 0 10px',
                                     background: '#fff', borderRadius: 14,
                                     padding: collapsingSections.has('expenses') ? 0 : '0 0 8px',
                                     overflow: 'hidden',
@@ -3583,7 +3621,7 @@ export default function Dashboard() {
                                 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
                                         <span style={{
-                                            fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a',
+                                            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a',
                                         }}>Regular Expenses</span>
                                         {EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).length > 4 && (
                                             <span
@@ -3890,13 +3928,13 @@ export default function Dashboard() {
                             const surplus = totalIn - totalOut
 
                             const cardStyle = {
-                                background: '#fff', borderRadius: 14, padding: '16px 18px',
-                                marginBottom: 12, boxShadow: 'none',
-                                border: 'none',
+                                padding: '16px 16px',
+                                background: '#fff', borderRadius: 14,
+                                marginBottom: 10,
                             }
                             const cardTitle = {
-                                fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                                color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+                                fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                color: '#1a1a1a',
                                 margin: '0 0 10px',
                             }
                             const bigNum = {
@@ -3944,7 +3982,7 @@ export default function Dashboard() {
                                             onClick={() => removeEvent(evt)}
                                             style={{
                                                 width: 24, height: 24, borderRadius: 6, border: 'none',
-                                                background: '#f5f5f5', cursor: 'pointer',
+                                                background: '#f0f4f4', cursor: 'pointer',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 padding: 0, flexShrink: 0,
                                             }}
@@ -3956,7 +3994,7 @@ export default function Dashboard() {
                             )
 
                             return (
-                                <div style={{ padding: '10px 20px 30px' }}>
+                                <div style={{ padding: '0 0 30px' }} >
 
                                     {/* Am I on track? */}
                                     {balanceHistory.length > 0 && (() => {
@@ -3969,59 +4007,81 @@ export default function Dashboard() {
                                         const isClose = absDiff < 50
                                         const weeksLeft2 = Math.max(1, Math.ceil(termDaysLeft / 7))
                                         const weeklyAdj = Math.round(absDiff / Math.min(weeksLeft2, 4))
+                                        const pct = forecastBal !== 0 ? Math.round((diff / Math.abs(forecastBal)) * 100) : 0
+                                        const clampedPct = Math.max(-100, Math.min(100, pct))
+                                        const sliderPos = Math.max(3, Math.min(97, 50 + clampedPct / 2))
+                                        const isDanger = clampedPct < -30
+                                        const isWarning2 = clampedPct < -10 && clampedPct >= -30
+                                        const statusText = isDanger ? 'NEEDS ATTENTION' : isWarning2 ? 'WATCH SPENDING' : 'HEALTHY'
+                                        const healthColor = isDanger ? '#e06470' : isWarning2 ? '#EC8C17' : '#147b75'
+                                        const healthBg = isDanger ? '#fdf0f1' : isWarning2 ? 'rgba(236,140,23,0.1)' : '#f0faf9'
 
-                                        const statusColor = isClose ? '#147b75' : isAhead ? '#147b75' : '#e06470'
-                                        const statusBg = isClose ? '#f0faf9' : isAhead ? '#f0faf9' : '#fdf0f1'
-                                        const statusText = isClose ? 'On track' : isAhead ? 'Ahead' : 'Behind'
+                                        // Gauge: pointer shows position on arc
+                                        // Left = behind (-), center = on track (0), right = ahead (+)
+                                        const gW = 240
+                                        const strokeW = 16
+                                        const r = (gW - strokeW) / 2
+                                        const cx = gW / 2
+                                        const cy = r + strokeW / 2
+                                        // Map clampedPct (-100..+100) to arc position (0..1), center = 0.5
+                                        const arcPos = Math.max(0.02, Math.min(0.98, (clampedPct + 100) / 200))
+                                        // Pointer on the arc edge
+                                        const pointerAngle = Math.PI * (1 - arcPos)
+                                        const dotX = cx + r * Math.cos(pointerAngle)
+                                        const dotY = cy - r * Math.sin(pointerAngle)
 
                                         return (
                                             <div style={cardStyle}>
-                                                <p style={cardTitle}>Am I on track?</p>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                                                    <div style={{ padding: '5px 12px', borderRadius: 20, background: statusBg }}>
-                                                        <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: statusColor }}>
-                                                            {statusText}
-                                                        </span>
-                                                    </div>
-                                                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                        {isClose ? 'Looking good!' : `${sym}${absDiff.toLocaleString()} (${Math.abs(Math.round(forecastBal) !== 0 ? Math.round((diff / Math.abs(forecastBal)) * 100) : 0)}%) ${isAhead ? 'above' : 'below'} forecast`}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                                                    <div style={{ flex: 1, background: '#f8f8f8', borderRadius: 10, padding: '10px 12px' }}>
-                                                        <p style={{ margin: 0, fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#999' }}>ACTUAL</p>
-                                                        <p style={{ margin: '4px 0 0', fontSize: 18, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: actualBal < 0 ? '#e06470' : '#1a1a1a' }}>
-                                                            {actualBal < 0 ? '\u2212' : ''}{sym}{Math.abs(Math.round(actualBal)).toLocaleString()}
-                                                        </p>
-                                                    </div>
-                                                    <div style={{ flex: 1, background: '#f8f8f8', borderRadius: 10, padding: '10px 12px' }}>
-                                                        <p style={{ margin: 0, fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#999' }}>FORECAST</p>
-                                                        <p style={{ margin: '4px 0 0', fontSize: 18, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: forecastBal < 0 ? '#e06470' : '#1a1a1a' }}>
-                                                            {forecastBal < 0 ? '\u2212' : ''}{sym}{Math.abs(Math.round(forecastBal)).toLocaleString()}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                {!isClose && (
-                                                    <div style={{ background: '#f8f8f8', borderRadius: 10, padding: '12px 14px' }}>
-                                                        <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
-                                                            {isAhead ? 'Nice work! To stay ahead:' : 'To get back on track:'}
-                                                        </p>
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                                {'\u2022'} Check all your inputs are up to date
+                                                <p style={cardTitle}>Am I On Track?</p>
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                    <div style={{ position: 'relative', width: gW, height: cy + 24 }}>
+                                                        <svg width={gW} height={cy + 24} viewBox={`0 0 ${gW} ${cy + 24}`} style={{ overflow: 'visible' }}>
+                                                            <defs>
+                                                                <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                                                    <stop offset="0%" stopColor="#e06470" />
+                                                                    <stop offset="20%" stopColor="#EC8C17" />
+                                                                    <stop offset="40%" stopColor="#d4b44a" />
+                                                                    <stop offset="50%" stopColor="#147b75" />
+                                                                    <stop offset="100%" stopColor="#147b75" />
+                                                                </linearGradient>
+                                                            </defs>
+                                                            {/* Full gradient arc */}
+                                                            <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+                                                                fill="none" stroke="url(#gaugeGrad)" strokeWidth={strokeW} strokeLinecap="round" />
+                                                            {/* White dot on the arc */}
+                                                            <circle cx={dotX} cy={dotY} r={strokeW / 2 + 2}
+                                                                fill="#fff" stroke={healthColor} strokeWidth={2.5}
+                                                                style={{ transition: 'cx 0.6s ease, cy 0.6s ease' }} />
+                                                        </svg>
+                                                        {/* Content inside the arc */}
+                                                        <div style={{
+                                                            position: 'absolute', bottom: 36, left: '50%', transform: 'translateX(-50%)',
+                                                            textAlign: 'center', whiteSpace: 'nowrap',
+                                                        }}>
+                                                            <p style={{ margin: 0, fontSize: 30, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
+                                                                {clampedPct >= 0 ? '+' : ''}{clampedPct}%
                                                             </p>
-                                                            {!isAhead && <>
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                                    {'\u2022'} Spend <span style={{ color: '#e06470', fontWeight: 700 }}>{sym}{weeklyAdj}/wk</span> less for the next few weeks
-                                                                </p>
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                                    {'\u2022'} Or earn <span style={{ color: '#147b75', fontWeight: 700 }}>{sym}{weeklyAdj}/wk</span> more
-                                                                </p>
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                                    {'\u2022'} Or wait for spending to balance out naturally
-                                                                </p>
-                                                            </>}
+                                                            <p style={{ margin: '4px 0 0', fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: healthColor }}>
+                                                                {isAhead ? 'Ahead!' : isClose ? 'On Track' : statusText === 'WATCH SPENDING' ? 'Watch Spending' : 'Needs Attention'}
+                                                            </p>
                                                         </div>
+                                                    </div>
+                                                    {/* Subtitle */}
+                                                    <p style={{ margin: '-30px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999', textAlign: 'center' }}>
+                                                        {isClose ? '' : isAhead
+                                                            ? <>{sym}{absDiff.toLocaleString()} above forecast</>
+                                                            : <>{sym}{absDiff.toLocaleString()} below forecast</>
+                                                        }
+                                                    </p>
+                                                </div>
+                                                {!isAhead && absDiff > 50 && (
+                                                    <div style={{ background: '#f8f8f8', borderRadius: 10, padding: '12px 14px' }}>
+                                                        <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
+                                                            To get back on track:
+                                                        </p>
+                                                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                                                            {'\u2022'} Spend <span style={{ color: '#e06470', fontWeight: 700 }}>{sym}{weeklyAdj}/wk</span> less or earn <span style={{ color: '#147b75', fontWeight: 700 }}>{sym}{weeklyAdj}/wk</span> more
+                                                        </p>
                                                     </div>
                                                 )}
                                             </div>
@@ -4057,172 +4117,306 @@ export default function Dashboard() {
                                         const spendLess = Math.round(shortfall / weeksToDate)
 
                                         return (
-                                            <div style={cardStyle}>
-                                                <p style={cardTitle}>Will I run out?</p>
+                                            <div style={{
+                                                background: 'linear-gradient(135deg, #e8838e, #d4566a)',
+                                                borderRadius: 14, padding: warningMinimised ? '12px 18px' : '20px 18px', marginBottom: 10,
+                                                color: '#fff', position: 'relative', overflow: 'hidden',
+                                                transition: 'padding 0.25s ease',
+                                            }}>
+                                                {/* Decorative circle */}
                                                 <div style={{
-                                                    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
-                                                    padding: '8px 12px', background: '#fdf0f1', borderRadius: 10,
+                                                    position: 'absolute', top: -20, right: -20,
+                                                    width: 80, height: 80, borderRadius: '50%',
+                                                    background: 'rgba(255,255,255,0.08)',
+                                                }} />
+                                                <div style={{
+                                                    position: 'absolute', bottom: -30, left: -10,
+                                                    width: 60, height: 60, borderRadius: '50%',
+                                                    background: 'rgba(255,255,255,0.05)',
+                                                }} />
+
+                                                {/* Header with minimise toggle */}
+                                                <div
+                                                    onClick={() => setWarningMinimised(m => !m)}
+                                                    style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: warningMinimised ? 0 : 12, transition: 'margin 0.25s ease' }}
+                                                >
+                                                    <AlertTriangle size={20} color="#fff" strokeWidth={2.5} />
+                                                    <p style={{ margin: 0, fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
+                                                        {alreadyOut ? 'You\'ve run out' : 'Running out warning'}
+                                                    </p>
+                                                    {warningMinimised && (
+                                                        <span style={{ fontSize: 14, fontWeight: 800, fontFamily: 'Nunito, sans-serif', opacity: 0.9 }}>
+                                                            {alreadyOut
+                                                                ? (od > 0 ? 'Past overdraft' : `Below ${sym}0`)
+                                                                : daysUntil === 0 ? 'Today'
+                                                                : daysUntil === 1 ? 'Tomorrow'
+                                                                : `${daysUntil}d`
+                                                            }
+                                                        </span>
+                                                    )}
+                                                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{
+                                                        transform: warningMinimised ? 'rotate(0deg)' : 'rotate(180deg)',
+                                                        transition: 'transform 0.25s ease', flexShrink: 0,
+                                                    }}>
+                                                        <path d="M4.5 7L9 11.5L13.5 7" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                    </svg>
+                                                </div>
+
+                                                {/* Collapsible content */}
+                                                <div style={{
+                                                    maxHeight: warningMinimised ? 0 : 300,
+                                                    opacity: warningMinimised ? 0 : 1,
+                                                    overflow: 'hidden',
+                                                    transition: 'max-height 0.3s ease, opacity 0.2s ease',
                                                 }}>
-                                                    <AlertTriangle size={18} color="#e06470" />
-                                                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                                    {/* Big stat */}
+                                                    <p style={{ margin: '0 0 4px', fontSize: 28, fontWeight: 800, fontFamily: 'Nunito, sans-serif', lineHeight: 1 }}>
                                                         {alreadyOut
-                                                            ? `You're past your ${od > 0 ? 'overdraft limit' : 'balance'}`
-                                                            : `Forecast hits ${sym}0 in ${daysUntil} ${daysUntil === 1 ? 'day' : 'days'}`
+                                                            ? `${od > 0 ? 'Past overdraft' : 'Below ' + sym + '0'}`
+                                                            : daysUntil === 0 ? 'Today'
+                                                            : daysUntil === 1 ? 'Tomorrow'
+                                                            : `${daysUntil} days`
                                                         }
                                                     </p>
-                                                </div>
-                                                <div style={{ background: '#f8f8f8', borderRadius: 10, padding: '12px 14px' }}>
-                                                    <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
-                                                        To avoid running out:
+                                                    <p style={{ margin: '0 0 16px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.8 }}>
+                                                        {alreadyOut
+                                                            ? 'Your balance is already past the limit'
+                                                            : `until your forecast hits ${sym}0${od > 0 ? ' / overdraft' : ''}`
+                                                        }
                                                     </p>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                            {'\u2022'} Check all your inputs are correct
+
+                                                    {/* Suggestions */}
+                                                    <div style={{
+                                                        background: 'rgba(255,255,255,0.12)', borderRadius: 10, padding: '12px 14px',
+                                                        backdropFilter: 'blur(4px)',
+                                                    }}>
+                                                        <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', opacity: 0.9 }}>
+                                                            To avoid running out:
                                                         </p>
-                                                        {spendLess > 0 && (
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                                {'\u2022'} Spend <span style={{ color: '#e06470', fontWeight: 700 }}>{sym}{spendLess}/wk</span> less
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                                            {spendLess > 0 && (
+                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85 }}>
+                                                                    {'\u2022'} Spend {sym}{spendLess}/wk less
+                                                                </p>
+                                                            )}
+                                                            {spendLess > 0 && (
+                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85 }}>
+                                                                    {'\u2022'} Or earn {sym}{spendLess}/wk more
+                                                                </p>
+                                                            )}
+                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85 }}>
+                                                                {'\u2022'} Ask family for a top-up
                                                             </p>
-                                                        )}
-                                                        {spendLess > 0 && (
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                                {'\u2022'} Earn <span style={{ color: '#147b75', fontWeight: 700 }}>{sym}{spendLess}/wk</span> more
+                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85 }}>
+                                                                {'\u2022'} Check uni hardship funding
                                                             </p>
-                                                        )}
-                                                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                            {'\u2022'} Ask family for a top-up
-                                                        </p>
-                                                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                            {'\u2022'} Check if your uni offers hardship funding
-                                                        </p>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                         )
                                     })()}
 
-                                    {/* Next N Days */}
-                                    <div style={cardStyle}>
-                                        <p style={cardTitle}>Next {lookAheadDays} Days</p>
-                                        <div style={{ display: 'flex', gap: 12 }}>
-                                            <div style={{ flex: 1, background: '#f0faf9', borderRadius: 10, padding: '12px 14px' }}>
-                                                <p style={{ margin: 0, fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>Coming In</p>
-                                                <p style={{ margin: '4px 0 0', fontSize: 20, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>
-                                                    {sym}{Math.round(upcomingIncome).toLocaleString()}
-                                                </p>
-                                            </div>
-                                            <div style={{ flex: 1, background: '#fdf0f1', borderRadius: 10, padding: '12px 14px' }}>
-                                                <p style={{ margin: 0, fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Going Out</p>
-                                                <p style={{ margin: '4px 0 0', fontSize: 20, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                    {sym}{Math.round(upcomingExpense).toLocaleString()}
-                                                </p>
-                                            </div>
-                                        </div>
-                                        <p style={{ ...subText, marginTop: 10 }}>
-                                            Net: <span style={{ color: upcomingIncome - upcomingExpense >= 0 ? '#147b75' : '#e06470', fontWeight: 700 }}>
-                                                {upcomingIncome - upcomingExpense >= 0 ? '+' : '-'}{sym}{Math.abs(Math.round(upcomingIncome - upcomingExpense)).toLocaleString()}
-                                            </span>
-                                        </p>
-                                    </div>
-
                                     {/* Upcoming Transactions */}
-                                    {(upcomingPayments.length > 0 || upcomingIncomeList.length > 0) && (
-                                        <div ref={goalsTransCardRef} style={cardStyle}>
-                                            <p style={cardTitle}>Upcoming Transactions</p>
-                                            {(() => {
-                                                const combined = [...upcomingPayments, ...upcomingIncomeList].sort((a, b) => a.date.localeCompare(b.date))
-                                                const first3 = combined.slice(0, 3)
-                                                const extra = combined.slice(3, 10)
-                                                const measuredH = goalsMoreRef.current?.scrollHeight || 0
-                                                return (
-                                                    <>
-                                                        {first3.map((evt, i) => renderEventRow(evt, i, goalsShowMore ? combined.slice(0, 10) : first3, evt.type === 'income' ? '#147b75' : '#e06470'))}
-                                                        {extra.length > 0 && (
-                                                            <div
-                                                                ref={goalsMoreRef}
-                                                                style={{
-                                                                    maxHeight: goalsShowMore ? measuredH || 600 : 0,
-                                                                    opacity: goalsShowMore ? 1 : 0,
-                                                                    overflow: 'hidden',
-                                                                    transition: 'max-height 0.45s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease',
-                                                                }}
-                                                            >
-                                                                {extra.map((evt, i) => renderEventRow(evt, i + 3, combined.slice(0, 10), evt.type === 'income' ? '#147b75' : '#e06470'))}
+                                    {(() => {
+                                        const thirtyDays = new Date(today)
+                                        thirtyDays.setDate(thirtyDays.getDate() + 30)
+                                        const thirtyStr = toLocalDate(thirtyDays)
+                                        const allUpcoming = [...upcomingIncomeList, ...upcomingPayments].sort((a, b) => a.date.localeCompare(b.date))
+                                        const next30 = allUpcoming.filter(e => e.date <= thirtyStr)
+                                        const shown = goalsShowMore ? next30 : allUpcoming.slice(0, 5)
+                                        if (allUpcoming.length === 0) return null
+                                        return (
+                                            <div style={cardStyle}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                                    <p style={{ ...cardTitle, margin: 0 }}>Upcoming Transactions</p>
+                                                    {allUpcoming.length > 5 && (
+                                                        <span onClick={() => setGoalsShowMore(p => !p)} style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75', cursor: 'pointer' }}>
+                                                            {goalsShowMore ? 'Show less' : 'Show all'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {shown.map((evt, i) => renderEventRow(evt, i, shown, evt.type === 'income' ? '#147b75' : '#e06470'))}
+                                            </div>
+                                        )
+                                    })()}
+
+                                    
+                                    {/* Spend & Income Breakdown */}
+                                    {(() => {
+                                        const activeEvents = events.filter(e => !e.removed && !e.noDot)
+                                        // Group by label for expenses
+                                        const expenseGroups = {}
+                                        const incomeGroups = {}
+                                        for (const e of activeEvents) {
+                                            const map = e.type === 'expense' ? expenseGroups : incomeGroups
+                                            const key = e.label || e.editType
+                                            map[key] = (map[key] || 0) + e.amount
+                                        }
+                                        const expEntries = Object.entries(expenseGroups).sort((a, b) => b[1] - a[1])
+                                        const incEntries = Object.entries(incomeGroups).sort((a, b) => b[1] - a[1])
+                                        const totalExp = expEntries.reduce((s, [, v]) => s + v, 0)
+                                        const totalInc = incEntries.reduce((s, [, v]) => s + v, 0)
+
+                                        const expColors = ['#e06470', '#EC8C17', '#d4b44a', '#8b5cf6', '#3b82a0', '#999']
+                                        const incColors = ['#147b75', '#1a9e97', '#5a7c4f', '#3b82a0', '#6366f1', '#999']
+
+                                        const net = totalInc - totalExp
+                                        const total = totalInc + totalExp
+
+                                        // Simple two-segment donut: income vs expense
+                                        const donutSize = 130
+                                        const strokeWidth = 16
+                                        const radius = (donutSize - strokeWidth) / 2
+                                        const circumference = 2 * Math.PI * radius
+                                        const incLength = total > 0 ? (totalInc / total) * circumference : circumference / 2
+                                        const expLength = circumference - incLength
+                                        const gap = total > 0 ? 4 : 0
+
+                                        const renderBreakdown = (entries, totalAmt, colors, type) => {
+                                            if (totalAmt === 0) return null
+                                            const key = type
+                                            const showTip = tappedSegment && tappedSegment.type === key
+                                            let tipLeft = 50
+                                            if (showTip) {
+                                                let cum = 0
+                                                for (const [label, amt] of entries) {
+                                                    const pct = (amt / totalAmt) * 100
+                                                    if (label === tappedSegment.label) { tipLeft = cum + pct / 2; break }
+                                                    cum += pct
+                                                }
+                                            }
+                                            return (
+                                                <>
+                                                    <div style={{ position: 'relative', height: showTip ? 24 : 0, transition: 'height 0.15s ease', overflow: 'visible' }}>
+                                                        {showTip && (
+                                                            <div style={{
+                                                                position: 'absolute', bottom: 2,
+                                                                left: `clamp(40px, ${tipLeft}%, calc(100% - 40px))`,
+                                                                transform: 'translateX(-50%)',
+                                                                background: '#333', borderRadius: 6, padding: '3px 8px',
+                                                                whiteSpace: 'nowrap', zIndex: 1,
+                                                            }}>
+                                                                <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>
+                                                                    {tappedSegment.label} \u00b7 {sym}{Math.round(tappedSegment.amt).toLocaleString()}
+                                                                </span>
+                                                                <div style={{
+                                                                    position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)',
+                                                                    borderLeft: '4px solid transparent', borderRight: '4px solid transparent',
+                                                                    borderTop: '4px solid #333',
+                                                                }} />
                                                             </div>
                                                         )}
-                                                        {extra.length > 0 && (
-                                                            <button onClick={() => {
-                                                                if (goalsShowMore && goalsTransCardRef.current && scrollRef.current) {
-                                                                    const sc = scrollRef.current
-                                                                    const stickyHeader = sc.querySelector('[data-sticky-header]')
-                                                                    const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
-                                                                    const cardTop = goalsTransCardRef.current.getBoundingClientRect().top
-                                                                    const scTop = sc.getBoundingClientRect().top
-                                                                    const offset = cardTop - scTop - headerH + sc.scrollTop - 10
-                                                                    setTimeout(() => sc.scrollTo({ top: offset, behavior: 'smooth' }), 50)
-                                                                }
-                                                                setGoalsShowMore(!goalsShowMore)
-                                                            }} style={{
-                                                                width: '100%', border: 'none', background: 'none', cursor: 'pointer',
-                                                                padding: '10px 0 0', fontSize: 12, fontWeight: 700,
-                                                                fontFamily: 'Nunito, sans-serif', color: '#147b75',
-                                                            }}>
-                                                                {goalsShowMore ? 'Show less' : `Show more (${extra.length} more)`}
-                                                            </button>
-                                                        )}
-                                                    </>
-                                                )
-                                            })()}
-                                        </div>
-                                    )}
+                                                    </div>
+                                                    <div style={{ display: 'flex', height: 14, borderRadius: 7, overflow: 'hidden', marginBottom: 8, cursor: 'pointer' }}>
+                                                        {entries.map(([label, amt], i) => {
+                                                            const color = colors[Math.min(i, colors.length - 1)]
+                                                            const isTapped = tappedSegment?.label === label && tappedSegment?.type === key
+                                                            return (
+                                                                <div key={label}
+                                                                    onClick={() => setTappedSegment(isTapped ? null : { label, amt, color, type: key })}
+                                                                    style={{
+                                                                        width: `${(amt / totalAmt) * 100}%`,
+                                                                        background: color, minWidth: 2,
+                                                                        opacity: showTip && !isTapped ? 0.35 : 1,
+                                                                        transition: 'opacity 0.2s ease',
+                                                                    }}
+                                                                />
+                                                            )
+                                                        })}
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+                                                        {entries.map(([label, amt], i) => {
+                                                            const color = colors[Math.min(i, colors.length - 1)]
+                                                            const isTapped = tappedSegment?.label === label && tappedSegment?.type === key
+                                                            return (
+                                                                <div key={label}
+                                                                    onClick={() => setTappedSegment(isTapped ? null : { label, amt, color, type: key })}
+                                                                    style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                                                                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                                                                    <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: isTapped ? '#333' : '#888' }}>
+                                                                        {label}
+                                                                    </span>
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </>
+                                            )
+                                        }
 
-                                    {/* Income vs Expenses ring */}
-                                    <div style={cardStyle}>
-                                        <p style={cardTitle}>Yearly Income vs Expenses</p>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-                                            <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
-                                                <svg viewBox="0 0 36 36" style={{ width: 80, height: 80, transform: 'rotate(-90deg)' }}>
-                                                    <circle cx="18" cy="18" r="14" fill="none" stroke="#f0f0f0" strokeWidth="4" />
-                                                    {totalIn + totalOut > 0 && (<>
-                                                        <circle cx="18" cy="18" r="14" fill="none" stroke="#147b75"
-                                                            strokeWidth="4" strokeLinecap="round"
-                                                            strokeDasharray={`${(totalIn / (totalIn + totalOut)) * 88} 88`}
-                                                        />
-                                                        <circle cx="18" cy="18" r="14" fill="none" stroke="#e06470"
-                                                            strokeWidth="4" strokeLinecap="round"
-                                                            strokeDasharray={`${(totalOut / (totalIn + totalOut)) * 88} 88`}
-                                                            strokeDashoffset={`-${(totalIn / (totalIn + totalOut)) * 88}`}
-                                                        />
-                                                    </>)}
-                                                </svg>
-                                                <div style={{
-                                                    position: 'absolute', inset: 0, display: 'flex',
-                                                    alignItems: 'center', justifyContent: 'center',
-                                                }}>
-                                                    <span style={{
-                                                        fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
-                                                        color: surplus >= 0 ? '#147b75' : '#e06470',
-                                                    }}>
-                                                        {surplus >= 0 ? '+' : '-'}{sym}{Math.abs(Math.round(surplus)).toLocaleString()}
-                                                    </span>
+                                        return (
+                                            <div style={cardStyle}>
+                                                {/* Donut + summary */}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 14 }}>
+                                                    <div style={{ position: 'relative', width: donutSize, height: donutSize, flexShrink: 0 }}>
+                                                        <svg width={donutSize} height={donutSize} viewBox={`0 0 ${donutSize} ${donutSize}`}>
+                                                            {/* Income arc */}
+                                                            <circle
+                                                                cx={donutSize / 2} cy={donutSize / 2} r={radius}
+                                                                fill="none" stroke="#147b75"
+                                                                strokeWidth={strokeWidth}
+                                                                strokeDasharray={`${Math.max(0, incLength - gap)} ${circumference - Math.max(0, incLength - gap)}`}
+                                                                strokeDashoffset={0}
+                                                                strokeLinecap="round"
+                                                                transform={`rotate(-90 ${donutSize / 2} ${donutSize / 2})`}
+                                                            />
+                                                            {/* Expense arc */}
+                                                            <circle
+                                                                cx={donutSize / 2} cy={donutSize / 2} r={radius}
+                                                                fill="none" stroke="#e06470"
+                                                                strokeWidth={strokeWidth}
+                                                                strokeDasharray={`${Math.max(0, expLength - gap)} ${circumference - Math.max(0, expLength - gap)}`}
+                                                                strokeDashoffset={-incLength}
+                                                                strokeLinecap="round"
+                                                                transform={`rotate(-90 ${donutSize / 2} ${donutSize / 2})`}
+                                                            />
+                                                        </svg>
+                                                        <div style={{
+                                                            position: 'absolute', inset: 0,
+                                                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                                        }}>
+                                                            <span style={{ fontSize: 18, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: net >= 0 ? '#147b75' : '#e06470', lineHeight: 1 }}>
+                                                                {net >= 0 ? '+' : '\u2212'}{sym}{Math.abs(Math.round(net)).toLocaleString()}
+                                                            </span>
+                                                            <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb', marginTop: 2 }}>net / year</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ marginBottom: 10 }}>
+                                                            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>INCOME</p>
+                                                            <p style={{ margin: '2px 0 0', fontSize: 20, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
+                                                                {sym}{Math.round(totalInc).toLocaleString()}
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>EXPENSES</p>
+                                                            <p style={{ margin: '2px 0 0', fontSize: 20, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
+                                                                {sym}{Math.round(totalExp).toLocaleString()}
+                                                            </p>
+                                                        </div>
+                                                    </div>
                                                 </div>
+
+                                                {/* Income breakdown */}
+                                                {incEntries.length > 0 && (
+                                                    <div style={{ marginBottom: expEntries.length > 0 ? 14 : 0 }}>
+                                                        <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>Income breakdown</p>
+                                                        {renderBreakdown(incEntries, totalInc, incColors, 'income')}
+                                                    </div>
+                                                )}
+
+                                                {/* Expense breakdown */}
+                                                {expEntries.length > 0 && (
+                                                    <div>
+                                                        <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Expense breakdown</p>
+                                                        {renderBreakdown(expEntries, totalExp, expColors, 'expense')}
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                                                    <div style={{ width: 10, height: 10, borderRadius: 3, background: '#147b75' }} />
-                                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
-                                                        Income: {sym}{Math.round(totalIn).toLocaleString()}
-                                                    </span>
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                                    <div style={{ width: 10, height: 10, borderRadius: 3, background: '#e06470' }} />
-                                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
-                                                        Expenses: {sym}{Math.round(totalOut).toLocaleString()}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                        )
+                                    })()}
 
                                     {/* Balance Tracking — actual vs predicted */}
                                     {balanceHistory.length > 1 && (() => {
@@ -4354,24 +4548,44 @@ export default function Dashboard() {
                         })()}
 
                         {activeTab === 'variable' && (
-                            <div style={{ padding: '10px 20px 0', animation: 'tabFadeIn 0.2s ease' }}>
+                            <div style={{ padding: '0 0 30px' }}>
+
+                                {/* Weekly Spend Card */}
+                                <div style={{
+                                    padding: '14px 16px 8px', background: '#fff', borderRadius: 14, marginBottom: 10,
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                        <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                                            Weekly Spend
+                                        </span>
+                                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                            {getCurrencySymbol()}{Math.round(weeklySpendTotal).toLocaleString()}/yr
+                                        </span>
+                                    </div>
+                                    <WeeklySpendStep compact
+                                        weeklySpend={formData.weeklySpend}
+                                        updateWeeklySpend={(val) => updateField('weeklySpend', val)}
+                                        weeklySpendNonTerm={formData.weeklySpendNonTerm}
+                                        updateWeeklySpendNonTerm={(val) => updateField('weeklySpendNonTerm', val)}
+                                        weeklySpendVariesByTerm={formData.weeklySpendVariesByTerm}
+                                        updateWeeklySpendVariesByTerm={(val) => updateField('weeklySpendVariesByTerm', val)}
+                                    />
+                                </div>
 
                                 {/* Flexible Spend Overview */}
                                 {(() => {
-                                    const flexEvents = events.filter(e => !e.removed && (e.editType?.startsWith('flex_') || e.editType === 'oneOffIncome' || e.editType === 'oneOffExpense'))
+                                    const flexEvents = events.filter(e => !e.removed && (e.editType?.startsWith('flex_') || e.editType === 'oneOffIncome' || e.editType === 'oneOffExpense' || e.editType === 'weeklySpend'))
                                     const flexIn = flexEvents.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0)
                                     const flexOut = flexEvents.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0)
                                     const flexNet = flexIn - flexOut
                                     const total = flexIn + flexOut
                                     const inPct = total > 0 ? Math.round((flexIn / total) * 100) : 50
                                     return (
-                                        <div style={{
-                                            padding: '14px 16px', background: '#fff', borderRadius: 14, marginBottom: 10,
-                                        }}>
+                                        <div style={{ padding: '16px 16px', background: '#fff', borderRadius: 14, marginBottom: 10 }}>
                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                                                <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                                                <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: 0 }}>
                                                     Flexible Spending Overview
-                                                </span>
+                                                </p>
                                                 <span style={{
                                                     fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
                                                     color: flexNet >= 0 ? '#147b75' : '#e06470',
@@ -4379,17 +4593,10 @@ export default function Dashboard() {
                                                     {flexNet >= 0 ? '+' : '\u2212'}{getCurrencySymbol()}{Math.abs(Math.round(flexNet)).toLocaleString()}
                                                 </span>
                                             </div>
-                                            <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: '#f0f0f0', marginBottom: 10 }}>
-                                                <div style={{
-                                                    height: '100%', width: `${100 - inPct}%`,
-                                                    background: '#e06470',
-                                                    borderRadius: (100 - inPct) >= 100 ? 4 : '4px 0 0 4px',
-                                                    transition: 'width 0.4s ease',
-                                                }} />
+                                            <div style={{ display: 'flex', height: 16, borderRadius: 8, overflow: 'hidden', background: '#e06470', marginBottom: 10 }}>
                                                 <div style={{
                                                     height: '100%', width: `${inPct}%`,
                                                     background: '#147b75',
-                                                    borderRadius: inPct >= 100 ? 4 : '0 4px 4px 0',
                                                     transition: 'width 0.4s ease',
                                                 }} />
                                             </div>
@@ -4409,7 +4616,7 @@ export default function Dashboard() {
                                 {(formData.flexIncomeSources || []).length > 0 && (
                                     <div data-section="flex-income" style={{ background: '#fff', borderRadius: 14, padding: '0 0 8px', marginBottom: 10 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
-                                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>Flexible Income</span>
+                                            <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>Flexible Income</span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                                             {(formData.flexIncomeSources || []).map(srcId => {
@@ -4420,10 +4627,10 @@ export default function Dashboard() {
                                                 const expanded = expandedSources.has(srcId)
                                                 const amt = parseFloat(String(srcData.amount || '0').replace(/,/g, ''))
                                                 return (
-                                                    <div key={srcId} data-source-row data-source-id={srcId} style={{ margin: '0 12px', borderRadius: 10, background: '#f5f5f5', overflow: 'hidden', marginBottom: 6 }}>
+                                                    <div key={srcId} data-source-row data-source-id={srcId} style={{ margin: '0 12px', borderRadius: 10, background: '#f0f4f4', overflow: 'hidden', marginBottom: 6 }}>
                                                         <div onClick={() => handleExpandToggle(srcId)} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 12, cursor: 'pointer' }}>
-                                                            {si && <si.Icon size={20} color={si.color} style={{ flexShrink: 0 }} />}
-                                                            <span style={{ flex: 1, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>{src.label}</span>
+                                                            {si && <si.Icon size={20} color="#147b75" style={{ flexShrink: 0 }} />}
+                                                            <span style={{ flex: 1, fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>{src.label}</span>
                                                             {amt > 0 && <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>+{getCurrencySymbol()}{amt.toLocaleString()}</span>}
                                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)' }}><path d="M6 9l6 6 6-6" /></svg>
                                                         </div>
@@ -4457,7 +4664,7 @@ export default function Dashboard() {
                                 {(formData.flexExpenseSources || []).length > 0 && (
                                     <div data-section="flex-expenses" style={{ background: '#fff', borderRadius: 14, padding: '0 0 8px', marginBottom: 10 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
-                                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>Flexible Expenses</span>
+                                            <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>Flexible Expenses</span>
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                                             {(formData.flexExpenseSources || []).map(srcId => {
@@ -4468,10 +4675,10 @@ export default function Dashboard() {
                                                 const expanded = expandedSources.has(srcId)
                                                 const amt = parseFloat(String(srcData.amount || '0').replace(/,/g, ''))
                                                 return (
-                                                    <div key={srcId} data-source-row data-source-id={srcId} style={{ margin: '0 12px', borderRadius: 10, background: '#f5f5f5', overflow: 'hidden', marginBottom: 6 }}>
+                                                    <div key={srcId} data-source-row data-source-id={srcId} style={{ margin: '0 12px', borderRadius: 10, background: '#f0f4f4', overflow: 'hidden', marginBottom: 6 }}>
                                                         <div onClick={() => handleExpandToggle(srcId)} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 12, cursor: 'pointer' }}>
-                                                            {si && <si.Icon size={20} color={si.color} style={{ flexShrink: 0 }} />}
-                                                            <span style={{ flex: 1, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>{src.label}</span>
+                                                            {si && <si.Icon size={20} color="#e06470" style={{ flexShrink: 0 }} />}
+                                                            <span style={{ flex: 1, fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>{src.label}</span>
                                                             {amt > 0 && <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>{'\u2212'}{getCurrencySymbol()}{amt.toLocaleString()}</span>}
                                                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)' }}><path d="M6 9l6 6 6-6" /></svg>
                                                         </div>
@@ -4593,7 +4800,7 @@ export default function Dashboard() {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                                         <div style={{
                                             display: 'flex', alignItems: 'center', flex: 1,
-                                            background: '#f5f5f5', borderRadius: 5,
+                                            background: '#f0f4f4', borderRadius: 5,
                                             padding: '0 6px', height: 24, gap: 2,
                                         }}>
                                             <span style={{
@@ -4782,7 +4989,7 @@ export default function Dashboard() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                                 <div style={{
                                     display: 'flex', alignItems: 'center',
-                                    background: '#f5f5f5', borderRadius: 5,
+                                    background: '#f0f4f4', borderRadius: 5,
                                     padding: '0 6px', height: 24, gap: 2,
                                     width: 76,
                                 }}>
@@ -4861,56 +5068,27 @@ export default function Dashboard() {
                 const isToday = lastDate === today
                 return (
                     <>
-                        <div onClick={closeFabBalance} style={{
+                        <div data-balance-overlay onClick={() => closeFabBalance()} style={{
                             position: 'fixed', inset: 0, zIndex: 1200,
                             background: 'rgba(0,0,0,0.25)',
                             backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
                             opacity: fabBalanceClosing ? 0 : 1,
                             transition: 'opacity 0.25s ease',
                         }} />
-                        <div style={{
-                            position: 'fixed', top: '12%',
+                        <div data-balance-popup onClick={(e) => e.stopPropagation()} style={{
+                            position: 'fixed', top: '15%',
                             left: '50%', transform: 'translateX(-50%)',
-                            zIndex: 1201, width: 300,
-                            background: '#fff', borderRadius: 22,
-                            boxShadow: '0 12px 48px rgba(0,0,0,0.15)',
-                            padding: '24px 22px 20px',
+                            zIndex: 1201, width: 'calc(100% - 48px)', maxWidth: 320,
+                            background: '#fff', borderRadius: 24,
+                            boxShadow: '0 20px 60px rgba(0,0,0,0.12)',
+                            padding: '32px 28px 28px',
                             animation: fabBalanceClosing
-                                ? 'balanceEditOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards'
-                                : 'balanceEditIn 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+                                ? 'balanceContractOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards'
+                                : 'balanceExpandIn 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
                             transformOrigin: 'center bottom',
                         }}>
-                            {/* Header */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                                <div style={{
-                                    width: 36, height: 36, borderRadius: '50%',
-                                    background: 'rgba(236,140,23,0.12)',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                }}>
-                                    <span style={{ fontSize: 18, fontWeight: 800, color: '#EC8C17', fontFamily: 'Nunito, sans-serif' }}>{sym}</span>
-                                </div>
-                                <div>
-                                    <p style={{ margin: 0, fontSize: 16, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
-                                        New Balance Reading
-                                    </p>
-                                    <p style={{ margin: 0, fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#aaa' }}>
-                                        {isToday ? 'Updating today\u2019s reading' : `Last recorded ${lastDate ? (() => { const d = daysBetween(lastDate, today); return d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago` })() : 'never'}`}
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Current reading — clearly not an input */}
-                            <div style={{ margin: '14px 0 12px', textAlign: 'center' }}>
-                                <p style={{ margin: 0, fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb', letterSpacing: 0.3 }}>
-                                    {isToday ? 'CURRENT READING' : 'LAST READING'}
-                                </p>
-                                <p style={{ margin: '4px 0 0', fontSize: 28, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: balanceNum < 0 ? '#e06470' : '#ccc', lineHeight: 1 }}>
-                                    {balanceNum < 0 ? '\u2212' : ''}{sym}{Math.abs(balanceNum).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </p>
-                            </div>
-
-                            <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
-                                Enter new balance
+                            <p style={{ margin: '0 0 2px', fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#999', textAlign: 'center', letterSpacing: 0.3 }}>
+                                {isToday ? 'Updating today\u2019s balance' : `Last recorded ${lastDate ? (() => { const d = daysBetween(lastDate, today); return d === 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago` })() : 'never'}`}
                             </p>
 
                             <BalancePillInline
@@ -4977,57 +5155,55 @@ export default function Dashboard() {
             {/* Graph filter dropdown — rendered at root to avoid overflow clipping */}
             {showGraphFilter && (() => {
                 const rect = graphFilterRef.current?.getBoundingClientRect()
+                const items = [
+                    { label: 'Expenses', active: showExpenses, color: '#e06470', toggle: () => setShowExpenses(prev => { localStorage.setItem('budgeup_show_expenses', String(!prev)); return !prev }) },
+                    { label: 'Income', active: showIncome, color: '#147b75', toggle: () => setShowIncome(prev => { localStorage.setItem('budgeup_show_income', String(!prev)); return !prev }) },
+                    { label: 'History', active: showBalanceHistory, color: '#EC8C17', toggle: () => { setShowBalanceHistory(prev => { analytics.track(DASHBOARD_EVENTS.BALANCE_HISTORY_TOGGLED, { visible: !prev }); localStorage.setItem('budgeup_show_balance_history', String(!prev)); return !prev }) } },
+                    { label: 'Overdraft', active: showOverdraft, color: '#c0392b', toggle: () => setShowOverdraft(prev => { localStorage.setItem('budgeup_show_overdraft', String(!prev)); return !prev }) },
+                    { label: 'Breaks', active: showHolidays, color: '#7c8ab8', toggle: () => setShowHolidays(prev => { localStorage.setItem('budgeup_show_holidays', String(!prev)); return !prev }) },
+                ]
                 return (
                     <div ref={graphFilterDropdownRef} style={{
                         position: 'fixed',
-                        top: rect ? rect.bottom + 8 : 0,
+                        top: rect ? rect.bottom + 6 : 0,
                         right: rect ? window.innerWidth - rect.right : 0,
-                        background: '#fff', borderRadius: 14,
-                        boxShadow: '0 8px 28px rgba(0,0,0,0.1)',
-                        padding: '6px 6px', zIndex: 2000,
+                        background: '#fff', borderRadius: 12,
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
+                        padding: 6, zIndex: 2000,
                         display: 'flex', flexDirection: 'column', gap: 2,
-                        minWidth: 160,
                         transformOrigin: 'top right',
                         animation: graphFilterClosing
                             ? 'filterDropdownOut 0.18s ease forwards'
                             : 'filterDropdownIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
                     }}>
-                        {[
-                            { label: 'Expenses', active: showExpenses, color: '#e06470', toggle: () => setShowExpenses(prev => { localStorage.setItem('budgeup_show_expenses', String(!prev)); return !prev }) },
-                            { label: 'Income', active: showIncome, color: '#147b75', toggle: () => setShowIncome(prev => { localStorage.setItem('budgeup_show_income', String(!prev)); return !prev }) },
-                            { label: 'Balance History', active: showBalanceHistory, color: '#EC8C17', toggle: () => { setShowBalanceHistory(prev => { analytics.track(DASHBOARD_EVENTS.BALANCE_HISTORY_TOGGLED, { visible: !prev }); localStorage.setItem('budgeup_show_balance_history', String(!prev)); return !prev }) } },
-                            { label: 'Overdraft', active: showOverdraft, color: '#c0392b', toggle: () => setShowOverdraft(prev => { localStorage.setItem('budgeup_show_overdraft', String(!prev)); return !prev }) },
-                            { label: 'Non-Lectures', active: showHolidays, color: '#7c8ab8', toggle: () => setShowHolidays(prev => { localStorage.setItem('budgeup_show_holidays', String(!prev)); return !prev }) },
-                        ].map(item => (
+                        {items.map((item, i) => (
                             <button
                                 key={item.label}
                                 onClick={item.toggle}
                                 style={{
-                                    display: 'flex', alignItems: 'center', gap: 10,
-                                    padding: '8px 12px', borderRadius: 8,
-                                    background: item.active ? `${item.color}10` : 'transparent',
+                                    display: 'flex', alignItems: 'center', gap: 8,
+                                    padding: '6px 14px', borderRadius: 20,
+                                    background: item.active ? `${item.color}12` : 'transparent',
                                     border: 'none', cursor: 'pointer',
-                                    transition: 'background 0.15s ease',
+                                    transition: 'background 0.15s ease, opacity 0.2s ease, transform 0.2s ease',
+                                    minWidth: 0,
+                                    opacity: graphFilterClosing ? 0 : 1,
+                                    transform: graphFilterClosing ? 'translateY(-4px)' : 'translateY(0)',
+                                    transitionDelay: graphFilterClosing ? `${(items.length - 1 - i) * 0.02}s` : `${i * 0.03}s`,
                                 }}
                             >
                                 <div style={{
-                                    width: 18, height: 18, borderRadius: 5,
-                                    background: item.active ? item.color : '#e8e8e8',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 9, height: 9, borderRadius: '50%',
+                                    background: item.active ? item.color : '#ddd',
                                     transition: 'background 0.2s ease',
                                     flexShrink: 0,
-                                }}>
-                                    {item.active && (
-                                        <svg width="10" height="8" viewBox="0 0 12 9" fill="none">
-                                            <path d="M1 4L4.5 7.5L11 1" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                        </svg>
-                                    )}
-                                </div>
+                                }} />
                                 <span style={{
-                                    fontSize: 13, fontWeight: 600,
+                                    fontSize: 12, fontWeight: 600,
                                     fontFamily: 'Nunito, sans-serif',
-                                    color: item.active ? '#333' : '#aaa',
+                                    color: item.active ? '#555' : '#bbb',
                                     transition: 'color 0.15s ease',
+                                    letterSpacing: 0.2,
                                 }}>{item.label}</span>
                             </button>
                         ))}

@@ -67,7 +67,7 @@ function Chevron({ open }) {
             transition: 'transform 0.2s ease',
             flexShrink: 0,
         }}>
-            <path d="M4 5.5L9 10.5L14 5.5" stroke="#9f9c9c"
+            <path d="M4 5.5L9 10.5L14 5.5" stroke="#777"
                 strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     )
@@ -529,7 +529,7 @@ export default function BursaryStep({
                                     fontFamily: 'Nunito, sans-serif',
                                     color: '#444', margin: '2px 0 0',
                                 }}>
-                                    Optional – helps us forecast your budget more accurately
+                                    Optional – improves accuracy
                                 </p>
                             </div>
                             <Chevron open={datesExpanded} />
@@ -555,7 +555,7 @@ export default function BursaryStep({
                                         padding: '5px 0',
                                     }}>
                                         <span style={{
-                                            fontSize: 12, color: '#9f9c9c',
+                                            fontSize: 12, color: '#777',
                                             fontFamily: 'Nunito, sans-serif',
                                         }}>
                                             {MONTH_LABELS[m]}

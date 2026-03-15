@@ -57,7 +57,7 @@ function Chevron({ open }) {
             transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
             transition: 'transform 0.2s ease', flexShrink: 0,
         }}>
-            <path d="M4 5.5L9 10.5L14 5.5" stroke="#9f9c9c" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M4 5.5L9 10.5L14 5.5" stroke="#777" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     )
 }
@@ -65,7 +65,7 @@ function Chevron({ open }) {
 function DateRow({ label, value, onChange, onDateTap, scrollRef }) {
     return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0' }}>
-            <span style={{ fontSize: 12, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif' }}>{label}</span>
+            <span style={{ fontSize: 12, color: '#777', fontFamily: 'Nunito, sans-serif' }}>{label}</span>
             <div style={{ position: 'relative' }}>
                 <span style={{
                     fontSize: 13, fontWeight: 600, color: '#147b75',
@@ -227,10 +227,10 @@ export default function OtherIncomeStep({
                 }, 350)
             }
         } else {
-            // Dashboard: scroll the input itself to top
-            if (scrollParent) {
+            // Dashboard: scroll the amount label to top so the question is visible
+            if (scrollParent && amountLabelRef.current) {
                 setTimeout(() => {
-                    scrollTargetToTop(scrollParent, input)
+                    scrollTargetToTop(scrollParent, amountLabelRef.current)
                 }, 350)
             }
         }
@@ -240,10 +240,12 @@ export default function OtherIncomeStep({
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
         setInputFocused(true)
         if (compact) {
-            // Pin page scroll in compact mode too
             const wrapper = rootRef.current
             const scrollParent = wrapper ? findScrollParent(wrapper.parentElement) : null
             pinAllScroll(scrollParent)
+            if (scrollParent && questionRef.current) {
+                setTimeout(() => scrollTargetToTop(scrollParent, questionRef.current), 350)
+            }
             return
         }
         // Pin scroll position so iOS doesn't auto-scroll the name input
@@ -260,10 +262,12 @@ export default function OtherIncomeStep({
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
         setInputFocused(true)
         if (compact) {
-            // Pin page scroll in compact mode
             const wrapper = rootRef.current
             const scrollParent = wrapper ? findScrollParent(wrapper.parentElement) : null
             pinAllScroll(scrollParent)
+            if (scrollParent && amountLabelRef.current) {
+                setTimeout(() => scrollTargetToTop(scrollParent, amountLabelRef.current), 350)
+            }
             return
         }
         // Wait for keyboard + spacer to settle, then scroll amount label to top
@@ -323,14 +327,14 @@ export default function OtherIncomeStep({
             {!compact && (
                 <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
                     <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>Other Income</h2>
-                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>Side hustles, selling stuff, or anything else coming in.</p>
+                    <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>Any certain and regular income you receive.</p>
                 </div>
             )}
 
             <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
                 <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Give it a name</p>
-                <input type="text" placeholder="e.g. Side hustle, YouTube, etc." value={otherIncomeLabel || ''} onChange={(e) => updateOtherIncomeLabel(e.target.value)}
+                <input type="text" placeholder="e.g. Any regular income" value={otherIncomeLabel || ''} onChange={(e) => updateOtherIncomeLabel(e.target.value)}
                     onTouchStart={handleInputTouchStart} onTouchEnd={handleNameTouchEnd}
                     onFocus={handleNameFocus} onBlur={handleInputBlur}
                     style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 10, padding: '10px 14px', fontSize: 15, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', marginBottom: 20 }} />
@@ -350,7 +354,7 @@ export default function OtherIncomeStep({
                                         transition: 'border-radius 0.3s ease',
                                     }}>
                                         <span style={{
-                                            fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif',
+                                            fontSize: 11, fontWeight: 600, color: '#777', fontFamily: 'Nunito, sans-serif',
                                             whiteSpace: 'nowrap', flexShrink: 0, overflow: 'hidden',
                                             width: showDual ? 52 : 0, opacity: showDual ? 1 : 0,
                                             transition: 'width 0.3s ease, opacity 0.2s ease',
@@ -371,7 +375,7 @@ export default function OtherIncomeStep({
                                             display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderTop: 'none',
                                             borderRadius: '0 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
                                         }}>
-                                            <span style={{ fontSize: 11, fontWeight: 600, color: '#9f9c9c', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Holidays</span>
+                                            <span style={{ fontSize: 11, fontWeight: 600, color: '#777', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Holidays</span>
                                             <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                                             <input type="text" inputMode="decimal" placeholder="0.00"
                                                 value={formatDisplay(rawNonTermAmount)} onChange={handleNonTermAmountChange}
@@ -436,7 +440,7 @@ export default function OtherIncomeStep({
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <div>
                                             <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know when I next get paid</p>
-                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – helps us forecast more accurately</p>
+                                            <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – improves accuracy</p>
                                         </div>
                                         <Chevron open={datesExpanded} />
                                     </div>
@@ -455,7 +459,7 @@ export default function OtherIncomeStep({
                                     <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Payment dates</p>
                                     {otherIncomeTermDates && Object.keys(otherIncomeTermDates).length > 0 && (
                                         <button onClick={() => updateOtherIncomeTermDates({})} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9f9c9c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#777" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
                                         </button>
                                     )}
                                 </div>
@@ -477,7 +481,7 @@ export default function OtherIncomeStep({
                                     {otherIncomeQuarterlyDates && Object.values(otherIncomeQuarterlyDates).some((v, i) => v !== QUARTER_DEFAULTS[i]) && (
                                         <button onClick={() => { const defaults = {}; QUARTER_DEFAULTS.forEach((d, i) => { defaults[i] = d }); updateOtherIncomeQuarterlyDates(defaults) }}
                                             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9f9c9c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#777" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
                                         </button>
                                     )}
                                 </div>
@@ -520,7 +524,7 @@ export default function OtherIncomeStep({
                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <div>
                                         <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>I know when I next get paid</p>
-                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – helps us forecast your budget more accurately</p>
+                                        <p style={{ fontSize: 10, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '2px 0 0' }}>Optional – improves accuracy</p>
                                     </div>
                                     <Chevron open={datesExpanded} />
                                 </div>
@@ -538,7 +542,7 @@ export default function OtherIncomeStep({
                                     <p style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#000', margin: 0 }}>Payment dates</p>
                                     {otherIncomeTermDates && Object.keys(otherIncomeTermDates).length > 0 && (
                                         <button onClick={(e) => { e.stopPropagation(); updateOtherIncomeTermDates({}) }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9f9c9c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#777" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
                                         </button>
                                     )}
                                 </div>
@@ -560,7 +564,7 @@ export default function OtherIncomeStep({
                                     {otherIncomeQuarterlyDates && Object.values(otherIncomeQuarterlyDates).some((v, i) => v !== QUARTER_DEFAULTS[i]) && (
                                         <button onClick={(e) => { e.stopPropagation(); const defaults = {}; QUARTER_DEFAULTS.forEach((d, i) => { defaults[i] = d }); updateOtherIncomeQuarterlyDates(defaults) }}
                                             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex', alignItems: 'center' }}>
-                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9f9c9c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#777" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
                                         </button>
                                     )}
                                 </div>

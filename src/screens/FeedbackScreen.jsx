@@ -8,6 +8,8 @@ const POSTHOG_SURVEY_ID = import.meta.env.VITE_POSTHOG_FEEDBACK_SURVEY_ID
 
 const RATING_ICONS = [PiHeartBreak, PiThumbsDown, PiMinus, PiThumbsUp, PiHeart]
 const RATING_LABELS = ['Terrible', 'Bad', 'Okay', 'Good', 'Love it']
+const RATING_COLORS = ['#e06470', '#EC8C17', '#d4b44a', '#1a9e97', '#147b75']
+const RATING_BGS = ['#fdf0f1', 'rgba(236,140,23,0.1)', 'rgba(212,180,74,0.1)', '#f0faf9', '#f0faf9']
 
 function RatingQuestion({ question, value, onChange }) {
     const scale = question.scale || 5
@@ -23,54 +25,36 @@ function RatingQuestion({ question, value, onChange }) {
             <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                gap: 4,
+                gap: 6,
             }}>
                 {options.map(num => {
                     const selected = value === num
                     const Icon = RATING_ICONS[num - 1]
+                    const color = RATING_COLORS[num - 1]
+                    const bg = RATING_BGS[num - 1]
                     return (
                         <button
                             key={num}
                             onClick={() => onChange(value === num ? null : num)}
                             style={{
                                 display: 'flex', flexDirection: 'column',
-                                alignItems: 'center', gap: 4,
-                                background: selected ? 'rgba(20, 123, 117, 0.1)' : '#f5f5f5',
-                                border: selected ? '2px solid #147B75' : '2px solid transparent',
+                                alignItems: 'center', justifyContent: 'center',
+                                background: selected ? bg : '#fff',
+                                border: `2px solid ${selected ? color : '#e8e8e8'}`,
                                 borderRadius: 12,
                                 padding: '10px 8px',
                                 cursor: 'pointer',
-                                transition: 'all 0.2s ease',
+                                transition: 'background 0.2s ease, border 0.2s ease',
                                 flex: 1,
-                                transform: selected ? 'scale(1.08)' : 'scale(1)',
                             }}
                         >
                             {Icon && (
-                                <Icon size={24} color={selected ? '#147B75' : '#999'} style={{ transition: 'color 0.2s ease' }} />
+                                <Icon size={18} color={selected ? color : '#999'} style={{ transition: 'color 0.2s ease' }} />
                             )}
-                            <span style={{
-                                fontSize: 10, fontWeight: 600,
-                                fontFamily: 'Nunito, sans-serif',
-                                color: selected ? '#147B75' : '#888',
-                                transition: 'color 0.2s ease',
-                            }}>{RATING_LABELS[num - 1] || num}</span>
                         </button>
                     )
                 })}
             </div>
-            {question.lowerBoundLabel && question.upperBoundLabel && (
-                <div style={{
-                    display: 'flex', justifyContent: 'space-between',
-                    marginTop: 4, padding: '0 4px',
-                }}>
-                    <span style={{ fontSize: 11, color: '#aaa', fontFamily: 'Nunito, sans-serif' }}>
-                        {question.lowerBoundLabel}
-                    </span>
-                    <span style={{ fontSize: 11, color: '#aaa', fontFamily: 'Nunito, sans-serif' }}>
-                        {question.upperBoundLabel}
-                    </span>
-                </div>
-            )}
         </div>
     )
 }
@@ -95,17 +79,17 @@ function OpenQuestion({ question, value, onChange }) {
                     padding: '12px 14px',
                     borderRadius: 10,
                     border: '1.5px solid #e8e8e8',
-                    background: '#f5f5f5',
+                    background: '#fff',
                     fontSize: 14, fontWeight: 500,
                     fontFamily: 'Nunito, sans-serif',
                     color: '#1a1a1a',
                     resize: 'none',
                     outline: 'none',
                     boxSizing: 'border-box',
-                    transition: 'border-color 0.2s ease, background 0.2s ease',
+                    transition: 'border-color 0.2s ease',
                 }}
-                onFocus={e => { e.target.style.borderColor = '#147B75'; e.target.style.background = '#fff' }}
-                onBlur={e => { e.target.style.borderColor = '#e8e8e8'; e.target.style.background = '#f5f5f5' }}
+                onFocus={e => { e.target.style.borderColor = '#147B75' }}
+                onBlur={e => { e.target.style.borderColor = '#e8e8e8' }}
             />
         </div>
     )
@@ -283,13 +267,13 @@ export default function FeedbackScreen() {
         <div style={{
             display: 'flex', flexDirection: 'column',
             height: '100%',
-            background: '#efefef',
+            background: '#fff',
         }}>
             {/* Header */}
             <div style={{
                 paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
                 padding: 'calc(env(safe-area-inset-top, 0px) + 16px) 20px 12px',
-                background: '#efefef',
+                background: '#fff',
             }}>
                 <h1 style={{
                     fontSize: 24, fontWeight: 800,
@@ -317,7 +301,7 @@ export default function FeedbackScreen() {
                 {/* Suggestion Box Card */}
                 {survey && (
                     <div style={{
-                        background: '#fff',
+                        background: '#f0f4f4',
                         borderRadius: 14,
                         padding: '20px 18px',
                         marginBottom: 12,
@@ -325,14 +309,11 @@ export default function FeedbackScreen() {
                     }}>
                         {!submitted ? (
                             <>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                                    <MessageSquare size={18} color="#147B75" />
-                                    <p style={{
-                                        fontSize: 16, fontWeight: 700,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#1a1a1a', margin: 0,
-                                    }}>Suggestion Box</p>
-                                </div>
+                                <p style={{
+                                    fontSize: 16, fontWeight: 700,
+                                    fontFamily: 'Nunito, sans-serif',
+                                    color: '#1a1a1a', margin: '0 0 4px',
+                                }}>Suggestion Box</p>
                                 <p style={{
                                     fontSize: 13, fontWeight: 500,
                                     fontFamily: 'Nunito, sans-serif',
@@ -423,7 +404,7 @@ export default function FeedbackScreen() {
                 {/* Loading skeleton for survey */}
                 {!survey && POSTHOG_SURVEY_ID && (
                     <div style={{
-                        background: '#fff', borderRadius: 14,
+                        background: '#f0f4f4', borderRadius: 14,
                         padding: '20px 18px', marginBottom: 12,
                         animation: 'skeletonFadeIn 0.3s ease',
                     }}>
@@ -451,7 +432,7 @@ export default function FeedbackScreen() {
                     borderRadius: 14,
                     overflow: 'hidden',
                     marginBottom: 12,
-                    background: '#fff',
+                    background: '#f0f4f4',
                     position: 'relative',
                 }}>
                     <div style={{ padding: '18px 18px 0' }}>

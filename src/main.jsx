@@ -9,13 +9,12 @@ import posthog from 'posthog-js'
 import 'posthog-js/dist/surveys'
 import { supabase } from './lib/supabaseClient'
 
-// Prevent pinch-to-zoom on iOS (Safari ignores viewport meta) — except on the term graph
-const isInsideGraph = (e) => e.target?.closest?.('[data-allow-zoom]')
-document.addEventListener('gesturestart', (e) => { if (!isInsideGraph(e)) e.preventDefault() }, { passive: false })
-document.addEventListener('gesturechange', (e) => { if (!isInsideGraph(e)) e.preventDefault() }, { passive: false })
-document.addEventListener('gestureend', (e) => { if (!isInsideGraph(e)) e.preventDefault() }, { passive: false })
+// Prevent pinch-to-zoom on iOS (Safari ignores viewport meta)
+document.addEventListener('gesturestart', (e) => e.preventDefault(), { passive: false })
+document.addEventListener('gesturechange', (e) => e.preventDefault(), { passive: false })
+document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false })
 document.addEventListener('touchmove', (e) => {
-  if (e.touches.length > 1 && !isInsideGraph(e)) e.preventDefault()
+  if (e.touches.length > 1) e.preventDefault()
 }, { passive: false })
 
 // Clear saved scroll positions and tab state on fresh page load

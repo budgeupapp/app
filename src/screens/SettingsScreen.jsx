@@ -673,7 +673,7 @@ export default function SettingsScreen() {
       height: '100vh',
       display: 'flex',
       flexDirection: 'column',
-      background: '#efefef',
+      background: '#fff',
     }}>
       {contextHolder}
 
@@ -797,7 +797,7 @@ export default function SettingsScreen() {
 
         {/* ACCOUNT HEADER */}
         <div style={{
-          background: '#fff',
+          background: '#f0f4f4',
           borderRadius: 16,
           padding: '22px 20px',
           marginBottom: 20,
@@ -844,24 +844,24 @@ export default function SettingsScreen() {
               onClick={handleCopyLink}
               style={{
                 width: 42, height: 42, borderRadius: 10,
-                background: '#f3f3f3', border: 'none',
+                background: '#fff', border: '1.5px solid #e0e0e0',
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <Copy size={16} color="#666" />
+              <Copy size={16} color="#555" />
             </button>
             <button
               onClick={handleShowQr}
               style={{
                 width: 42, height: 42, borderRadius: 10,
-                background: '#f3f3f3', border: 'none',
+                background: '#fff', border: '1.5px solid #e0e0e0',
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 18,
               }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="2" y="2" width="8" height="8" rx="1" />
                 <rect x="14" y="2" width="8" height="8" rx="1" />
                 <rect x="2" y="14" width="8" height="8" rx="1" />
@@ -877,11 +877,11 @@ export default function SettingsScreen() {
         {/* FINANCIAL */}
         <div style={{ marginBottom: 16 }}>
           <div style={{
-            fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-            color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+            color: '#1a1a1a',
             padding: '0 6px', marginBottom: 8,
           }}>Financial</div>
-          <div style={{ background: '#fff', borderRadius: 16 }}>
+          <div style={{ background: '#f0f4f4', borderRadius: 16 }}>
             <SettingsRow
               icon={<Globe size={18} />}
               label="Currency"
@@ -905,7 +905,7 @@ export default function SettingsScreen() {
                   width: '100%', appearance: 'none', WebkitAppearance: 'none',
                   border: '1px solid #e8e8e8', borderRadius: 10, padding: '10px 14px',
                   fontSize: 15, fontFamily: 'Nunito, sans-serif', fontWeight: 600,
-                  background: '#fafafa', color: '#1a1a1a', cursor: 'pointer',
+                  background: '#fff', color: '#1a1a1a', cursor: 'pointer',
                 }}
               >
                 {CURRENCIES.map(c => (
@@ -925,7 +925,7 @@ export default function SettingsScreen() {
                 display: 'flex', alignItems: 'center',
                 border: '1px solid #e8e8e8', borderRadius: 10,
                 padding: '0 14px', height: 44, gap: 6,
-                background: '#fafafa',
+                background: '#fff',
               }}>
                 <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>
                   {getCurrencySymbol(currency)}
@@ -988,7 +988,7 @@ export default function SettingsScreen() {
                 display: 'flex', alignItems: 'center',
                 border: '1px solid #e8e8e8', borderRadius: 10,
                 padding: '0 14px', height: 44, gap: 6,
-                background: '#fafafa',
+                background: '#fff',
               }}>
                 <span style={{ fontSize: 16, fontWeight: 600, color: '#5e5e5e', fontFamily: 'Nunito, sans-serif' }}>
                   {getCurrencySymbol(currency)}
@@ -1077,7 +1077,7 @@ export default function SettingsScreen() {
                     }}
                     style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      width: '100%', padding: '10px 14px', border: 'none',
+                      width: '100%', padding: '10px 14px',
                       borderRadius: 10, cursor: 'pointer', textAlign: 'left',
                       background: graphStartMode === opt.key ? '#f0faf9' : '#fafafa',
                       border: graphStartMode === opt.key ? '2px solid #147b75' : '1.5px solid #e8e8e8',
@@ -1105,7 +1105,7 @@ export default function SettingsScreen() {
                     <div style={{
                       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                       padding: '10px 14px', borderRadius: 10,
-                      border: '1px solid #e8e8e8', background: '#fafafa',
+                      border: '1px solid #e8e8e8', background: '#fff',
                     }}>
                       <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>
                         {new Date(graphStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -1147,11 +1147,11 @@ export default function SettingsScreen() {
         {/* UNIVERSITY & TERMS */}
         <div style={{ marginBottom: 16 }}>
           <div style={{
-            fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-            color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+            color: '#1a1a1a',
             padding: '0 6px', marginBottom: 8,
           }}>University & Terms</div>
-          <div style={{ background: '#fff', borderRadius: 16 }}>
+          <div style={{ background: '#f0f4f4', borderRadius: 16 }}>
             <SettingsRow
               icon={<BookOpen size={18} />}
               label="University"
@@ -1189,7 +1189,15 @@ export default function SettingsScreen() {
                       const currentTerms = termDates?.terms || []
                       const customTerms = custom.terms || []
                       const alreadySet = currentTerms.length === customTerms.length &&
-                        customTerms.every((ct, i) => currentTerms[i]?.start === ct.start && currentTerms[i]?.end === ct.end)
+                        customTerms.every((ct, i) => {
+                          const curr = currentTerms[i]
+                          if (!curr || curr.start !== ct.start || curr.end !== ct.end) return false
+                          // Also check break names match
+                          const currBreaks = curr.breaks || []
+                          const ctBreaks = ct.breaks || []
+                          if (currBreaks.length !== ctBreaks.length) return false
+                          return ctBreaks.every((cb, j) => currBreaks[j]?.name === cb.name && currBreaks[j]?.start === cb.start && currBreaks[j]?.end === cb.end)
+                        })
                       if (!alreadySet) {
                         setTermDatesPrompt({ university: val, termDates: custom })
                       }
@@ -1199,7 +1207,7 @@ export default function SettingsScreen() {
                     width: '100%', appearance: 'none', WebkitAppearance: 'none',
                     border: '1.5px solid #e0e0e0', borderRadius: 10, padding: '10px 38px 10px 14px',
                     fontSize: 15, fontFamily: 'Nunito, sans-serif', fontWeight: 600,
-                    background: '#f5f5f5', color: '#1a1a1a', cursor: 'pointer',
+                    background: '#fff', color: '#1a1a1a', cursor: 'pointer',
                     boxSizing: 'border-box',
                   }}
                 >
@@ -1218,6 +1226,13 @@ export default function SettingsScreen() {
             <SettingsRow
               icon={<Calendar size={18} />}
               label="Term dates"
+              value={(() => {
+                const terms = termDates?.terms
+                if (!terms?.length) return null
+                const sorted = [...terms].sort((a, b) => a.start.localeCompare(b.start))
+                const fmtShort = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+                return `${fmtShort(sorted[0].start)} – ${fmtShort(sorted[sorted.length - 1].end)}`
+              })()}
               onClick={() => toggle('termDates')}
               expanded={expanded === 'termDates'}
               last
@@ -1271,11 +1286,11 @@ export default function SettingsScreen() {
         {/* LEGAL & PRIVACY */}
         <div style={{ marginBottom: 16 }}>
           <div style={{
-            fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-            color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+            color: '#1a1a1a',
             padding: '0 6px', marginBottom: 8,
           }}>Legal & Privacy</div>
-          <div style={{ background: '#fff', borderRadius: 16 }}>
+          <div style={{ background: '#f0f4f4', borderRadius: 16 }}>
             {policyLinks.map((link, i) => (
               <a
                 key={link.label}
@@ -1318,11 +1333,11 @@ export default function SettingsScreen() {
         {/* ACCOUNT ACTIONS */}
         <div style={{ marginBottom: 16 }}>
           <div style={{
-            fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-            color: '#999', textTransform: 'uppercase', letterSpacing: 0.5,
+            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+            color: '#1a1a1a',
             padding: '0 6px', marginBottom: 8,
           }}>Account</div>
-          <div style={{ background: '#fff', borderRadius: 16 }}>
+          <div style={{ background: '#f0f4f4', borderRadius: 16 }}>
             <button
               onClick={() => setShowResetModal(true)}
               style={{

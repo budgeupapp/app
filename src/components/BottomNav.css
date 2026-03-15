@@ -64,7 +64,7 @@
     align-items: center;
     justify-content: center;
     box-shadow: 0 0 0 4px rgba(20, 123, 117, 0.15);
-    transition: background 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+    transition: background 0.35s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease;
     margin-top: -20px;
 }
 

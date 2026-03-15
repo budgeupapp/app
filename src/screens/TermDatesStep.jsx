@@ -16,7 +16,7 @@ function DateRow({ label, value, onChange, last = false }) {
         }}>
             <span style={{
                 fontSize: 12,
-                color: '#9f9c9c',
+                color: '#777',
                 fontFamily: 'Nunito, sans-serif',
             }}>{label}</span>
 
@@ -54,12 +54,12 @@ function DateRow({ label, value, onChange, last = false }) {
 
 function Chevron({ open }) {
     return (
-        <svg width="18" height="15" viewBox="0 0 18 15" fill="none" style={{
-            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{
+            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
             transition: 'transform 0.2s ease',
             flexShrink: 0,
         }}>
-            <path d="M4 5.5L9 10.5L14 5.5" stroke="#9f9c9c"
+            <path d="M7 4.5L12 9L7 13.5" stroke="#777"
                 strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     )
@@ -204,7 +204,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                         }}
                     />
                     <span style={{
-                        fontSize: 9, fontWeight: 600, color: '#9f9c9c',
+                        fontSize: 9, fontWeight: 600, color: '#777',
                         fontFamily: 'Nunito, sans-serif',
                     }}>{weeks} weeks</span>
                     <div style={{ flex: 1 }} />
@@ -245,7 +245,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                 transition: 'max-height 0.3s ease, opacity 0.2s ease',
                             }}>
                                 <div style={{
-                                    background: (brk.name && /^exams?$/i.test(brk.name.trim()))
+                                    background: (brk.name && /exam/i.test(brk.name.trim()))
                                         ? 'rgba(240,212,212,0.8)'
                                         : (brk.name && /reading/i.test(brk.name))
                                             ? 'rgba(212,228,240,0.8)'
@@ -259,12 +259,27 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                         display: 'flex', alignItems: 'center',
                                         padding: '8px 12px 4px 12px', gap: 6,
                                     }}>
+                                        <input
+                                            type="text"
+                                            value={brk.name || ''}
+                                            placeholder="Holiday"
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) => {
+                                                const newBreaks = [...term.breaks]
+                                                newBreaks[i] = { ...newBreaks[i], name: e.target.value }
+                                                onUpdate({ ...term, breaks: newBreaks })
+                                            }}
+                                            style={{
+                                                fontSize: 12, fontWeight: 700, color: '#4b4a4a',
+                                                fontFamily: 'Nunito, sans-serif',
+                                                border: 'none', background: 'transparent',
+                                                outline: 'none', padding: 0,
+                                                width: Math.max(40, (brk.name || 'Holiday').length * 7),
+                                                borderBottom: '1px dotted rgba(75,74,74,0.35)',
+                                            }}
+                                        />
                                         <span style={{
-                                            fontSize: 12, fontWeight: 700, color: '#4b4a4a',
-                                            fontFamily: 'Nunito, sans-serif',
-                                        }}>{brk.name || 'Holiday'}</span>
-                                        <span style={{
-                                            fontSize: 9, fontWeight: 600, color: '#9f9c9c',
+                                            fontSize: 9, fontWeight: 600, color: '#777',
                                             fontFamily: 'Nunito, sans-serif',
                                         }}>{days} days off</span>
                                         <div style={{ flex: 1 }} />
@@ -273,7 +288,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                             style={{
                                                 background: 'none', border: 'none',
                                                 cursor: 'pointer', fontSize: 18,
-                                                color: '#9f9c9c', lineHeight: 1, padding: 0,
+                                                color: '#777', lineHeight: 1, padding: 0,
                                             }}
                                         >×</button>
                                     </div>

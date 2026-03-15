@@ -83,21 +83,28 @@ function calcYRange(bal, projMin, projMax) {
     const b = typeof bal === 'number' && !isNaN(bal) ? bal : 0
     const lo = projMin !== undefined ? Math.min(b, projMin) : b
     const hi = projMax !== undefined ? Math.max(b, projMax) : b
-    const mag = Math.max(Math.abs(hi), Math.abs(lo), Math.max(hi - lo, 200))
+    // Use the range (hi - lo) as primary sizing metric for more stable scaling
+    const range0 = Math.max(hi - lo, 200)
+    const mag = Math.max(range0, Math.abs(hi), Math.abs(lo))
 
+    // Use wider thresholds with overlap to reduce step jumping
     let step = 50
-    if (mag > 100) step = 100
-    if (mag > 300) step = 200
-    if (mag > 600) step = 500
-    if (mag > 1500) step = 1000
-    if (mag > 3000) step = 2000
-    if (mag > 8000) step = 5000
-    if (mag > 15000) step = 10000
-    if (mag > 30000) step = 20000
-    if (mag > 80000) step = 50000
+    if (mag > 120) step = 100
+    if (mag > 400) step = 200
+    if (mag > 800) step = 500
+    if (mag > 2000) step = 1000
+    if (mag > 4000) step = 2000
+    if (mag > 10000) step = 5000
+    if (mag > 20000) step = 10000
+    if (mag > 40000) step = 20000
+    if (mag > 100000) step = 50000
 
-    const yMax = Math.ceil((hi + 0.3 * step) / step) * step
-    const yMin = Math.min(yMax - 2 * step, Math.floor((lo - 0.15 * step) / step) * step)
+    // Add generous padding so small value changes don't shift the range
+    const pad = step * 0.5
+    const yMax = Math.ceil((hi + pad) / step) * step
+    // Ensure 0 is always visible with some space below
+    const loWithZero = Math.min(lo, 0)
+    const yMin = Math.min(yMax - 2 * step, Math.floor((loWithZero - pad * 0.3) / step) * step)
 
     // Generate exactly 6 evenly-spaced ticks across the range
     const TARGET_TICKS = 6
@@ -149,6 +156,24 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
     const todayNoon = new Date(todayMidnight.getTime() + 12 * 60 * 60 * 1000)
     const todayPct = datePctFromDate(todayNoon)
     const showToday = today >= AY_START && today <= AY_END
+
+    // If no balance recorded today, move the orange marker to the last known recording
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+    const hasTodayReading = balanceHistory.some(bh => bh.recorded_date === todayIso)
+    const lastReading = !hasTodayReading && balanceHistory.length > 0
+        ? balanceHistory.reduce((latest, bh) => bh.recorded_date > latest.recorded_date ? bh : latest, balanceHistory[0])
+        : null
+    const markerPct = lastReading ? datePct(lastReading.recorded_date) : todayPct
+    const markerLabel = (() => {
+        if (hasTodayReading || !lastReading) return 'TODAY'
+        const rd = new Date(lastReading.recorded_date + 'T12:00:00')
+        const diffDays = Math.round((todayMidnight - rd) / 86400000)
+        if (diffDays === 1) return 'YESTERDAY'
+        const day = rd.getDate()
+        const mon = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][rd.getMonth()]
+        return `${day} ${mon}`
+    })()
+    const markerDate = lastReading ? lastReading.recorded_date : todayIso
 
     const hasBalance = balance !== undefined
 
@@ -419,9 +444,19 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         // Track (x, balance) for zero/overdraft crossing detection
         const balPoints = [{ x: balStartX, bal: balAtStart }]
 
+        let insertedMarker = false
         let insertedToday = false
         for (const evt of postSignup) {
             const x = Math.max(0.5, datePct(evt.date))
+            // Insert a point at markerPct (orange dot) for a clean past/future split
+            if (!insertedMarker && markerPct !== todayPct && x >= markerPct && prevX < markerPct) {
+                const spent = weeklySpendBetween(prevX, markerPct)
+                if (spent > 0) { bal -= spent }
+                points.push({ x: markerPct, y: toTopPct(bal) })
+                balPoints.push({ x: markerPct, bal })
+                insertedMarker = true
+                prevX = markerPct
+            }
             // Insert a point at todayPct before the first future event for a clean past/future split
             if (!insertedToday && x >= todayPct && prevX < todayPct) {
                 const spent = weeklySpendBetween(prevX, todayPct)
@@ -451,6 +486,15 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             prevX = x
         }
 
+        // Ensure line reaches marker
+        if (!insertedMarker && markerPct !== todayPct && prevX < markerPct) {
+            const spent = weeklySpendBetween(prevX, markerPct)
+            if (spent > 0) { bal -= spent }
+            points.push({ x: markerPct, y: toTopPct(bal) })
+            balPoints.push({ x: markerPct, bal })
+            prevX = markerPct
+        }
+
         // Ensure line reaches today
         if (prevX < todayPct) {
             const spent = weeklySpendBetween(prevX, todayPct)
@@ -466,24 +510,31 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         points.push({ x: 100, y: toTopPct(bal) })
         balPoints.push({ x: 100, bal })
 
+        // Extend line left to markerPct if it starts after the orange dot
+        if (points.length > 0 && points[0].x > markerPct) {
+            points.unshift({ x: markerPct, y: points[0].y })
+            balPoints.unshift({ x: markerPct, bal: balPoints[0]?.bal ?? balAtStart })
+        }
+
         const startX = points[0].x
 
         const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
         const fillPath = linePath + ` L 100 100 L ${startX} 100 Z`
 
-        // Split into past and future line paths at todayPct for different colors
-        const todayIdx = points.findIndex(p => p.x >= todayPct)
+        // Split into past and future line paths at markerPct (orange dot) for different colors
+        const splitX = markerPct
+        const splitIdx = points.findIndex(p => p.x >= splitX)
         let pastLinePath = null
         let pastFillPath = null
         let futureLinePath = null
         let futureFillPath = null
 
-        if (startX < todayPct && todayIdx > 0) {
-            const pastPts = points.slice(0, todayIdx + 1)
+        if (startX < splitX && splitIdx > 0) {
+            const pastPts = points.slice(0, splitIdx + 1)
             pastLinePath = pastPts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
             pastFillPath = pastLinePath + ` L ${pastPts[pastPts.length - 1].x} 100 L ${startX} 100 Z`
 
-            const futurePts = points.slice(todayIdx)
+            const futurePts = points.slice(splitIdx)
             futureLinePath = futurePts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
             futureFillPath = futureLinePath + ` L 100 100 L ${futurePts[0].x} 100 Z`
         } else {
@@ -554,9 +605,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
     const pastPath = (() => {
         if (!hasBalance) return null
 
-        // Match the steppedPath's starting y so there's no visual jump
         const y = steppedPath?.points?.[0]?.y ?? toTopPct(balNum)
-        // End the past line where the stepped path starts (first past event or today)
         const endX = steppedPath ? steppedPath.points[0].x : todayPct
         const points = [{ x: 0, y }, { x: endX, y }]
         const linePath = `M 0 ${y} L ${endX} ${y}`
@@ -564,6 +613,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
         return { linePath, fillPath, dots: [], points }
     })()
+
+    // No cross-fade on graph line — instant update
 
     /* ---------- TAPPED DOT TOOLTIPS ---------- */
     const [tappedHistDot, setTappedHistDot] = useState(null) // { date, balance, x, y }
@@ -650,13 +701,17 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             }
         }
 
-        // Find nearest event dot
-        let nearbyDot = null, bestDist = Infinity
+        // Find all event dots near the scrub position
         const threshold = 2.5 / (z || 1)
+        const nearbyDots = []
         for (const dot of allDotsRef.current) {
             const d = Math.abs(dot.x - xPct)
-            if (d < bestDist && d < threshold) { bestDist = d; nearbyDot = dot }
+            if (d < threshold) nearbyDots.push(dot)
         }
+        // Keep single nearbyDot for backward compat (closest one)
+        const nearbyDot = nearbyDots.length > 0
+            ? nearbyDots.reduce((best, d) => Math.abs(d.x - xPct) < Math.abs(best.x - xPct) ? d : best)
+            : null
 
         // Convert xPct to date (linear between AY_START and AY_END)
         const totalMs = AY_END.getTime() - AY_START.getTime()
@@ -667,17 +722,17 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         const yPct = 100 - ((balance - ym) / (ymx - ym)) * 100
         const clampedY = Math.max(2, Math.min(98, yPct))
         if (scrubLineRef.current) {
+            scrubLineRef.current.style.display = ''
             scrubLineRef.current.style.left = `${xPct}%`
-            scrubLineRef.current.style.opacity = '1'
         }
         if (scrubDotRef.current) {
+            scrubDotRef.current.style.display = ''
             scrubDotRef.current.style.left = `${xPct}%`
             scrubDotRef.current.style.top = `${clampedY}%`
-            scrubDotRef.current.style.opacity = '1'
         }
-
         // Position tooltip in viewport space (fixed positioning)
         if (scrubTooltipRef.current) {
+            scrubTooltipRef.current.style.display = ''
             const tooltipX = Math.max(rect.left + 45, Math.min(rect.right - 45, clientX))
             const tooltipY = rect.top + 10
             scrubTooltipRef.current.style.left = `${tooltipX}px`
@@ -702,7 +757,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             }
         }
 
-        setScrubData({ xPct, balance, date, nearbyDot, actualBal })
+        setScrubData({ xPct, balance, date, nearbyDot, nearbyDots, actualBal })
     }, [])
 
     /* ---------- ZOOM & PAN ---------- */
@@ -855,37 +910,15 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         if (s.longPressTimer) { clearTimeout(s.longPressTimer); s.longPressTimer = null }
         // Dismiss tapped dot tooltip
         setTappedHistDot(null)
+        // Ensure scrubber visuals are hidden on new touch
+        if (scrubLineRef.current) scrubLineRef.current.style.display = 'none'
+        if (scrubDotRef.current) scrubDotRef.current.style.display = 'none'
+        if (scrubTooltipRef.current) { scrubTooltipRef.current.style.opacity = '0'; scrubTooltipRef.current.style.display = 'none' }
 
         if (!zoomEnabledRef.current && !hasBalance) return
         const t = touchRef.current
 
-        // Check for double-tap first — handle it cleanly without disrupting animation state
-        if (e.touches.length === 1 && zoomEnabledRef.current) {
-            const now = Date.now()
-            if (now - t.lastTap < 300) {
-                t.isDoubleTap = true
-                t.lastTap = 0 // reset so a third tap doesn't re-trigger
-                // Cancel any momentum but not mid-animation
-                if (momentumRef.current) { cancelAnimationFrame(momentumRef.current); momentumRef.current = null }
-                if (zoomRef.current > 1.05) {
-                    animateTo(1, 0, 400)
-                } else {
-                    const container = graphContainerRef.current
-                    if (container) {
-                        const rect = container.getBoundingClientRect()
-                        const graphLeft = rect.left + Y_AXIS_W
-                        const graphWidth = rect.width - Y_AXIS_W
-                        const tapRel = (e.touches[0].clientX - graphLeft) / graphWidth
-                        const tapPct = tapRel * 100
-                        const targetZoom = 8
-                        animateZoomTo(tapPct, targetZoom, 450)
-                    }
-                }
-                e.preventDefault()
-                return
-            }
-            t.lastTap = now
-        }
+
 
         if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null }
         if (momentumRef.current) { cancelAnimationFrame(momentumRef.current); momentumRef.current = null }
@@ -1012,9 +1045,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         if (s.active) {
             s.active = false
             setScrubData(null)
-            if (scrubLineRef.current) scrubLineRef.current.style.opacity = '0'
-            if (scrubDotRef.current) scrubDotRef.current.style.opacity = '0'
-            if (scrubTooltipRef.current) scrubTooltipRef.current.style.opacity = '0'
+            if (scrubLineRef.current) scrubLineRef.current.style.display = 'none'
+            if (scrubDotRef.current) scrubDotRef.current.style.display = 'none'
+            if (scrubTooltipRef.current) { scrubTooltipRef.current.style.opacity = '0'; scrubTooltipRef.current.style.display = 'none' }
             return
         }
 
@@ -1191,7 +1224,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                         return (
                             <div key={tick} style={{
                                 position: 'absolute',
-                                right: 4,
+                                right: 8,
                                 top: `${toTopPct(tick)}%`,
                                 transform: 'translateY(-50%)',
                                 fontSize: 9,
@@ -1377,7 +1410,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     const isActive = activeEventDot && activeEventDot.date === dot.event.date && activeEventDot.editType === dot.event.editType
                                     return (
                                         <div
-                                            key={`past-${i}`}
+                                            key={`past-${dot.event.editType}-${dot.event.date}-${dot.event.amount}`}
                                             onClick={(e) => { e.stopPropagation(); onEventClick?.({ ...dot.event, balanceAfter: dot.balanceAfter }, e) }}
                                             style={{
                                                 position: 'absolute',
@@ -1391,9 +1424,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                                 cursor: 'pointer',
                                                 zIndex: isActive ? 20 : (isCurrent ? 8 : 4),
                                                 transition: isZoomed
-                                                    ? 'transform 0.15s ease'
+                                                    ? 'transform 0.15s ease, top 0.4s ease, left 0.4s ease'
                                                     : pastRevealed
-                                                        ? 'transform 0.15s ease, opacity 0.2s ease, background 0.2s ease'
+                                                        ? 'transform 0.15s ease, opacity 0.2s ease, background 0.2s ease, top 0.4s ease, left 0.4s ease'
                                                         : `transform 0.35s cubic-bezier(.34,1.56,.64,1) ${delay}s, opacity 0.2s ease ${delay}s`,
                                             }}
                                         >
@@ -1422,9 +1455,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             <>
                                 <div style={{
                                     position: 'absolute',
-                                    left: `${todayPct}%`, right: 0,
+                                    left: `${markerPct}%`, right: 0,
                                     top: `${greenTopPct}%`, bottom: 0,
-                                    background: 'linear-gradient(to bottom, rgba(20,123,117,0.08), rgba(20,123,117,0))',
+                                    background: 'linear-gradient(to bottom, rgba(20,123,117,0.05), rgba(20,123,117,0))',
                                     pointerEvents: 'none',
                                     transformOrigin: 'left',
                                     transform: balanceAnimated ? 'scaleX(1)' : 'scaleX(0)',
@@ -1435,10 +1468,10 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 }} />
                                 <div style={{
                                     position: 'absolute',
-                                    left: `${todayPct}%`, right: 0,
+                                    left: `${markerPct}%`, right: 0,
                                     top: `${greenTopPct}%`,
                                     height: 0,
-                                    borderTop: `1.5px solid #147b75`,
+                                    borderTop: `1.5px solid rgba(20,123,117,0.25)`,
                                     pointerEvents: 'none',
                                     transformOrigin: 'left',
                                     transform: balanceAnimated ? 'scaleX(1)' : 'scaleX(0)',
@@ -1454,17 +1487,20 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             const isIncome = dot.event.type === 'income'
                             const isHidden = hiddenEventTypes.includes(dot.event.editType)
                             const isCurrent = !currentEventType || dot.event.editType === currentEventType
+                            const isPast = dot.x < markerPct
                             const forcedColor2 = forceDotColor === 'green' ? '#147b75' : forceDotColor === 'red' ? '#e06470' : (forceGreenDots ? '#147b75' : null)
                             const color = forcedColor2
                                 ? forcedColor2
-                                : isCurrent
-                                    ? (isIncome ? '#147b75' : '#e06470')
-                                    : (isIncome ? '#a8d5d3' : '#f2c4c8')
+                                : isPast
+                                    ? (isIncome ? '#a8d5d3' : '#f2c4c8')
+                                    : isCurrent
+                                        ? (isIncome ? '#147b75' : '#e06470')
+                                        : (isIncome ? '#a8d5d3' : '#f2c4c8')
                             const delay = 0.25 + i * 0.12
                             const isActive = activeEventDot && activeEventDot.date === dot.event.date && activeEventDot.editType === dot.event.editType
                             return (
                                 <div
-                                    key={i}
+                                    key={`${dot.event.editType}-${dot.event.date}-${dot.event.amount}`}
                                     onClick={(e) => { if (!isHidden) { e.stopPropagation(); onEventClick?.({ ...dot.event, balanceAfter: dot.balanceAfter }, e) } }}
                                     style={{
                                         position: 'absolute',
@@ -1479,9 +1515,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                         pointerEvents: 'auto',
                                         zIndex: isActive ? 20 : (isCurrent ? 8 : 5),
                                         transition: isZoomed
-                                            ? 'transform 0.15s ease'
+                                            ? 'transform 0.15s ease, top 0.4s ease, left 0.4s ease'
                                             : eventsRevealed
-                                                ? 'transform 0.15s ease, opacity 0.2s ease'
+                                                ? 'transform 0.15s ease, opacity 0.2s ease, top 0.4s ease, left 0.4s ease'
                                                 : `transform 0.35s cubic-bezier(.34,1.56,.64,1) ${delay}s, opacity 0.2s ease ${delay}s`,
                                     }}
                                 >
@@ -1552,7 +1588,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 const delay = 0.25 + i * 0.12
                                 return (
                                     <div
-                                        key={`step-${i}`}
+                                        key={`step-${dot.event.editType}-${dot.event.date}-${dot.event.amount}`}
                                         style={{
                                             position: 'absolute',
                                             left: `clamp(0px, ${dot.x}%, 100%)`,
@@ -1564,17 +1600,17 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                             pointerEvents: 'none',
                                             zIndex: 3,
                                             opacity: (eventsRevealed || isZoomed) ? 0.6 : 0,
-                                            transition: `opacity 0.3s ease ${delay}s`,
+                                            transition: `opacity 0.3s ease ${delay}s, top 0.4s ease, height 0.4s ease, left 0.4s ease`,
                                         }}
                                     />
                                 )
                             })}
 
-                        {/* Today vertical dashed line */}
+                        {/* Marker vertical dashed line — centered under pill */}
                         {showToday && (
                             <div style={{
                                 position: 'absolute',
-                                left: `${todayPct}%`,
+                                left: `${markerPct}%`,
                                 top: 0, bottom: 0,
                                 width: 0,
                                 borderLeft: '1px dashed rgba(236,140,23,0.4)',
@@ -1582,23 +1618,23 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             }} />
                         )}
 
-                        {/* TODAY pill */}
+                        {/* Marker pill — TODAY / YESTERDAY / date */}
                         {showToday && (
                             <div style={{
-                                position: 'absolute', left: `${todayPct}%`, top: -5,
+                                position: 'absolute', left: `${markerPct}%`, top: -5,
                                 transform: `translateX(-50%)`,
                                 background: '#EC8C17', color: '#fff',
                                 fontSize: 5, fontWeight: 700,
                                 fontFamily: 'Nunito, sans-serif',
                                 padding: '2px 5px', borderRadius: 5,
                                 whiteSpace: 'nowrap', letterSpacing: 0.5, zIndex: 2,
-                            }}>TODAY</div>
+                            }}>{markerLabel}</div>
                         )}
 
                         {/* Balance-mode: orange dot at balance position */}
                         {balanceVisible && showToday && (() => {
                             const isOneOff = currentEventType === 'oneOffIncome' || currentEventType === 'oneOffExpense'
-                            const hasCurrentAtToday = isOneOff && currentEventType && pastEvents.some(e => e.editType === currentEventType && Math.abs(datePct(e.date) - todayPct) < 0.5)
+                            const hasCurrentAtToday = isOneOff && currentEventType && pastEvents.some(e => e.editType === currentEventType && Math.abs(datePct(e.date) - markerPct) < 0.5)
                             const isTodayTapped = tappedHistDot?.date === '__today__'
                             return (
                                 <div
@@ -1607,13 +1643,13 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                         if (isTodayTapped) {
                                             setTappedHistDot(null)
                                         } else {
-                                            setTappedHistDot({ date: '__today__', balance: actualBalNum, x: todayPct, y: balTopPct })
+                                            setTappedHistDot({ date: '__today__', balance: actualBalNum, x: markerPct, y: balTopPct })
                                         }
                                         onBalanceClick?.(e)
                                     }}
                                     style={{
                                         position: 'absolute',
-                                        left: `${todayPct}%`,
+                                        left: `${markerPct}%`,
                                         top: `${balTopPct}%`,
                                         transform: dotAnimated
                                             ? `translate(-50%, -50%) scale(${isTodayTapped ? 1.15 : 1})`
@@ -1703,7 +1739,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 <path
                                     d={pastPath.linePath}
                                     fill="none"
-                                    stroke="rgba(20,123,117,0.45)"
+                                    stroke="rgba(20,123,117,0.2)"
                                     strokeWidth="1.5"
                                     strokeLinejoin="round"
                                     vectorEffect="non-scaling-stroke"
@@ -1737,15 +1773,15 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     <>
                                         <path
                                             d={steppedPath.pastFillPath}
-                                            fill="url(#pastStepGrad)"
+                                            fill="url(#stepGrad)"
                                             shapeRendering="crispEdges"
-                                            opacity={(eventsRevealed || isZoomed) ? 1 : 0}
+                                            opacity={(eventsRevealed || isZoomed) ? 0.4 : 0}
                                             style={{ transition: 'opacity 0.5s ease 0.4s' }}
                                         />
                                         <path
                                             d={steppedPath.pastLinePath}
                                             fill="none"
-                                            stroke="rgba(20,123,117,0.45)"
+                                            stroke="rgba(20,123,117,0.35)"
                                             strokeWidth="1.5"
                                             strokeLinejoin="bevel"
                                             vectorEffect="non-scaling-stroke"
@@ -1798,8 +1834,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     date: bh.recorded_date,
                                 })).filter(p => p.x > 0.5 && p.x < 99.5)
                             if (allHistPoints.length === 0) return null
-                            // Always use all points for the line, plus today's balance to connect
-                            const linePoints = [...allHistPoints, { x: todayPct, y: balTopPctLive }]
+                            // Always use all points for the line, plus marker position to connect
+                            const linePoints = [...allHistPoints, { x: markerPct, y: balTopPctLive }]
                             const pathD = linePoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
                             // Show dots: always include latest (last point), then every 5 days going backwards
                             const dayStep = zoom >= 4 ? 1 : zoom >= 2 ? 7 : 14
@@ -1941,7 +1977,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             )
                         })()}
 
-                        {/* Scrubber vertical line + dot (inside zoom div so it zooms correctly) */}
+                        {/* Scrubber vertical line + dot */}
                         <div ref={scrubLineRef} style={{
                             position: 'absolute',
                             left: 0, top: 0, bottom: 0,
@@ -1949,8 +1985,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             borderLeft: '1.5px solid rgba(80,80,80,0.5)',
                             pointerEvents: 'none',
                             zIndex: 25,
-                            opacity: 0,
-                            transition: 'opacity 0.15s ease',
+                            display: 'none',
                         }} />
                         <div ref={scrubDotRef} style={{
                             position: 'absolute',
@@ -1963,8 +1998,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             boxShadow: '0 0 6px rgba(0,0,0,0.15)',
                             pointerEvents: 'none',
                             zIndex: 26,
-                            opacity: 0,
-                            transition: 'opacity 0.15s ease',
+                            display: 'none',
                         }} />
                     </div>
 
@@ -1979,7 +2013,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
             {/* X-axis date labels — adapt to zoom level */}
             <div style={{
-                position: 'relative', height: 14, marginTop: 6, marginLeft: Y_AXIS_W,
+                position: 'relative', height: 14, marginTop: 6, marginBottom: 10, marginLeft: Y_AXIS_W,
                 overflow: 'hidden',
             }}>
                 {/* During zoom-out animation, render month labels in a fixed (non-zoomed) container
@@ -1991,19 +2025,16 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                         {MONTHS
                             .filter((_, idx) => idx % 2 === 0)
                             .map(({ label, date }, i) => {
-                                const idx = i * 2
                                 const midDate = new Date(date.getFullYear(), date.getMonth(), 15)
                                 const pct = datePctFromDate(midDate)
-                                const isNow = today.getMonth() === date.getMonth() &&
-                                    today.getFullYear() === date.getFullYear()
                                 return (
                                     <span key={label} style={{
                                         position: 'absolute',
                                         left: `${Math.max(0, pct)}%`,
                                         transform: pct < 3 ? 'none' : 'translateX(-50%)',
-                                        fontSize: isNow ? 10 : 9, fontWeight: isNow ? 900 : 500,
+                                        fontSize: 9, fontWeight: 500,
                                         fontFamily: 'Nunito, sans-serif',
-                                        color: isNow ? '#147b75' : '#8f8f8f',
+                                        color: '#8f8f8f',
                                         whiteSpace: 'nowrap',
                                     }}>{label}</span>
                                 )
@@ -2032,16 +2063,14 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     .map(({ label, date, idx }) => {
                                         const midDate = new Date(date.getFullYear(), date.getMonth(), 15)
                                         const pct = datePctFromDate(midDate)
-                                        const isNow = today.getMonth() === date.getMonth() &&
-                                            today.getFullYear() === date.getFullYear()
                                         return (
                                             <span key={label} style={{
                                                 position: 'absolute',
                                                 left: `${Math.max(0, pct)}%`,
                                                 transform: pct < 3 ? 'none' : 'translateX(-50%)',
-                                                fontSize: isNow ? 10 : 9, fontWeight: isNow ? 900 : 500,
+                                                fontSize: 9, fontWeight: 500,
                                                 fontFamily: 'Nunito, sans-serif',
-                                                color: isNow ? '#147b75' : '#8f8f8f',
+                                                color: '#8f8f8f',
                                                 whiteSpace: 'nowrap',
                                             }}>{label}</span>
                                         )
@@ -2065,16 +2094,13 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             while (d <= AY_END) {
                                 const pct = datePctFromDate(d)
                                 const label = `${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })}`
-                                const isToday = d.getDate() === today.getDate() &&
-                                    d.getMonth() === today.getMonth() &&
-                                    d.getFullYear() === today.getFullYear()
                                 ticks.push(
                                     <span key={`d${pct.toFixed(2)}`} style={{
                                         position: 'absolute', left: `${pct}%`,
                                         transform: 'translateX(-50%)',
-                                        fontSize: isToday ? 10 : 9, fontWeight: isToday ? 900 : 500,
+                                        fontSize: 9, fontWeight: 500,
                                         fontFamily: 'Nunito, sans-serif',
-                                        color: isToday ? '#EC8C17' : '#8f8f8f',
+                                        color: '#8f8f8f',
                                         whiteSpace: 'nowrap',
                                     }}>{label}</span>
                                 )
@@ -2174,25 +2200,27 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             )
                         })()}
                         <div style={{
-                            maxHeight: scrubData.nearbyDot ? 30 : 0,
-                            opacity: scrubData.nearbyDot ? 1 : 0,
+                            maxHeight: scrubData.nearbyDots?.length ? scrubData.nearbyDots.length * 22 + 6 : 0,
+                            opacity: scrubData.nearbyDots?.length ? 1 : 0,
                             overflow: 'hidden',
                             transition: 'max-height 0.15s ease, opacity 0.15s ease',
                         }}>
-                            <div style={{
-                                marginTop: 3,
-                                paddingTop: 3,
-                                borderTop: '1px solid #f0f0f0',
-                                fontSize: 8,
-                                fontWeight: 600,
-                                fontFamily: 'Nunito, sans-serif',
-                                color: scrubData.nearbyDot?.event.type === 'income' ? '#147b75' : '#e06470',
-                            }}>
-                                {scrubData.nearbyDot && <>{scrubData.nearbyDot.event.type === 'income' ? '+' : '-'}{getCurrencySymbol()}{Math.round(scrubData.nearbyDot.event.amount).toLocaleString()}</>}
-                                {scrubData.nearbyDot?.event.label && (
-                                    <span style={{ color: '#666', fontWeight: 500 }}> {scrubData.nearbyDot.event.label}</span>
-                                )}
-                            </div>
+                            {(scrubData.nearbyDots || []).map((dot, i) => (
+                                <div key={i} style={{
+                                    marginTop: i === 0 ? 3 : 1,
+                                    paddingTop: i === 0 ? 3 : 0,
+                                    borderTop: i === 0 ? '1px solid #f0f0f0' : 'none',
+                                    fontSize: 8,
+                                    fontWeight: 600,
+                                    fontFamily: 'Nunito, sans-serif',
+                                    color: dot.event.type === 'income' ? '#147b75' : '#e06470',
+                                }}>
+                                    {dot.event.type === 'income' ? '+' : '-'}{getCurrencySymbol()}{Math.round(dot.event.amount).toLocaleString()}
+                                    {dot.event.label && (
+                                        <span style={{ color: '#666', fontWeight: 500 }}> {dot.event.label}</span>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
