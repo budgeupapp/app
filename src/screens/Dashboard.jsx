@@ -2089,8 +2089,14 @@ export default function Dashboard() {
                         return merged
                     })
                 }
-                if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
-                const bal = result.formData?.balance
+                if (result.balanceHistory) {
+                    setBalanceHistory(result.balanceHistory)
+                    if (result.balanceHistory.length > 0) {
+                        const latestBal = String(result.balanceHistory[0].balance)
+                        setFormData(prev => ({ ...prev, balance: latestBal }))
+                    }
+                }
+                const bal = result.balanceHistory?.length > 0 ? String(result.balanceHistory[0].balance) : result.formData?.balance
                 if (bal && bal !== '' && bal !== '0' && Number(bal) !== 0) {
                     originSetRef.current = true
                 }
@@ -2194,9 +2200,23 @@ export default function Dashboard() {
                         // Persist merged data (break names etc.) back to Supabase
                         saveUserFinances(userIdRef.current, { ...merged, onboardingCompleted: true }).catch(() => { })
                     }
-                    if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
+                    if (result.balanceHistory) {
+                        setBalanceHistory(result.balanceHistory)
+                        // Use latest balance_history as the graph anchor so it's consistent across devices
+                        if (result.balanceHistory.length > 0) {
+                            const latestBal = String(result.balanceHistory[0].balance)
+                            setFormData(prev => ({ ...prev, balance: latestBal }))
+                            // Also update localStorage so it stays in sync
+                            try {
+                                const saved = localStorage.getItem(STORAGE_KEY)
+                                const parsed = saved ? JSON.parse(saved) : {}
+                                if (parsed.formData) parsed.formData.balance = latestBal
+                                localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
+                            } catch { }
+                        }
+                    }
                     // Mark origin as set if balance already exists
-                    const bal = result.formData?.balance
+                    const bal = result.balanceHistory?.length > 0 ? String(result.balanceHistory[0].balance) : result.formData?.balance
                     if (bal && bal !== '' && bal !== '0' && Number(bal) !== 0) {
                         originSetRef.current = true
                     } else {
