@@ -2077,7 +2077,6 @@ export default function Dashboard() {
                         const parsed = saved ? JSON.parse(saved) : {}
                         const localFD = parsed.formData || {}
                         if (localFD.overdraft != null) merged.overdraft = localFD.overdraft
-                        if (localFD.balance != null) merged.balance = localFD.balance
                         if (localFD.amountOverrides) merged.amountOverrides = { ...(merged.amountOverrides || {}), ...localFD.amountOverrides }
                         if (parsed.formData?.termDates?.terms?.length) {
                             merged.termDates = parsed.formData.termDates
@@ -2089,14 +2088,8 @@ export default function Dashboard() {
                         return merged
                     })
                 }
-                if (result.balanceHistory) {
-                    setBalanceHistory(result.balanceHistory)
-                    if (result.balanceHistory.length > 0) {
-                        const latestBal = String(result.balanceHistory[0].balance)
-                        setFormData(prev => ({ ...prev, balance: latestBal }))
-                    }
-                }
-                const bal = result.balanceHistory?.length > 0 ? String(result.balanceHistory[0].balance) : result.formData?.balance
+                if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
+                const bal = result.formData?.balance
                 if (bal && bal !== '' && bal !== '0' && Number(bal) !== 0) {
                     originSetRef.current = true
                 }
@@ -2166,9 +2159,9 @@ export default function Dashboard() {
                         if (localFD.flexSourceData) merged.flexSourceData = { ...(merged.flexSourceData || {}), ...localFD.flexSourceData }
                         if (localFD.otherIncomes?.length) merged.otherIncomes = [...new Set([...(merged.otherIncomes || []).map(i => JSON.stringify(i)), ...localFD.otherIncomes.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
                         if (localFD.otherExpenses?.length) merged.otherExpenses = [...new Set([...(merged.otherExpenses || []).map(i => JSON.stringify(i)), ...localFD.otherExpenses.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
-                        // Prefer localStorage overdraft/balance/overrides (Settings saves there immediately, Supabase may lag)
+                        // Prefer localStorage overdraft/overrides (Settings saves there immediately, Supabase may lag)
+                        // Balance always comes from DB (user_profiles) to stay consistent across devices
                         if (localFD.overdraft != null) merged.overdraft = localFD.overdraft
-                        if (localFD.balance != null) merged.balance = localFD.balance
                         if (localFD.amountOverrides) merged.amountOverrides = { ...(merged.amountOverrides || {}), ...localFD.amountOverrides }
                         // Prefer localStorage term dates (Settings saves there immediately, Supabase may lag)
                         try {
@@ -2200,23 +2193,9 @@ export default function Dashboard() {
                         // Persist merged data (break names etc.) back to Supabase
                         saveUserFinances(userIdRef.current, { ...merged, onboardingCompleted: true }).catch(() => { })
                     }
-                    if (result.balanceHistory) {
-                        setBalanceHistory(result.balanceHistory)
-                        // Use latest balance_history as the graph anchor so it's consistent across devices
-                        if (result.balanceHistory.length > 0) {
-                            const latestBal = String(result.balanceHistory[0].balance)
-                            setFormData(prev => ({ ...prev, balance: latestBal }))
-                            // Also update localStorage so it stays in sync
-                            try {
-                                const saved = localStorage.getItem(STORAGE_KEY)
-                                const parsed = saved ? JSON.parse(saved) : {}
-                                if (parsed.formData) parsed.formData.balance = latestBal
-                                localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed))
-                            } catch { }
-                        }
-                    }
+                    if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
                     // Mark origin as set if balance already exists
-                    const bal = result.balanceHistory?.length > 0 ? String(result.balanceHistory[0].balance) : result.formData?.balance
+                    const bal = result.formData?.balance
                     if (bal && bal !== '' && bal !== '0' && Number(bal) !== 0) {
                         originSetRef.current = true
                     } else {
