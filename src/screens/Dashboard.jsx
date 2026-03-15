@@ -1334,8 +1334,8 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
                             onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
                             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2 }}
                         >
-                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e07b3c' }}>
-                                {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted — tap to restore
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted
                             </span>
                         </button>
                     )}
@@ -1519,8 +1519,8 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                             onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
                             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2 }}
                         >
-                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e07b3c' }}>
-                                {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted — tap to restore
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted
                             </span>
                         </button>
                     )}
