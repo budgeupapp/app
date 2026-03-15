@@ -11,8 +11,8 @@ const MONTH_TO_DEFAULT_DATE = {
 
 const mapFrequencyToRecurrence = freq => {
     const mapping = {
-        'one_off': 'once', 'once': 'once',
-        'weekly': 'weekly', 'monthly': 'monthly',
+        'one_off': 'once', 'once': 'once', 'one-off': 'once',
+        'weekly': 'weekly', 'fortnightly': 'weekly', 'monthly': 'monthly',
         'termly': 'termly', 'yearly': 'yearly',
         'quarterly': 'quarterly', 'other': 'monthly'
     }
@@ -359,6 +359,40 @@ export async function saveCashflowForecast(userId, data) {
                 term_specific: true,
             })
         }
+    }
+
+    /* --- Flex income sources --- */
+    for (const srcId of (data.flexIncomeSources || [])) {
+        const srcData = data.flexSourceData?.[srcId]
+        if (!srcData) continue
+        const amt = stripCommas(srcData.amount) || '0'
+        const freq = srcData.frequency || 'monthly'
+        rows.push({
+            user_id: userId, direction: 'in', type: srcId,
+            title: srcId.replace('flex_', '').replace(/_/g, ' '),
+            amount: amt, currency: 'GBP',
+            recurrence: mapFrequencyToRecurrence(freq),
+            scheduled_date: srcData.startDate || '2025-09-01',
+            end_date: srcData.endDate || null, source: 'manual',
+            category: 'flexIncome',
+        })
+    }
+
+    /* --- Flex expense sources --- */
+    for (const srcId of (data.flexExpenseSources || [])) {
+        const srcData = data.flexSourceData?.[srcId]
+        if (!srcData) continue
+        const amt = stripCommas(srcData.amount) || '0'
+        const freq = srcData.frequency || 'monthly'
+        rows.push({
+            user_id: userId, direction: 'out', type: srcId,
+            title: srcId.replace('flex_', '').replace(/_/g, ' '),
+            amount: amt, currency: 'GBP',
+            recurrence: mapFrequencyToRecurrence(freq),
+            scheduled_date: srcData.startDate || '2025-09-01',
+            end_date: srcData.endDate || null, source: 'manual',
+            category: 'flexExpense',
+        })
     }
 
     /* --- One-off items --- */

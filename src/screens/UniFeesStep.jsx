@@ -6,7 +6,7 @@ function formatDisplay(raw) { if (!raw) return ''; const [whole, ...rest] = raw.
 function cleanNum(val) { let v = val.replace(/[^0-9.]/g, ''); const p = v.split('.'); if (p.length > 2) v = p[0] + '.' + p.slice(1).join(''); if (parseFloat(v) > 500000) v = '500000'; return v }
 
 const PERIOD_OPTIONS = [
-    { id: 'weekly', label: 'Weekly' }, { id: 'monthly', label: 'Monthly' },
+    { id: 'weekly', label: 'Weekly' }, { id: 'fortnightly', label: 'Fortnightly' }, { id: 'monthly', label: 'Monthly' },
     { id: 'quarterly', label: 'Quarterly' }, { id: 'termly', label: 'Per Term' }, { id: 'yearly', label: 'Yearly' },
 ]
 const FREQ_PILL_OPTIONS = [

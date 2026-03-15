@@ -1229,7 +1229,7 @@ function BalancePillInline({ value, sym, onSave, onCancel, compact }) {
                             border: 'none', background: 'transparent',
                             fontSize: sz, fontWeight: 800, color: '#1a1a1a',
                             fontFamily: 'Nunito, sans-serif', outline: 'none', padding: 0,
-                            width: Math.max(compact ? 50 : 60, (raw || '0.00').length * (compact ? 16 : 22)),
+                            width: Math.max(compact ? 50 : 80, (raw || '0.00').length * (compact ? 16 : 26)),
                             textAlign: 'left',
                         }}
                         placeholder="0.00"
@@ -1347,7 +1347,7 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
                 <div ref={innerRef}>
                     <div style={{ borderTop: '1px solid #eee', padding: '8px 14px 4px', background: '#fafafa' }}>
                         {children}
-                        <div style={{ padding: '4px 0 8px', textAlign: 'center' }}>
+                        <div style={{ padding: '10px 0 6px', textAlign: 'center', background: '#fafafa' }}>
                             <span onClick={handleDelete} style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470', cursor: 'pointer' }}>Delete {label.toLowerCase()}</span>
                         </div>
                     </div>
@@ -1479,10 +1479,10 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                     <p style={{
                         fontSize: 11, fontWeight: 600,
                         fontFamily: 'Nunito, sans-serif',
-                        color: isInactive ? '#bbb' : isExpense ? 'rgba(224,100,112,0.8)' : 'rgba(20,123,117,0.7)',
+                        color: isInactive ? '#bbb' : '#999',
                         margin: 0,
                     }}>
-                        {`${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr`}
+                        {`${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr`}
                     </p>
                     {removedCount > 0 && expanded && (
                         <button
@@ -1813,7 +1813,16 @@ export default function Dashboard() {
     const [goalsShowMore, setGoalsShowMore] = useState(false)
     const [warningMinimised, setWarningMinimisedRaw] = useState(() => localStorage.getItem('budgeup_warning_minimised') === 'true')
     const setWarningMinimised = (fn) => { setWarningMinimisedRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; localStorage.setItem('budgeup_warning_minimised', String(val)); return val }) }
-    const [tappedSegment, setTappedSegment] = useState(null) // { label, amt, color }
+    const [trackMinimised, setTrackMinimised] = useState(false)
+    const [tappedSegment, setTappedSegment] = useState(null)
+    const breakdownRef = useRef(null)
+    // Close tooltip on click anywhere
+    useEffect(() => {
+        if (!tappedSegment) return
+        const dismiss = () => setTappedSegment(null)
+        setTimeout(() => document.addEventListener('pointerdown', dismiss), 50)
+        return () => document.removeEventListener('pointerdown', dismiss)
+    }, [tappedSegment])
     const [showAllIncome, setShowAllIncome] = useState(false)
     const [showAllExpenses, setShowAllExpenses] = useState(false)
     const goalsMoreRef = useRef(null)
@@ -2115,7 +2124,7 @@ export default function Dashboard() {
                     if (result.formData) {
                         // Merge Supabase with localStorage to preserve unsaved local changes
                         let localFD = {}
-                        try { const ls = localStorage.getItem(STORAGE_KEY); localFD = (ls ? JSON.parse(ls) : {}).formData || {} } catch {}
+                        try { const ls = localStorage.getItem(STORAGE_KEY); localFD = (ls ? JSON.parse(ls) : {}).formData || {} } catch { }
                         const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
                         // Preserve local sources not yet synced to Supabase
                         for (const k of ['incomeSources', 'expenseSources', 'flexIncomeSources', 'flexExpenseSources']) {
@@ -2152,7 +2161,7 @@ export default function Dashboard() {
                         } catch { /* ignore */ }
                         setFormData(merged)
                         // Persist merged data (break names etc.) back to Supabase
-                        saveUserFinances(userIdRef.current, { ...merged, onboardingCompleted: true }).catch(() => {})
+                        saveUserFinances(userIdRef.current, { ...merged, onboardingCompleted: true }).catch(() => { })
                     }
                     if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
                     // Mark origin as set if balance already exists
@@ -2218,7 +2227,7 @@ export default function Dashboard() {
                 // Flush save immediately on cleanup
                 const userId = userIdRef.current
                 if (userId) {
-                    saveCashflowForecast(userId, formData).catch(() => {})
+                    saveCashflowForecast(userId, formData).catch(() => { })
                     saveUserFinances(userId, {
                         university: formData.university,
                         overdraft: formData.overdraft,
@@ -2227,7 +2236,7 @@ export default function Dashboard() {
                         weeklySpendNonTerm: formData.weeklySpendNonTerm,
                         weeklySpendVariesByTerm: formData.weeklySpendVariesByTerm,
                         balance: formData.balance,
-                    }).catch(() => {})
+                    }).catch(() => { })
                 }
                 saveTimerRef.current = null
             }
@@ -3202,7 +3211,21 @@ export default function Dashboard() {
                     }}>
 
                         {/* Balance entry banner — shown when no balance in user_profiles */}
-                        {showInitialBalancePopup && (
+                        {showInitialBalancePopup && !dbLoaded && (
+                            <div style={{
+                                margin: '8px 12px 8px', padding: '14px 16px',
+                                background: '#f5f5f5', borderRadius: 12,
+                            }}>
+                                <div style={{ width: '55%', height: 14, borderRadius: 7, background: '#e8e8e8', marginBottom: 10 }} />
+                                <div style={{ width: '85%', height: 10, borderRadius: 5, background: '#ececec', marginBottom: 6 }} />
+                                <div style={{ width: '70%', height: 10, borderRadius: 5, background: '#ececec', marginBottom: 12 }} />
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <div style={{ flex: 1, height: 40, borderRadius: 10, background: '#e8e8e8' }} />
+                                    <div style={{ width: 80, height: 40, borderRadius: 10, background: '#e8e8e8' }} />
+                                </div>
+                            </div>
+                        )}
+                        {showInitialBalancePopup && dbLoaded && (
                             <div style={{
                                 margin: '8px 12px 8px', padding: balanceBannerDismissing ? 0 : '14px 16px 16px',
                                 background: '#fdf0f1', border: '1px solid #e06470',
@@ -3332,13 +3355,16 @@ export default function Dashboard() {
 
                         {/* Balance hero header */}
                         <div ref={heroHeaderRef} style={{
-                            padding: '4px 18px 6px',
+                            padding: '12px 18px 6px',
                             opacity: showInitialBalancePopup ? 0.35 : 1,
                             pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
                         }}>
                             {/* Row 1: Balance + filter button */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                    {!dbLoaded ? (
+                                        <div style={{ width: 140, height: 28, borderRadius: 8, background: '#e8e8e8' }} />
+                                    ) : (
                                     <p style={{
                                         margin: 0, fontSize: 30, fontWeight: 800,
                                         fontFamily: 'Nunito, sans-serif',
@@ -3347,6 +3373,7 @@ export default function Dashboard() {
                                     }}>
                                         {balanceNum < 0 ? '\u2212' : ''}{getCurrencySymbol()}{Math.abs(balanceNum).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </p>
+                                    )}
                                     <p style={{
                                         margin: 0, fontSize: 10, fontWeight: 600,
                                         fontFamily: 'Nunito, sans-serif',
@@ -3482,19 +3509,21 @@ export default function Dashboard() {
                         </div>
                     </div>{/* end graph card */}
 
-                    {/* Handle + tabs — inside sticky header so they stick */}
-                    <div style={{ background: '#f0f4f4', borderRadius: '20px 20px 0 0', padding: '0 10px 0', marginTop: 5, marginBottom: -1 }}>
-                        {/* Drag handle line — drag to collapse/cover graph */}
+                    {/* Tabs — inside sticky header so they stick */}
+                    <div style={{
+                        background: '#f0f4f4',
+                        borderRadius: '16px 16px 0 0',
+                        padding: '0 14px 8px',
+                        boxShadow: '0 1px 0 rgba(0,0,0,0.04)',
+                    }}>
+                        {/* Drag handle line */}
                         <div
                             onPointerDown={onHandlePointerDown}
-                            style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px', cursor: 'pointer', touchAction: 'none' }}
+                            style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 6px', cursor: 'pointer', touchAction: 'none' }}
                         >
-                            <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d0d0d0' }} />
+                            <div style={{ width: 36, height: 4, borderRadius: 2, background: '#ccc' }} />
                         </div>
                         <div ref={cardDetailsRef} onPointerDown={onHandlePointerDown} style={{
-                            padding: '0 6px 6px',
-                            zIndex: 12,
-                            background: '#f0f4f4',
                             touchAction: 'none',
                             opacity: showInitialBalancePopup ? 0.35 : 1,
                             pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
@@ -3517,6 +3546,7 @@ export default function Dashboard() {
                                             width: `calc(${100 / 3}% - 4px)`,
                                             background: '#147b75', borderRadius: 50,
                                             transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                            boxShadow: '0 1px 3px rgba(20,123,117,0.25)',
                                         }} />
                                         {tabs.map(tab => {
                                             const isActive = activeTab === tab.key
@@ -3526,7 +3556,7 @@ export default function Dashboard() {
                                                     onClick={() => handleTabChange(tab.key)}
                                                     style={{
                                                         flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        padding: '8px 0', borderRadius: 50, cursor: 'pointer',
+                                                        padding: '7px 0', borderRadius: 50, cursor: 'pointer',
                                                         position: 'relative', zIndex: 1,
                                                         color: isActive ? '#fff' : '#1a1a1a',
                                                         transition: isActive ? 'color 0.12s ease 0.12s' : 'color 0.15s ease 0.15s',
@@ -4279,13 +4309,46 @@ export default function Dashboard() {
                                                     </p>
                                                 </div>
                                                 {!isAhead && absDiff > 50 && (
-                                                    <div style={{ background: '#f8f8f8', borderRadius: 10, padding: '12px 14px' }}>
-                                                        <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
-                                                            To get back on track:
+                                                    <div style={{
+                                                        marginTop: 16, borderRadius: 14, padding: '16px 18px',
+                                                        background: 'linear-gradient(135deg, #147b75, #1a9e97)',
+                                                        color: '#fff', position: 'relative', overflow: 'hidden',
+                                                    }}>
+                                                        <div style={{ position: 'absolute', top: -15, right: -15, width: 70, height: 70, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
+                                                        <div style={{ position: 'absolute', bottom: -20, left: -10, width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, position: 'relative', zIndex: 2 }}>
+                                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg>
+                                                            <p style={{ margin: 0, fontSize: 14, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
+                                                                Getting Back on Track
+                                                            </p>
+                                                            <button onClick={(e) => { e.stopPropagation(); setTrackCardHidden(true); sessionStorage.setItem('budgeup_track_hidden', 'true') }} style={{
+                                                                background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%',
+                                                                width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                flexShrink: 0, position: 'relative', zIndex: 3,
+                                                            }}>
+                                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                                            </button>
+                                                        </div>
+                                                        <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.9 }}>
+                                                            Firstly, check that all your inputs are correct!
                                                         </p>
-                                                        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                                            {'\u2022'} Spend <span style={{ color: '#e06470', fontWeight: 700 }}>{sym}{weeklyAdj}/wk</span> less or earn <span style={{ color: '#147b75', fontWeight: 700 }}>{sym}{weeklyAdj}/wk</span> more
+                                                        <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif' }}>
+                                                            To get back on track either:
                                                         </p>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
+                                                                {'\u2022'} Wait for average spend to balance out naturally
+                                                            </p>
+                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
+                                                                {'\u2022'} Adjust inputs to make forecast more realistic
+                                                            </p>
+                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
+                                                                {'\u2022'} Spend <span style={{ fontWeight: 800, opacity: 1 }}>{sym}{weeklyAdj}/wk</span> less over the next couple of weeks
+                                                            </p>
+                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
+                                                                {'\u2022'} Earn <span style={{ fontWeight: 800, opacity: 1 }}>{sym}{weeklyAdj}/wk</span> more over the next couple of weeks
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
@@ -4322,7 +4385,7 @@ export default function Dashboard() {
 
                                         return (
                                             <div style={{
-                                                background: 'linear-gradient(135deg, #e8838e, #d4566a)',
+                                                background: 'linear-gradient(135deg, #c9404f, #a8293a)',
                                                 borderRadius: 14, padding: warningMinimised ? '12px 18px' : '20px 18px', marginBottom: 10,
                                                 color: '#fff', position: 'relative', overflow: 'hidden',
                                                 transition: 'padding 0.25s ease',
@@ -4353,8 +4416,8 @@ export default function Dashboard() {
                                                             {alreadyOut
                                                                 ? (od > 0 ? 'Past overdraft' : `Below ${sym}0`)
                                                                 : daysUntil === 0 ? 'Today'
-                                                                : daysUntil === 1 ? 'Tomorrow'
-                                                                : `${daysUntil}d`
+                                                                    : daysUntil === 1 ? 'Tomorrow'
+                                                                        : `${daysUntil}d`
                                                             }
                                                         </span>
                                                     )}
@@ -4378,8 +4441,8 @@ export default function Dashboard() {
                                                         {alreadyOut
                                                             ? `${od > 0 ? 'Past overdraft' : 'Below ' + sym + '0'}`
                                                             : daysUntil === 0 ? 'Today'
-                                                            : daysUntil === 1 ? 'Tomorrow'
-                                                            : `${daysUntil} days`
+                                                                : daysUntil === 1 ? 'Tomorrow'
+                                                                    : `${daysUntil} days`
                                                         }
                                                     </p>
                                                     <p style={{ margin: '0 0 16px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.8 }}>
@@ -4445,7 +4508,7 @@ export default function Dashboard() {
                                         )
                                     })()}
 
-                                    
+
                                     {/* Spend & Income Breakdown */}
                                     {(() => {
                                         const activeEvents = events.filter(e => !e.removed && !e.noDot)
@@ -4498,39 +4561,40 @@ export default function Dashboard() {
                                                         {showTip && (
                                                             <div style={{
                                                                 position: 'absolute', bottom: '100%', marginBottom: 4,
-                                                                left: `clamp(30px, ${tipLeft}%, calc(100% - 30px))`,
-                                                                transform: 'translateX(-50%)',
-                                                                background: tappedSegment.color, borderRadius: 6, padding: '3px 8px',
+                                                                ...(tipLeft > 80
+                                                                    ? { right: 0 }
+                                                                    : tipLeft < 20
+                                                                        ? { left: 0 }
+                                                                        : { left: `${tipLeft}%`, transform: 'translateX(-50%)' }),
+                                                                background: tappedSegment.color, borderRadius: 8, padding: '5px 10px',
                                                                 whiteSpace: 'nowrap', zIndex: 1,
+                                                                display: 'flex', alignItems: 'center', gap: 6,
                                                                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                                                                animation: 'tipIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
                                                             }}>
-                                                                <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>
-                                                                    {tappedSegment.label} · {sym}{Math.round(tappedSegment.amt).toLocaleString()}
+                                                                <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>
+                                                                    {tappedSegment.label}
                                                                 </span>
-                                                                <div style={{
-                                                                    position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)',
-                                                                    borderLeft: '4px solid transparent', borderRight: '4px solid transparent',
-                                                                    borderTop: `4px solid ${tappedSegment.color}`,
-                                                                }} />
+                                                                <span style={{ fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>
+                                                                    {sym}{Math.round(tappedSegment.amt).toLocaleString()}
+                                                                </span>
                                                             </div>
                                                         )}
                                                         <div style={{ display: 'flex', height: 14, borderRadius: 7, overflow: 'hidden', cursor: 'pointer' }}>
-                                                        {entries.map(([label, amt], i) => {
-                                                            const color = colors[Math.min(i, colors.length - 1)]
-                                                            const isTapped = tappedSegment?.label === label && tappedSegment?.type === key
-                                                            return (
-                                                                <div key={label}
-                                                                    onClick={() => setTappedSegment(isTapped ? null : { label, amt, color, type: key })}
-                                                                    style={{
-                                                                        width: `${(amt / totalAmt) * 100}%`,
-                                                                        background: color, minWidth: 2,
-                                                                        opacity: showTip && !isTapped ? 0.35 : 1,
-                                                                        transition: 'opacity 0.2s ease',
-                                                                    }}
-                                                                />
-                                                            )
-                                                        })}
-                                                    </div>
+                                                            {entries.map(([label, amt], i) => {
+                                                                const color = colors[Math.min(i, colors.length - 1)]
+                                                                const isTapped = tappedSegment?.label === label && tappedSegment?.type === key
+                                                                return (
+                                                                    <div key={label}
+                                                                        onClick={() => setTappedSegment(isTapped ? null : { label, amt, color, type: key })}
+                                                                        style={{
+                                                                            width: `${(amt / totalAmt) * 100}%`,
+                                                                            background: color, minWidth: 2,
+                                                                        }}
+                                                                    />
+                                                                )
+                                                            })}
+                                                        </div>
                                                     </div>
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
                                                         {entries.map(([label, amt], i) => {
@@ -4553,7 +4617,7 @@ export default function Dashboard() {
                                         }
 
                                         return (
-                                            <div style={cardStyle}>
+                                            <div ref={breakdownRef} style={cardStyle}>
                                                 {/* Donut + summary */}
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 14 }}>
                                                     <div style={{ position: 'relative', width: donutSize, height: donutSize, flexShrink: 0 }}>

@@ -242,6 +242,10 @@ button:focus {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+@keyframes tipIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 
 @keyframes pickerSlideDown {
   from { opacity: 0; transform: translateY(-8px); max-height: 0; }

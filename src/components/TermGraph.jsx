@@ -1606,12 +1606,12 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 )
                             })}
 
-                        {/* Marker vertical dashed line — centered under pill */}
+                        {/* Marker vertical dashed line — centered under pill, stops at x-axis */}
                         {showToday && (
                             <div style={{
                                 position: 'absolute',
                                 left: `${markerPct}%`,
-                                top: 0, bottom: 0,
+                                top: 0, bottom: 2,
                                 width: 0,
                                 borderLeft: '1px dashed rgba(236,140,23,0.4)',
                                 transform: `translateX(-0.5px)`,
@@ -1624,9 +1624,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 position: 'absolute', left: `${markerPct}%`, top: -5,
                                 transform: `translateX(-50%)`,
                                 background: '#EC8C17', color: '#fff',
-                                fontSize: 5, fontWeight: 700,
+                                fontSize: 7, fontWeight: 700,
                                 fontFamily: 'Nunito, sans-serif',
-                                padding: '2px 5px', borderRadius: 5,
+                                padding: '2.5px 6px', borderRadius: 6,
                                 whiteSpace: 'nowrap', letterSpacing: 0.5, zIndex: 2,
                             }}>{markerLabel}</div>
                         )}
