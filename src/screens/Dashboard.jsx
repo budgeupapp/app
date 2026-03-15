@@ -1552,11 +1552,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                         }
                     </div>
                 </button>
-                <ChevronRight size={16} color={isInactive ? '#bbb' : '#ccc'} style={{
-                    flexShrink: 0,
-                    transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.2s ease',
-                }} />
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isInactive ? '#bbb' : '#ccc'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)' }}><path d="M6 9l6 6 6-6" /></svg>
             </div>
 
             {/* Expanded section — animated height */}
