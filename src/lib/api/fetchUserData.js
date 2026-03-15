@@ -197,10 +197,19 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
     const rentRows = (byCategory['rent'] || []).filter(r => !r.is_removed)
     if (rentRows.length) {
         expenseSources.push('rent')
-        const r = rentRows[0]
-        fd.rentAmount = String(r.amount)
-        fd.rentFrequency = r.recurrence
-        fd.rentNextDate = r.scheduled_date
+        const main = rentRows.find(r => r.subcategory !== 'non_term')
+        const nonTerm = rentRows.find(r => r.subcategory === 'non_term')
+        if (main) {
+            fd.rentAmount = String(main.amount)
+            fd.rentFrequency = main.recurrence
+            fd.rentNextDate = main.scheduled_date
+            fd.rentEndDate = main.end_date || ''
+            fd.rentVariesByTerm = main.term_specific || false
+        }
+        if (nonTerm) {
+            fd.rentNonTermAmount = String(nonTerm.amount)
+            fd.rentVariesByTerm = true
+        }
     }
 
     // Bills
@@ -213,29 +222,12 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
             fd.billsAmount = String(main.amount)
             fd.billsFrequency = main.recurrence
             fd.billsNextDate = main.scheduled_date
+            fd.billsEndDate = main.end_date || ''
             fd.billsVariesByTerm = main.term_specific || false
         }
         if (nonTerm) {
             fd.billsNonTermAmount = String(nonTerm.amount)
             fd.billsVariesByTerm = true
-        }
-    }
-
-    // Uni fees
-    const uniRows = (byCategory['uniFees'] || []).filter(r => !r.is_removed)
-    if (uniRows.length) {
-        expenseSources.push('uni_fees')
-        const uniMain = uniRows.find(r => r.subcategory !== 'non_term')
-        const uniNonTerm = uniRows.find(r => r.subcategory === 'non_term')
-        if (uniMain) {
-            fd.uniFeesAmount = String(uniMain.amount)
-            fd.uniFeesFrequency = uniMain.recurrence
-            fd.uniFeesNextDate = uniMain.scheduled_date
-            fd.uniFeesVariesByTerm = uniMain.term_specific || false
-        }
-        if (uniNonTerm) {
-            fd.uniFeesNonTermAmount = String(uniNonTerm.amount)
-            fd.uniFeesVariesByTerm = true
         }
     }
 
@@ -254,6 +246,24 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
         if (savNonTerm) {
             fd.savingsInvNonTermAmount = String(savNonTerm.amount)
             fd.savingsInvVariesByTerm = true
+        }
+    }
+
+    // Uni fees
+    const uniRows = (byCategory['uniFees'] || []).filter(r => !r.is_removed)
+    if (uniRows.length) {
+        expenseSources.push('uni_fees')
+        const uniMain = uniRows.find(r => r.subcategory !== 'non_term')
+        const uniNonTerm = uniRows.find(r => r.subcategory === 'non_term')
+        if (uniMain) {
+            fd.uniFeesAmount = String(uniMain.amount)
+            fd.uniFeesFrequency = uniMain.recurrence
+            fd.uniFeesNextDate = uniMain.scheduled_date
+            fd.uniFeesVariesByTerm = uniMain.term_specific || false
+        }
+        if (uniNonTerm) {
+            fd.uniFeesNonTermAmount = String(uniNonTerm.amount)
+            fd.uniFeesVariesByTerm = true
         }
     }
 
@@ -276,6 +286,44 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
                 nonTermAmount: nonTerm ? String(nonTerm.amount) : '',
             }
         })
+    }
+
+    // Flex income sources
+    const flexIncomeRows = (byCategory['flexIncome'] || []).filter(r => !r.is_removed)
+    if (flexIncomeRows.length) {
+        const flexIncomeSources = []
+        const flexSourceData = fd.flexSourceData || {}
+        for (const r of flexIncomeRows) {
+            const srcId = r.type // e.g. 'flex_freelance'
+            if (!flexIncomeSources.includes(srcId)) flexIncomeSources.push(srcId)
+            flexSourceData[srcId] = {
+                amount: String(r.amount),
+                frequency: r.recurrence || 'monthly',
+                startDate: r.scheduled_date || '',
+                endDate: r.end_date || '',
+            }
+        }
+        fd.flexIncomeSources = flexIncomeSources
+        fd.flexSourceData = flexSourceData
+    }
+
+    // Flex expense sources
+    const flexExpenseRows = (byCategory['flexExpense'] || []).filter(r => !r.is_removed)
+    if (flexExpenseRows.length) {
+        const flexExpenseSources = []
+        const flexSourceData = fd.flexSourceData || {}
+        for (const r of flexExpenseRows) {
+            const srcId = r.type
+            if (!flexExpenseSources.includes(srcId)) flexExpenseSources.push(srcId)
+            flexSourceData[srcId] = {
+                amount: String(r.amount),
+                frequency: r.recurrence || 'monthly',
+                startDate: r.scheduled_date || '',
+                endDate: r.end_date || '',
+            }
+        }
+        fd.flexExpenseSources = flexExpenseSources
+        fd.flexSourceData = flexSourceData
     }
 
     // One-off items (is_removed means hidden, not deleted — deleted items are removed from the array)

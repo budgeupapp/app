@@ -12,7 +12,7 @@ const MONTH_TO_DEFAULT_DATE = {
 const mapFrequencyToRecurrence = freq => {
     const mapping = {
         'one_off': 'once', 'once': 'once', 'one-off': 'once',
-        'weekly': 'weekly', 'fortnightly': 'weekly', 'monthly': 'monthly',
+        'weekly': 'weekly', 'fortnightly': 'fortnightly', 'monthly': 'monthly',
         'termly': 'termly', 'yearly': 'yearly',
         'quarterly': 'quarterly', 'other': 'monthly'
     }
@@ -236,14 +236,25 @@ export async function saveCashflowForecast(userId, data) {
     /* --- Rent --- */
     if (data.expenseSources?.includes('rent')) {
         const amt = stripCommas(data.rentAmount) || '0'
-        {
+        const rentFreq = data.rentFrequency || 'monthly'
+        rows.push({
+            user_id: userId, direction: 'out', type: 'rent',
+            title: 'Rent', amount: amt, currency: 'GBP',
+            recurrence: mapFrequencyToRecurrence(rentFreq),
+            scheduled_date: data.rentNextDate || '2025-09-01',
+            end_date: data.rentEndDate || null, source: 'manual',
+            category: 'rent',
+            term_specific: data.rentVariesByTerm || false,
+        })
+        if (data.rentVariesByTerm && data.rentNonTermAmount) {
             rows.push({
-                user_id: userId, direction: 'out', type: 'rent',
-                title: 'Rent', amount: amt, currency: 'GBP',
-                recurrence: mapFrequencyToRecurrence(data.rentFrequency || 'monthly'),
+                user_id: userId, direction: 'out', type: 'rent_non_term',
+                title: 'Rent (non-term)', amount: stripCommas(data.rentNonTermAmount),
+                currency: 'GBP', recurrence: mapFrequencyToRecurrence(rentFreq),
                 scheduled_date: data.rentNextDate || '2025-09-01',
                 end_date: null, source: 'manual',
-                category: 'rent',
+                category: 'rent', subcategory: 'non_term',
+                term_specific: true,
             })
         }
     }
@@ -251,14 +262,25 @@ export async function saveCashflowForecast(userId, data) {
     /* --- Bills --- */
     if (data.expenseSources?.includes('bills')) {
         const amt = stripCommas(data.billsAmount) || '0'
-        {
+        const billsFreq = data.billsFrequency || 'monthly'
+        rows.push({
+            user_id: userId, direction: 'out', type: 'bills',
+            title: 'Bills', amount: amt, currency: 'GBP',
+            recurrence: mapFrequencyToRecurrence(billsFreq),
+            scheduled_date: data.billsNextDate || '2025-09-01',
+            end_date: data.billsEndDate || null, source: 'manual',
+            category: 'bills',
+            term_specific: data.billsVariesByTerm || false,
+        })
+        if (data.billsVariesByTerm && data.billsNonTermAmount) {
             rows.push({
-                user_id: userId, direction: 'out', type: 'bills',
-                title: 'Bills', amount: amt, currency: 'GBP',
-                recurrence: mapFrequencyToRecurrence(data.billsFrequency || 'monthly'),
+                user_id: userId, direction: 'out', type: 'bills_non_term',
+                title: 'Bills (non-term)', amount: stripCommas(data.billsNonTermAmount),
+                currency: 'GBP', recurrence: mapFrequencyToRecurrence(billsFreq),
                 scheduled_date: data.billsNextDate || '2025-09-01',
                 end_date: null, source: 'manual',
-                category: 'bills',
+                category: 'bills', subcategory: 'non_term',
+                term_specific: true,
             })
         }
     }
@@ -295,14 +317,25 @@ export async function saveCashflowForecast(userId, data) {
     /* --- Savings & Investments --- */
     if (data.expenseSources?.includes('savings_investments')) {
         const amt = stripCommas(data.savingsInvAmount) || '0'
-        {
+        const savFreq = data.savingsInvFrequency || 'monthly'
+        rows.push({
+            user_id: userId, direction: 'out', type: 'savings',
+            title: 'Savings & Investments', amount: amt, currency: 'GBP',
+            recurrence: mapFrequencyToRecurrence(savFreq),
+            scheduled_date: data.savingsInvNextDate || '2025-09-01',
+            end_date: null, source: 'manual',
+            category: 'savingsInv',
+            term_specific: data.savingsInvVariesByTerm || false,
+        })
+        if (data.savingsInvVariesByTerm && data.savingsInvNonTermAmount) {
             rows.push({
-                user_id: userId, direction: 'out', type: 'savings',
-                title: 'Savings & Investments', amount: amt, currency: 'GBP',
-                recurrence: mapFrequencyToRecurrence(data.savingsInvFrequency || 'monthly'),
+                user_id: userId, direction: 'out', type: 'savings_non_term',
+                title: 'Savings & Investments (non-term)', amount: stripCommas(data.savingsInvNonTermAmount),
+                currency: 'GBP', recurrence: mapFrequencyToRecurrence(savFreq),
                 scheduled_date: data.savingsInvNextDate || '2025-09-01',
                 end_date: null, source: 'manual',
-                category: 'savingsInv',
+                category: 'savingsInv', subcategory: 'non_term',
+                term_specific: true,
             })
         }
     }
