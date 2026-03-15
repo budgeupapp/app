@@ -263,11 +263,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             if (isYearlyInput) {
                 // Collect all payment dates first, then distribute yearly total evenly
                 const allDates = []
-                if (freq === 'weekly') {
+                if (freq === 'weekly' || freq === 'fortnightly') {
+                    const step = freq === 'fortnightly' ? 14 : 7
                     let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly support' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly support' }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
@@ -295,11 +296,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                 // Per-payment amount (amountPeriod === freq, exact — no rounding needed)
                 const famNonTermAmt = formData.familyVariesByTerm ? parseFloat(String(formData.familyNonTermAmount || formData.familyAmount || '0').replace(/,/g, '')) : famAmtRaw
                 const getFamAmt = (ds) => formData.familyVariesByTerm ? (isInTerm(ds, terms) ? famAmtRaw : famNonTermAmt) : famAmtRaw
-                if (freq === 'weekly') {
+                if (freq === 'weekly' || freq === 'fortnightly') {
+                    const step = freq === 'fortnightly' ? 14 : 7
                     let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
@@ -331,11 +333,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             const yearlyWork = workAmt * (YM[workAmtPeriod] || 1)
             if (isYearlyWork) {
                 const allDates = []
-                if (freq === 'weekly') {
+                if (freq === 'weekly' || freq === 'fortnightly') {
+                    const step = freq === 'fortnightly' ? 14 : 7
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly income' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly income' }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
@@ -362,11 +365,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             } else {
                 const workNonTermAmt = formData.workVariesByTerm ? parseFloat(String(formData.workNonTermAmount || formData.workAmount || '0').replace(/,/g, '')) : workAmt
                 const getWorkAmt = (ds) => formData.workVariesByTerm ? (isInTerm(ds, terms) ? workAmt : workNonTermAmt) : workAmt
-                if (freq === 'weekly') {
+                if (freq === 'weekly' || freq === 'fortnightly') {
+                    const step = freq === 'fortnightly' ? 14 : 7
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
@@ -402,11 +406,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             const yearlyOther = otherAmt * (YM[otherAmtPeriod] || 1)
             if (isYearlyOther) {
                 const allDates = []
-                if (freq === 'weekly') {
+                if (freq === 'weekly' || freq === 'fortnightly') {
+                    const step = freq === 'fortnightly' ? 14 : 7
                     let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
@@ -433,11 +438,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             } else {
                 const otherNonTermAmt = inst.variesByTerm ? parseFloat(String(inst.nonTermAmount || inst.amount || '0').replace(/,/g, '')) : otherAmt
                 const getOtherAmt = (ds) => inst.variesByTerm ? (isInTerm(ds, terms) ? otherAmt : otherNonTermAmt) : otherAmt
-                if (freq === 'weekly') {
+                if (freq === 'weekly' || freq === 'fortnightly') {
+                    const step = freq === 'fortnightly' ? 14 : 7
                     let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
@@ -580,11 +586,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             const yearlyUni = uniAmt * (YM[uniAmtPeriod] || 1)
             if (isYearlyUni) {
                 const allDates = []
-                if (uniFreq === 'weekly') {
+                if (uniFreq === 'weekly' || uniFreq === 'fortnightly') {
+                    const step = uniFreq === 'fortnightly' ? 14 : 7
                     let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly fees' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: uniFreq === 'fortnightly' ? 'Fortnightly fees' : 'Weekly fees' }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (uniFreq === 'yearly') {
                     allDates.push({ date: formData.uniFeesNextDate || '2025-09-01', sublabel: 'Yearly tuition' })
                 } else if (uniFreq === 'monthly') {
@@ -611,11 +618,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             } else {
                 const uniNonTermAmt = formData.uniFeesVariesByTerm ? parseFloat(String(formData.uniFeesNonTermAmount || formData.uniFeesAmount || '0').replace(/,/g, '')) : uniAmt
                 const getUniAmt = (ds) => formData.uniFeesVariesByTerm ? (isInTerm(ds, terms) ? uniAmt : uniNonTermAmt) : uniAmt
-                if (uniFreq === 'weekly') {
+                if (uniFreq === 'weekly' || uniFreq === 'fortnightly') {
+                    const step = uniFreq === 'fortnightly' ? 14 : 7
                     let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(2025, 8, 1)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getUniAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'University Fees', sublabel: 'Weekly fees', editType: 'uniFees' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getUniAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'University Fees', sublabel: uniFreq === 'fortnightly' ? 'Fortnightly fees' : 'Weekly fees', editType: 'uniFees' }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (uniFreq === 'yearly') {
                     const dateString = formData.uniFeesNextDate || '2025-09-01'; const a = getUniAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
                 } else if (uniFreq === 'monthly') {
@@ -653,11 +661,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             const yearlySav = savAmt * (YM[savAmtPeriod] || 1)
             if (isYearlySav) {
                 const allDates = []
-                if (freq === 'weekly') {
+                if (freq === 'weekly' || freq === 'fortnightly') {
+                    const step = freq === 'fortnightly' ? 14 : 7
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly savings' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly savings' }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
@@ -684,11 +693,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             } else {
                 const savNonTermAmt = formData.savingsInvVariesByTerm ? parseFloat(String(formData.savingsInvNonTermAmount || formData.savingsInvAmount || '0').replace(/,/g, '')) : savAmt
                 const getSavAmt = (ds) => formData.savingsInvVariesByTerm ? (isInTerm(ds, terms) ? savAmt : savNonTermAmt) : savAmt
-                if (freq === 'weekly') {
+                if (freq === 'weekly' || freq === 'fortnightly') {
+                    const step = freq === 'fortnightly' ? 14 : 7
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const dateString = toLocalDate(d); const a = getSavAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { const dateString = toLocalDate(d); const a = getSavAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
@@ -724,11 +734,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             const yearlyOtherExp = otherExpAmt * (YM[otherExpAmtPeriod] || 1)
             if (isYearlyOtherExp) {
                 const allDates = []
-                if (freq === 'weekly') {
+                if (freq === 'weekly' || freq === 'fortnightly') {
+                    const step = freq === 'fortnightly' ? 14 : 7
                     let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
@@ -751,11 +762,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             } else {
                 const otherExpNonTermAmt = inst.variesByTerm ? parseFloat(String(inst.nonTermAmount || inst.amount || '0').replace(/,/g, '')) : otherExpAmt
                 const getOtherExpAmt = (ds) => inst.variesByTerm ? (isInTerm(ds, terms) ? otherExpAmt : otherExpNonTermAmt) : otherExpAmt
-                if (freq === 'weekly') {
+                if (freq === 'weekly' || freq === 'fortnightly') {
+                    const step = freq === 'fortnightly' ? 14 : 7
                     let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const dateString = toLocalDate(d); const a = getOtherExpAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + 7 * 86400000) }
+                    while (d > ayStart) d = new Date(d.getTime() - step * 86400000)
+                    while (d < ayStart) d = new Date(d.getTime() + step * 86400000)
+                    while (d <= ayEnd) { const dateString = toLocalDate(d); const a = getOtherExpAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + step * 86400000) }
                 } else if (freq === 'monthly') {
                     let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
@@ -812,12 +824,10 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
 
         if (freq === 'one-off') {
             if (startDate) events.push({ date: startDate, amount: amt, type: flexType, label, sublabel: 'One-off', editType: flexId })
-        } else if (freq === 'weekly') {
+        } else if (freq === 'weekly' || freq === 'fortnightly') {
+            const step = freq === 'fortnightly' ? 14 : 7
             let d = new Date(effStart)
-            while (d <= effEnd) { events.push({ date: toLocalDate(d), amount: amt, type: flexType, label, sublabel: 'Weekly', editType: flexId }); d = new Date(d.getTime() + 7 * 86400000) }
-        } else if (freq === 'fortnightly') {
-            let d = new Date(effStart)
-            while (d <= effEnd) { events.push({ date: toLocalDate(d), amount: amt, type: flexType, label, sublabel: 'Fortnightly', editType: flexId }); d = new Date(d.getTime() + 14 * 86400000) }
+            while (d <= effEnd) { events.push({ date: toLocalDate(d), amount: amt, type: flexType, label, sublabel: freq === 'fortnightly' ? 'Fortnightly' : 'Weekly', editType: flexId }); d = new Date(d.getTime() + step * 86400000) }
         } else if (freq === 'monthly') {
             let d = new Date(effStart)
             const dom = d.getDate()
@@ -847,12 +857,17 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
         : events
 
     const removed = formData.removedEvents || []
+    const overrides = formData.amountOverrides || {}
     return filtered.map(e => {
         const isFlex = e.editType?.startsWith('flex_')
         const base = isFlex ? { ...e, flex: true } : e
         // One-off items are deleted from source array directly, not via removedEvents
         if (base.editType === 'oneOffIncome' || base.editType === 'oneOffExpense') return base
-        return removed.includes(`${base.editType}:${base.date}`) ? { ...base, removed: true } : base
+        // Apply per-payment amount override
+        const overrideKey = `${base.editType}:${base.date}`
+        const overrideVal = overrides[overrideKey]
+        const withOverride = overrideVal != null ? { ...base, amount: parseFloat(String(overrideVal).replace(/,/g, '')) || base.amount, hasOverride: true } : base
+        return removed.includes(overrideKey) ? { ...withOverride, removed: true } : withOverride
     })
 }
 
@@ -1261,7 +1276,7 @@ function BalancePillInline({ value, sym, onSave, onCancel, compact }) {
 
 /* ---------- FLEX ROW (mirrors SourceRow expand behavior) ---------- */
 
-function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpandToggle, onDelete, onToggleVisibility, active = true, scrollContainerRef, children }) {
+function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpandToggle, onDelete, onToggleVisibility, active = true, removedCount = 0, onRestoreRemoved, overrideCount = 0, onClearOverrides, scrollContainerRef, children }) {
     const innerRef = useRef(null)
     const [measuredHeight, setMeasuredHeight] = useState(0)
     const [deleting, setDeleting] = useState(false)
@@ -1314,6 +1329,21 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
                             {frequency && frequency !== 'one-off' ? `/${frequency === 'weekly' ? 'wk' : frequency === 'fortnightly' ? '2wk' : frequency === 'monthly' ? 'mo' : frequency === 'quarterly' ? 'qtr' : frequency === 'termly' ? 'term' : 'yr'}` : ''}
                         </span>
                     )}
+                    {removedCount > 0 && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2 }}
+                        >
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e07b3c' }}>
+                                {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted — tap to restore
+                            </span>
+                        </button>
+                    )}
+                    {overrideCount > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#6b7cdb', marginTop: 2, display: 'block' }}>
+                            {overrideCount} payment{overrideCount !== 1 ? 's' : ''} edited
+                        </span>
+                    )}
                 </div>
                 {onToggleVisibility && (
                     <button onClick={(e) => { e.stopPropagation(); onToggleVisibility() }} style={{
@@ -1359,7 +1389,7 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
 
 /* ---------- INCOME/EXPENSE ROW ---------- */
 
-function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemoved, isExpense, expanded, onToggle, onExpandToggle, onDelete, scrollContainerRef, isTabSwitchingRef, formData, updateField, children }) {
+function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemoved, overrideCount = 0, onClearOverrides, isExpense, expanded, onToggle, onExpandToggle, onDelete, scrollContainerRef, isTabSwitchingRef, formData, updateField, children }) {
     const isInactive = !active
     const rowRef = useRef(null)
     const innerRef = useRef(null)
@@ -1484,22 +1514,20 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                     }}>
                         {`${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr`}
                     </p>
-                    {removedCount > 0 && expanded && (
+                    {removedCount > 0 && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: 4,
-                                background: 'none', border: 'none', padding: 0,
-                                cursor: 'pointer', marginTop: 2,
-                            }}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2 }}
                         >
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#e07b3c" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.12-9.36L1 10" />
-                            </svg>
                             <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e07b3c' }}>
                                 {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted — tap to restore
                             </span>
                         </button>
+                    )}
+                    {overrideCount > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#6b7cdb', marginTop: 2, display: 'block' }}>
+                            {overrideCount} payment{overrideCount !== 1 ? 's' : ''} edited
+                        </span>
                     )}
                 </div>
 
@@ -1703,7 +1731,6 @@ export default function Dashboard() {
     const [showExpenses, setShowExpenses] = useState(() => localStorage.getItem('budgeup_show_expenses') === 'true')
     const [showOverdraft, setShowOverdraft] = useState(() => localStorage.getItem('budgeup_show_overdraft') !== 'false')
     const [showHolidays, setShowHolidays] = useState(() => localStorage.getItem('budgeup_show_holidays') !== 'false')
-    const [showFlexible, setShowFlexible] = useState(() => localStorage.getItem('budgeup_show_flexible') !== 'false')
     const [expandedSources, setExpandedSources] = useState(new Set())
     const [visibleExpandedSource, setVisibleExpandedSource] = useState(null)
     const [balanceToast, setBalanceToast] = useState(null)
@@ -2048,10 +2075,14 @@ export default function Dashboard() {
                 const result = await fetchUserData(userId)
                 if (result.formData) {
                     const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
-                    // Prefer localStorage term dates (Settings saves there immediately, Supabase may lag)
+                    // Prefer localStorage values (Settings saves there immediately, Supabase may lag)
                     try {
                         const saved = localStorage.getItem(STORAGE_KEY)
                         const parsed = saved ? JSON.parse(saved) : {}
+                        const localFD = parsed.formData || {}
+                        if (localFD.overdraft != null) merged.overdraft = localFD.overdraft
+                        if (localFD.balance != null) merged.balance = localFD.balance
+                        if (localFD.amountOverrides) merged.amountOverrides = { ...(merged.amountOverrides || {}), ...localFD.amountOverrides }
                         if (parsed.formData?.termDates?.terms?.length) {
                             merged.termDates = parsed.formData.termDates
                         }
@@ -2133,6 +2164,10 @@ export default function Dashboard() {
                         if (localFD.flexSourceData) merged.flexSourceData = { ...(merged.flexSourceData || {}), ...localFD.flexSourceData }
                         if (localFD.otherIncomes?.length) merged.otherIncomes = [...new Set([...(merged.otherIncomes || []).map(i => JSON.stringify(i)), ...localFD.otherIncomes.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
                         if (localFD.otherExpenses?.length) merged.otherExpenses = [...new Set([...(merged.otherExpenses || []).map(i => JSON.stringify(i)), ...localFD.otherExpenses.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
+                        // Prefer localStorage overdraft/balance/overrides (Settings saves there immediately, Supabase may lag)
+                        if (localFD.overdraft != null) merged.overdraft = localFD.overdraft
+                        if (localFD.balance != null) merged.balance = localFD.balance
+                        if (localFD.amountOverrides) merged.amountOverrides = { ...(merged.amountOverrides || {}), ...localFD.amountOverrides }
                         // Prefer localStorage term dates (Settings saves there immediately, Supabase may lag)
                         try {
                             const saved = localStorage.getItem(STORAGE_KEY)
@@ -2884,6 +2919,19 @@ export default function Dashboard() {
         const removed = formData.removedEvents || []
         const keep = removed.filter(key => !editTypes.some(et => key.startsWith(et + ':')))
         updateField('removedEvents', keep)
+    }
+
+    const getSourceOverrideCount = (editTypes) => {
+        const overrides = formData.amountOverrides || {}
+        return Object.keys(overrides).filter(key => editTypes.some(et => key.startsWith(et + ':'))).length
+    }
+
+    const clearSourceOverrides = (editTypes) => {
+        const overrides = { ...(formData.amountOverrides || {}) }
+        for (const key of Object.keys(overrides)) {
+            if (editTypes.some(et => key.startsWith(et + ':'))) delete overrides[key]
+        }
+        updateField('amountOverrides', overrides)
     }
 
     // Check if a source has any data configured
@@ -3693,6 +3741,8 @@ export default function Dashboard() {
                                                     yearlyAmount={yearly}
                                                     removedCount={removedCount}
                                                     onRestoreRemoved={() => restoreSourceEvents(editTypes)}
+                                                    overrideCount={getSourceOverrideCount(editTypes)}
+                                                    onClearOverrides={() => clearSourceOverrides(editTypes)}
                                                     expanded={isExpanded}
                                                     onToggle={() => toggleSourceVisibility(source.id)}
                                                     onExpandToggle={() => handleExpandToggle(source.id)}
@@ -3883,6 +3933,8 @@ export default function Dashboard() {
                                                     yearlyAmount={yearly}
                                                     removedCount={removedCount}
                                                     onRestoreRemoved={() => restoreSourceEvents(editTypes)}
+                                                    overrideCount={getSourceOverrideCount(editTypes)}
+                                                    onClearOverrides={() => clearSourceOverrides(editTypes)}
                                                     isExpense
                                                     expanded={expandedSources.has(source.id)}
                                                     onToggle={() => toggleSourceVisibility(source.id)}
@@ -4310,44 +4362,49 @@ export default function Dashboard() {
                                                 </div>
                                                 {!isAhead && absDiff > 50 && (
                                                     <div style={{
-                                                        marginTop: 16, borderRadius: 14, padding: '16px 18px',
+                                                        marginTop: 16, borderRadius: 14, padding: trackMinimised ? '12px 18px' : '16px 18px',
                                                         background: 'linear-gradient(135deg, #147b75, #1a9e97)',
                                                         color: '#fff', position: 'relative', overflow: 'hidden',
+                                                        transition: 'padding 0.25s ease',
                                                     }}>
                                                         <div style={{ position: 'absolute', top: -15, right: -15, width: 70, height: 70, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
                                                         <div style={{ position: 'absolute', bottom: -20, left: -10, width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, position: 'relative', zIndex: 2 }}>
+                                                        <div
+                                                            onClick={() => setTrackMinimised(m => !m)}
+                                                            style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: trackMinimised ? 0 : 10, cursor: 'pointer', position: 'relative', zIndex: 2, transition: 'margin 0.25s ease' }}
+                                                        >
                                                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg>
                                                             <p style={{ margin: 0, fontSize: 14, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
                                                                 Getting Back on Track
                                                             </p>
-                                                            <button onClick={(e) => { e.stopPropagation(); setTrackCardHidden(true); sessionStorage.setItem('budgeup_track_hidden', 'true') }} style={{
-                                                                background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '50%',
-                                                                width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                flexShrink: 0, position: 'relative', zIndex: 3,
-                                                            }}>
-                                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                                                            </button>
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: trackMinimised ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.3s ease' }}><path d="M6 9l6 6 6-6" /></svg>
                                                         </div>
-                                                        <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.9 }}>
-                                                            Firstly, check that all your inputs are correct!
-                                                        </p>
-                                                        <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif' }}>
-                                                            To get back on track either:
-                                                        </p>
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
-                                                                {'\u2022'} Wait for average spend to balance out naturally
+                                                        <div style={{
+                                                            maxHeight: trackMinimised ? 0 : 300,
+                                                            opacity: trackMinimised ? 0 : 1,
+                                                            overflow: 'hidden',
+                                                            transition: 'max-height 0.35s ease, opacity 0.2s ease',
+                                                        }}>
+                                                            <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.9 }}>
+                                                                Firstly, check that all your inputs are correct!
                                                             </p>
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
-                                                                {'\u2022'} Adjust inputs to make forecast more realistic
+                                                            <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif' }}>
+                                                                To get back on track either:
                                                             </p>
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
-                                                                {'\u2022'} Spend <span style={{ fontWeight: 800, opacity: 1 }}>{sym}{weeklyAdj}/wk</span> less over the next couple of weeks
-                                                            </p>
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
-                                                                {'\u2022'} Earn <span style={{ fontWeight: 800, opacity: 1 }}>{sym}{weeklyAdj}/wk</span> more over the next couple of weeks
-                                                            </p>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
+                                                                    {'\u2022'} Wait for average spend to balance out naturally
+                                                                </p>
+                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
+                                                                    {'\u2022'} Adjust inputs to make forecast more realistic
+                                                                </p>
+                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
+                                                                    {'\u2022'} Spend <span style={{ fontWeight: 800, opacity: 1 }}>{sym}{weeklyAdj}/wk</span> less over the next couple of weeks
+                                                                </p>
+                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
+                                                                    {'\u2022'} Earn <span style={{ fontWeight: 800, opacity: 1 }}>{sym}{weeklyAdj}/wk</span> more over the next couple of weeks
+                                                                </p>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 )}
@@ -4900,6 +4957,10 @@ export default function Dashboard() {
                                                     <FlexRow key={srcId} srcId={srcId} label={src.label} amt={amt} frequency={srcData.frequency} si={si}
                                                         isExpense={false} expanded={expandedSources.has(srcId)}
                                                         active={!hiddenSources.has(srcId)}
+                                                        removedCount={getSourceRemovedCount([srcId])}
+                                                        onRestoreRemoved={() => restoreSourceEvents([srcId])}
+                                                        overrideCount={getSourceOverrideCount([srcId])}
+                                                        onClearOverrides={() => clearSourceOverrides([srcId])}
                                                         onToggleVisibility={() => toggleSourceVisibility(srcId)}
                                                         onExpandToggle={() => handleExpandToggle(srcId)}
                                                         onDelete={() => {
@@ -4940,6 +5001,10 @@ export default function Dashboard() {
                                                     <FlexRow key={srcId} srcId={srcId} label={src.label} amt={amt} frequency={srcData.frequency} si={si}
                                                         isExpense={true} expanded={expandedSources.has(srcId)}
                                                         active={!hiddenSources.has(srcId)}
+                                                        removedCount={getSourceRemovedCount([srcId])}
+                                                        onRestoreRemoved={() => restoreSourceEvents([srcId])}
+                                                        overrideCount={getSourceOverrideCount([srcId])}
+                                                        onClearOverrides={() => clearSourceOverrides([srcId])}
                                                         onToggleVisibility={() => toggleSourceVisibility(srcId)}
                                                         onExpandToggle={() => handleExpandToggle(srcId)}
                                                         onDelete={() => {
@@ -4994,8 +5059,8 @@ export default function Dashboard() {
                 const w = 140
                 const h = editingEvent.removed ? 60 : 80
                 const left = Math.max(8, Math.min(editingEvent.clickX - w / 2, window.innerWidth - w - 8))
-                const showBelow = editingEvent.clickY < h + 24
-                const top = showBelow ? editingEvent.clickY + 14 : editingEvent.clickY - h - 10
+                const showBelow = editingEvent.clickY < h + 10
+                const top = showBelow ? editingEvent.clickY + 2 : editingEvent.clickY - h - 2
                 return (
                     <>
                         <div
@@ -5082,29 +5147,32 @@ export default function Dashboard() {
                                             onClick={() => {
                                                 const val = editAmount.replace(/[^0-9.]/g, '')
                                                 if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
-                                                    updateField('instalmentAmounts', {
-                                                        ...(formData.instalmentAmounts || {}),
-                                                        [editingEvent.editMonth]: val,
-                                                    })
+                                                    const newVal = parseFloat(val) || 0
+                                                    const oldVal = editingEvent.amount || 0
+                                                    const oldTotal = parseFloat(String(formData.loanAmount || '0').replace(/,/g, '')) || 0
+                                                    const newTotal = Math.round((oldTotal - oldVal + newVal) * 100) / 100
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        instalmentAmounts: { ...(prev.instalmentAmounts || {}), [editingEvent.editMonth]: val },
+                                                        loanAmount: String(newTotal),
+                                                    }))
                                                 } else if (editingEvent.editType === 'bursary' && editingEvent.editMonth) {
-                                                    updateField('bursaryInstalmentAmounts', {
-                                                        ...(formData.bursaryInstalmentAmounts || {}),
-                                                        [editingEvent.editMonth]: val,
+                                                    const newVal = parseFloat(val) || 0
+                                                    const oldVal = editingEvent.amount || 0
+                                                    const oldTotal = parseFloat(String(formData.bursaryAmount || '0').replace(/,/g, '')) || 0
+                                                    const newTotal = Math.round((oldTotal - oldVal + newVal) * 100) / 100
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        bursaryInstalmentAmounts: { ...(prev.bursaryInstalmentAmounts || {}), [editingEvent.editMonth]: val },
+                                                        bursaryAmount: String(newTotal),
+                                                    }))
+                                                } else {
+                                                    // Per-payment amount override keyed by editType:date
+                                                    const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
+                                                    updateField('amountOverrides', {
+                                                        ...(formData.amountOverrides || {}),
+                                                        [overrideKey]: val,
                                                     })
-                                                } else if (editingEvent.editType === 'family') {
-                                                    updateField('familyAmount', val)
-                                                } else if (editingEvent.editType === 'otherIncome') {
-                                                    updateField('otherIncomeAmount', val)
-                                                } else if (editingEvent.editType === 'rent') {
-                                                    updateField('rentAmount', val)
-                                                } else if (editingEvent.editType === 'bills') {
-                                                    updateField('billsAmount', val)
-                                                } else if (editingEvent.editType === 'uniFees') {
-                                                    updateField('uniFeesAmount', val)
-                                                } else if (editingEvent.editType === 'savingsInv') {
-                                                    updateField('savingsInvAmount', val)
-                                                } else if (editingEvent.editType === 'work') {
-                                                    updateField('workAmount', val)
                                                 }
                                                 analytics.track(DASHBOARD_EVENTS.EVENT_EDITED, {
                                                     edit_type: editingEvent.editType,
@@ -5182,6 +5250,18 @@ export default function Dashboard() {
                                                             return !(item.date === editingEvent.date && (item.direction || 'out') === dir && amt === editingEvent.amount)
                                                         })
                                                         updateField('oneOffItems', updated.length > 0 ? updated : [{ name: '', amount: '', date: '', direction: 'out' }])
+                                                    } else if (editingEvent.editType?.startsWith('flex_') && formData.flexSourceData?.[editingEvent.editType]?.frequency === 'one-off') {
+                                                        // One-off flex: remove the source entirely
+                                                        const srcId = editingEvent.editType
+                                                        setFormData(prev => {
+                                                            const isExp = (prev.flexExpenseSources || []).includes(srcId)
+                                                            const key = isExp ? 'flexExpenseSources' : 'flexIncomeSources'
+                                                            return {
+                                                                ...prev,
+                                                                [key]: (prev[key] || []).filter(s => s !== srcId),
+                                                                flexSourceData: { ...prev.flexSourceData, [srcId]: undefined },
+                                                            }
+                                                        })
                                                     } else {
                                                         const key = `${editingEvent.editType}:${editingEvent.date}`
                                                         updateField('removedEvents', [...(formData.removedEvents || []), key])
@@ -5414,8 +5494,7 @@ export default function Dashboard() {
                     { label: 'Expenses', active: showExpenses, color: '#e06470', toggle: () => setShowExpenses(prev => { localStorage.setItem('budgeup_show_expenses', String(!prev)); return !prev }) },
                     { label: 'Income', active: showIncome, color: '#147b75', toggle: () => setShowIncome(prev => { localStorage.setItem('budgeup_show_income', String(!prev)); return !prev }) },
                     { label: 'History', active: showBalanceHistory, color: '#EC8C17', toggle: () => { setShowBalanceHistory(prev => { analytics.track(DASHBOARD_EVENTS.BALANCE_HISTORY_TOGGLED, { visible: !prev }); localStorage.setItem('budgeup_show_balance_history', String(!prev)); return !prev }) } },
-                    { label: 'Overdraft', active: showOverdraft, color: '#c0392b', toggle: () => setShowOverdraft(prev => { localStorage.setItem('budgeup_show_overdraft', String(!prev)); return !prev }) },
-                    { label: 'Flexible', active: showFlexible, color: '#1a9e97', toggle: () => setShowFlexible(prev => { localStorage.setItem('budgeup_show_flexible', String(!prev)); return !prev }) },
+                    ...(overdraftNum ? [{ label: 'Overdraft', active: showOverdraft, color: '#c0392b', toggle: () => setShowOverdraft(prev => { localStorage.setItem('budgeup_show_overdraft', String(!prev)); return !prev }) }] : []),
                     { label: 'Breaks', active: showHolidays, color: '#7c8ab8', toggle: () => setShowHolidays(prev => { localStorage.setItem('budgeup_show_holidays', String(!prev)); return !prev }) },
                 ]
                 return (

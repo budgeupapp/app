@@ -314,6 +314,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         ? calcYRange(balNum, (anyEvents || hasOverdraft || hasHistoryData) ? projMin : undefined, (anyEvents || hasOverdraft || hasHistoryData) ? projMax : undefined)
         : { yMin: 0, yMax: 100, ticks: [] }
     const toTopPct = (val) => Math.max(2, Math.min(98, 100 - ((val - yMin) / (yMax - yMin)) * 100))
+    const fromTopPct = (pct) => yMin + (100 - pct) / 100 * (yMax - yMin)
     const balTopPctLive = hasBalance ? toTopPct(actualBalNum) : 0
     const balTopPctRef = useRef(balTopPctLive)
     if (hasBalance) balTopPctRef.current = balTopPctLive
@@ -582,7 +583,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         const zeroDateStr = zeroCrossX !== null ? toLocalDate(pctToDate(zeroCrossX)) : null
         const odDateStr = odCrossX !== null ? toLocalDate(pctToDate(odCrossX)) : null
 
-        return { linePath, fillPath, dots, points, pastLinePath, pastFillPath, futureLinePath, futureFillPath, zeroDate: zeroDateStr, overdraftBreachDate: odDateStr }
+        return { linePath, fillPath, dots, points, balPoints, pastLinePath, pastFillPath, futureLinePath, futureFillPath, zeroDate: zeroDateStr, overdraftBreachDate: odDateStr }
     })()
 
     // Fire zero/overdraft date callbacks
@@ -1530,7 +1531,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                             : isActive ? '2px solid white' : (isCurrent ? '1px solid white' : '0.75px solid white'),
                                         boxShadow: isActive
                                             ? `0 0 8px ${isIncome ? 'rgba(20,123,117,0.7)' : 'rgba(224,100,112,0.7)'}`
-                                            : 'none',
+                                            : dot.event.hasOverride && currentEventType && dot.event.editType === currentEventType
+                                                ? `0 0 0 2.5px #fff, 0 0 0 4px #6b7cdb`
+                                                : 'none',
                                         transition: 'width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease, border 0.15s ease',
                                     }} />
                                 </div>
@@ -1539,21 +1542,31 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
                         {/* Removed event dots — only show on the related card */}
                         {balanceVisible && showToday && currentEventType && (() => {
-                            // Only future events create steps; past line is flat at balNum
-                            const sortedFuture = [...futureEvents].sort((a, b) => datePct(a.date) - datePct(b.date))
+                            // Interpolate balance on the line using actual balance values
+                            const bp = steppedPath?.balPoints || []
+                            const getLineBal = (xPct) => {
+                                if (!bp.length) return balNum
+                                if (xPct <= bp[0].x) return bp[0].bal
+                                for (let j = 1; j < bp.length; j++) {
+                                    if (xPct <= bp[j].x) {
+                                        // Stepped line: use previous segment's balance
+                                        return bp[j - 1].bal
+                                    }
+                                }
+                                return bp[bp.length - 1].bal
+                            }
 
                             return [...removedFutureEvents, ...removedPastEvents]
                                 .filter(evt => evt.editType === currentEventType)
                                 .map((evt, i) => {
                                     const x = datePct(evt.date)
-                                    // Past removed events sit at balNum; future ones walk forward
-                                    let bal = balNum
-                                    for (const ae of sortedFuture) {
-                                        if (datePct(ae.date) > x) break
-                                        bal += ae.type === 'income' ? ae.amount : -ae.amount
-                                    }
+                                    const lineBal = getLineBal(x)
+                                    const yPct = toTopPct(lineBal)
                                     const isIncome = evt.type === 'income'
-                                    const dotColor = isIncome ? '#a8d5d3' : '#f0a8ae'
+                                    const dotColor = isIncome ? '#147b75' : '#e06470'
+                                    const isActive = activeEventDot && activeEventDot.date === evt.date && activeEventDot.editType === evt.editType
+                                    const size = isActive ? 16 : 13
+                                    const r = isActive ? 6 : 4.5
                                     return (
                                         <div
                                             key={`removed-${i}`}
@@ -1561,17 +1574,22 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                             style={{
                                                 position: 'absolute',
                                                 left: `clamp(5px, ${x}%, calc(100% - 5px))`,
-                                                top: `${toTopPct(bal)}%`,
+                                                top: `${yPct}%`,
                                                 transform: 'translate(-50%, -50%)',
                                                 padding: 10,
                                                 cursor: 'pointer',
                                                 pointerEvents: 'auto',
-                                                zIndex: 6,
+                                                zIndex: isActive ? 20 : 6,
                                             }}
                                         >
-                                            <svg width="11" height="11" viewBox="0 0 11 11" style={{ overflow: 'visible', display: 'block' }}>
-                                                <circle cx="5.5" cy="5.5" r="4" fill={dotColor} stroke={dotColor} strokeWidth="1.5" strokeDasharray="2 2" />
-                                            </svg>
+                                            <div style={{
+                                                width: size, height: size,
+                                                borderRadius: '50%',
+                                                background: 'white',
+                                                border: `${isActive ? 2.2 : 1.8}px dashed ${dotColor}`,
+                                                boxShadow: isActive ? `0 0 6px ${dotColor}80` : 'none',
+                                                transition: 'width 0.15s ease, height 0.15s ease, border-width 0.15s ease, box-shadow 0.15s ease',
+                                            }} />
                                         </div>
                                     )
                                 })

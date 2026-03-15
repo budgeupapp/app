@@ -426,6 +426,20 @@ export async function saveCashflowForecast(userId, data) {
         }
     }
 
+    /* --- Amount overrides (per-payment) --- */
+    const amountOverrides = data.amountOverrides || {}
+    for (const [key, val] of Object.entries(amountOverrides)) {
+        const [editType, date] = key.split(':')
+        if (!editType || !date || !val) continue
+        rows.push({
+            user_id: userId, direction: 'out', type: editType,
+            title: `Override: ${editType}`, amount: stripCommas(val) || 0,
+            currency: 'GBP', recurrence: 'once',
+            scheduled_date: date, end_date: null, source: 'manual',
+            category: editType, subcategory: 'amount_override',
+        })
+    }
+
     if (!rows.length) return
 
     const { error } = await supabase.from('cashflow_forecast').insert(rows)

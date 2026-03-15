@@ -296,6 +296,15 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
         fd.removedEvents = removedRows.map(r => `${r.category}:${r.scheduled_date}`)
     }
 
+    // Amount overrides (per-payment)
+    const overrideRows = cashflows.filter(r => r.subcategory === 'amount_override')
+    if (overrideRows.length) {
+        fd.amountOverrides = {}
+        for (const r of overrideRows) {
+            fd.amountOverrides[`${r.category}:${r.scheduled_date}`] = String(r.amount)
+        }
+    }
+
     fd.incomeSources = incomeSources
     fd.expenseSources = expenseSources
 
