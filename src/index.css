@@ -160,6 +160,7 @@ button:focus {
   -webkit-tap-highlight-color: transparent;
 }
 
+
 /* PostHog survey widget — center above bottom nav */
 [class^="PostHogSurvey"] {
   position: fixed !important;

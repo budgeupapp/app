@@ -393,13 +393,14 @@ export default function MoneyAdviceScreen() {
                                 )
                             })}
                         </div>
-                        <div style={{ position: 'relative', height: 20, marginTop: 8 }}>
+                        <div style={{ display: 'flex', position: 'relative', height: 20, marginTop: 12, padding: '0 4px' }}>
                             <div style={{
-                                position: 'absolute',
-                                left: `${(situation - 1) * 20 + 10}%`,
+                                position: 'absolute', top: 0,
+                                left: `clamp(0%, ${(situation - 1) * 20 + 10}% , calc(100% - 30px))`,
                                 transform: 'translateX(-50%)',
                                 transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                                 whiteSpace: 'nowrap',
+                                display: 'flex', justifyContent: 'center',
                             }}>
                                 <span style={{
                                     fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif',

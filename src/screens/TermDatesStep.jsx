@@ -274,7 +274,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                                 fontFamily: 'Nunito, sans-serif',
                                                 border: 'none', background: 'transparent',
                                                 outline: 'none', padding: 0,
-                                                width: Math.max(40, (brk.name || 'Holiday').length * 7),
+                                                width: `${(brk.name || 'Holiday').length}ch`,
                                                 borderBottom: '1px dotted rgba(75,74,74,0.35)',
                                             }}
                                         />

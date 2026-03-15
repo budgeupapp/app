@@ -1,5 +1,5 @@
 import { getCurrencySymbol } from '../lib/settings'
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
 import { analytics, DASHBOARD_EVENTS } from '../lib/analytics/index.js'
 
 const MAX_SPEND = 500
@@ -18,7 +18,7 @@ function RulerPicker({ value, onChange, max, color, onDragEnd }) {
     const maxScroll = totalTicks * TICK_GAP
 
     // Scroll to value on mount and when value changes externally
-    useEffect(() => {
+    useLayoutEffect(() => {
         const el = containerRef.current
         if (!el || userScrolling.current) return
         const targetScroll = (value / STEP) * TICK_GAP

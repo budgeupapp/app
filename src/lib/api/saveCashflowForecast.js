@@ -86,6 +86,14 @@ export async function saveCashflowForecast(userId, data) {
                     category: 'loan',
                 })
             })
+        } else {
+            // No dates set yet — save placeholder so source persists
+            rows.push({
+                user_id: userId, direction: 'in', type: 'student_loan',
+                title: 'Student loan', amount: '0', currency: 'GBP', recurrence: 'yearly',
+                scheduled_date: '2025-09-15', end_date: null, source: 'manual',
+                category: 'loan',
+            })
         }
     }
 
@@ -99,25 +107,35 @@ export async function saveCashflowForecast(userId, data) {
         const perPayment = dateCount ? Number((totalAmount / dateCount).toFixed(2)) : 0
         let running = 0
 
-        dates.forEach((date, idx) => {
-            const amount = idx === dates.length - 1
-                ? (totalAmount - running).toFixed(2)
-                : perPayment.toFixed(2)
-            running += Number(amount)
+        if (dates.length) {
+            dates.forEach((date, idx) => {
+                const amount = idx === dates.length - 1
+                    ? (totalAmount - running).toFixed(2)
+                    : perPayment.toFixed(2)
+                running += Number(amount)
+                rows.push({
+                    user_id: userId, direction: 'in', type: 'bursary',
+                    title: 'Bursary', amount, currency: 'GBP', recurrence: 'yearly',
+                    scheduled_date: date, end_date: null, source: 'manual',
+                    category: 'bursary',
+                })
+            })
+        } else {
+            // No dates set yet — save placeholder so source persists
             rows.push({
                 user_id: userId, direction: 'in', type: 'bursary',
-                title: 'Bursary', amount, currency: 'GBP', recurrence: 'yearly',
-                scheduled_date: date, end_date: null, source: 'manual',
+                title: 'Bursary', amount: '0', currency: 'GBP', recurrence: 'yearly',
+                scheduled_date: '2025-09-15', end_date: null, source: 'manual',
                 category: 'bursary',
             })
-        })
+        }
     }
 
     /* --- Family & Friends --- */
     if (data.incomeSources?.includes('family_friends')) {
-        const amt = stripCommas(data.familyAmount)
-        const freq = data.familyFrequency
-        if (amt && freq) {
+        const amt = stripCommas(data.familyAmount) || '0'
+        const freq = data.familyFrequency || 'monthly'
+        {
             rows.push({
                 user_id: userId, direction: 'in', type: 'family',
                 title: 'Family & Friends', amount: amt, currency: 'GBP',
@@ -144,9 +162,9 @@ export async function saveCashflowForecast(userId, data) {
 
     /* --- Work --- */
     if (data.incomeSources?.includes('work')) {
-        const amt = stripCommas(data.workAmount)
+        const amt = stripCommas(data.workAmount) || '0'
         const freq = data.workFrequency || 'monthly'
-        if (amt) {
+        {
             rows.push({
                 user_id: userId, direction: 'in', type: 'work',
                 title: 'Work', amount: amt, currency: 'GBP',
@@ -217,8 +235,8 @@ export async function saveCashflowForecast(userId, data) {
 
     /* --- Rent --- */
     if (data.expenseSources?.includes('rent')) {
-        const amt = stripCommas(data.rentAmount)
-        if (amt) {
+        const amt = stripCommas(data.rentAmount) || '0'
+        {
             rows.push({
                 user_id: userId, direction: 'out', type: 'rent',
                 title: 'Rent', amount: amt, currency: 'GBP',
@@ -232,8 +250,8 @@ export async function saveCashflowForecast(userId, data) {
 
     /* --- Bills --- */
     if (data.expenseSources?.includes('bills')) {
-        const amt = stripCommas(data.billsAmount)
-        if (amt) {
+        const amt = stripCommas(data.billsAmount) || '0'
+        {
             rows.push({
                 user_id: userId, direction: 'out', type: 'bills',
                 title: 'Bills', amount: amt, currency: 'GBP',
@@ -247,8 +265,8 @@ export async function saveCashflowForecast(userId, data) {
 
     /* --- University Fees --- */
     if (data.expenseSources?.includes('uni_fees')) {
-        const amt = stripCommas(data.uniFeesAmount)
-        if (amt) {
+        const amt = stripCommas(data.uniFeesAmount) || '0'
+        {
             const uniAmtPeriod = data.uniFeesAmountPeriod || 'yearly'
             const uniFreq = uniAmtPeriod === 'yearly' ? (data.uniFeesFrequency || 'monthly') : uniAmtPeriod
             rows.push({
@@ -276,8 +294,8 @@ export async function saveCashflowForecast(userId, data) {
 
     /* --- Savings & Investments --- */
     if (data.expenseSources?.includes('savings_investments')) {
-        const amt = stripCommas(data.savingsInvAmount)
-        if (amt) {
+        const amt = stripCommas(data.savingsInvAmount) || '0'
+        {
             rows.push({
                 user_id: userId, direction: 'out', type: 'savings',
                 title: 'Savings & Investments', amount: amt, currency: 'GBP',

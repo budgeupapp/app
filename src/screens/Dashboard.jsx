@@ -15,6 +15,8 @@ import {
     DEFAULT_LOAN_MONTHS,
     ALL_MONTH_KEYS,
     MONTH_LABELS,
+    hasCustomTermDates,
+    getTermDatesForUniversity,
 } from '../config/onboardingConfig'
 import MaintenanceLoanStep from './MaintenanceLoanStep'
 import BursaryStep from './BursaryStep'
@@ -1255,6 +1257,104 @@ function BalancePillInline({ value, sym, onSave, onCancel, compact }) {
     )
 }
 
+/* ---------- FLEX ROW (mirrors SourceRow expand behavior) ---------- */
+
+function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpandToggle, onDelete, onToggleVisibility, active = true, scrollContainerRef, children }) {
+    const innerRef = useRef(null)
+    const [measuredHeight, setMeasuredHeight] = useState(0)
+    const [deleting, setDeleting] = useState(false)
+
+    useLayoutEffect(() => {
+        if (expanded && innerRef.current) {
+            setMeasuredHeight(innerRef.current.scrollHeight)
+        }
+    }, [expanded, children])
+
+    useEffect(() => {
+        if (!expanded || !innerRef.current) return
+        const ro = new ResizeObserver(() => {
+            if (innerRef.current) setMeasuredHeight(innerRef.current.scrollHeight)
+        })
+        ro.observe(innerRef.current)
+        return () => ro.disconnect()
+    }, [expanded])
+
+    const color = isExpense ? '#e06470' : '#147b75'
+
+    const handleDelete = () => {
+        if (deleting) return
+        setDeleting(true)
+        setTimeout(() => onDelete(), 500)
+    }
+
+    return (
+        <div data-source-row data-source-id={srcId} style={{
+            margin: '0 12px', borderRadius: 10, background: !active ? '#f0f0f0' : '#f5f5f5', overflow: 'hidden',
+            maxHeight: deleting ? 0 : 1000,
+            opacity: deleting ? 0 : !active ? 0.55 : 1,
+            marginBottom: deleting ? -2 : 6,
+            transform: deleting ? 'translateX(-40px) scale(0.97)' : 'translateX(0) scale(1)',
+            transition: deleting
+                ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s, opacity 0.25s ease, margin-bottom 0.4s ease 0.1s, transform 0.3s ease'
+                : 'opacity 0.3s ease, background 0.3s ease',
+        }}>
+            <div onClick={onExpandToggle} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 12, cursor: 'pointer' }}>
+                {si && (
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: isExpense ? 'rgba(224,100,112,0.1)' : 'rgba(20,123,117,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <si.Icon size={20} color={color} />
+                    </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', display: 'block' }}>{label}</span>
+                    {amt > 0 && (
+                        <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                            {isExpense ? '\u2212' : '+'}{getCurrencySymbol()}{amt.toLocaleString()}
+                            {frequency && frequency !== 'one-off' ? `/${frequency === 'weekly' ? 'wk' : frequency === 'fortnightly' ? '2wk' : frequency === 'monthly' ? 'mo' : frequency === 'quarterly' ? 'qtr' : frequency === 'termly' ? 'term' : 'yr'}` : ''}
+                        </span>
+                    )}
+                </div>
+                {onToggleVisibility && (
+                    <button onClick={(e) => { e.stopPropagation(); onToggleVisibility() }} style={{
+                        background: 'none', border: 'none', padding: '4px 8px 4px 4px',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center',
+                        flexShrink: 0, marginRight: -4,
+                    }}>
+                        <div style={{
+                            transition: 'transform 0.2s ease, opacity 0.2s ease',
+                            transform: active ? 'scale(1)' : 'scale(0.85)',
+                            opacity: active ? 1 : 0.5,
+                            display: 'flex', alignItems: 'center',
+                        }}>
+                            {active
+                                ? <Eye size={16} strokeWidth={1.8} color={isExpense ? '#e06470' : '#147b75'} />
+                                : <EyeOff size={16} strokeWidth={1.8} color="#999" />
+                            }
+                        </div>
+                    </button>
+                )}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isExpense ? '#bbb' : '#999'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)' }}><path d="M6 9l6 6 6-6" /></svg>
+            </div>
+            <div style={{
+                maxHeight: expanded ? (measuredHeight + 20) || 800 : 0,
+                opacity: expanded ? 1 : 0,
+                overflow: 'hidden',
+                transition: expanded
+                    ? 'max-height 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.2s ease'
+                    : 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease',
+            }}>
+                <div ref={innerRef}>
+                    <div style={{ borderTop: '1px solid #eee', padding: '8px 14px 4px', background: '#fafafa' }}>
+                        {children}
+                        <div style={{ padding: '4px 0 8px', textAlign: 'center' }}>
+                            <span onClick={handleDelete} style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470', cursor: 'pointer' }}>Delete {label.toLowerCase()}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 /* ---------- INCOME/EXPENSE ROW ---------- */
 
 function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemoved, isExpense, expanded, onToggle, onExpandToggle, onDelete, scrollContainerRef, isTabSwitchingRef, formData, updateField, children }) {
@@ -1418,7 +1518,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                     }}>
                         {active
                             ? <Eye size={16} strokeWidth={1.8} color={isExpense ? '#e06470' : '#147b75'} />
-                            : <EyeOff size={16} strokeWidth={1.8} color="#ccc" />
+                            : <EyeOff size={16} strokeWidth={1.8} color="#999" />
                         }
                     </div>
                 </button>
@@ -1547,6 +1647,25 @@ function migrateOtherFields(data) {
             d.otherExpenses = []
         }
     }
+    // Merge break names from university config (only fills in missing names, never changes dates)
+    try {
+        if (d.university && hasCustomTermDates(d.university) && d.termDates?.terms?.length) {
+            const custom = getTermDatesForUniversity(d.university)
+            if (custom?.terms?.length) {
+                for (let ti = 0; ti < d.termDates.terms.length && ti < custom.terms.length; ti++) {
+                    const breaks = d.termDates.terms[ti].breaks
+                    const customBreaks = custom.terms[ti].breaks
+                    if (!breaks || !customBreaks) continue
+                    for (let bi = 0; bi < breaks.length; bi++) {
+                        const match = customBreaks.find(cb => cb.start === breaks[bi].start && cb.end === breaks[bi].end)
+                        if (match?.name && !breaks[bi].name) {
+                            breaks[bi].name = match.name
+                        }
+                    }
+                }
+            }
+        }
+    } catch { /* ignore */ }
     return d
 }
 
@@ -1582,6 +1701,7 @@ export default function Dashboard() {
     const [showExpenses, setShowExpenses] = useState(() => localStorage.getItem('budgeup_show_expenses') === 'true')
     const [showOverdraft, setShowOverdraft] = useState(() => localStorage.getItem('budgeup_show_overdraft') !== 'false')
     const [showHolidays, setShowHolidays] = useState(() => localStorage.getItem('budgeup_show_holidays') !== 'false')
+    const [showFlexible, setShowFlexible] = useState(() => localStorage.getItem('budgeup_show_flexible') !== 'false')
     const [expandedSources, setExpandedSources] = useState(new Set())
     const [visibleExpandedSource, setVisibleExpandedSource] = useState(null)
     const [balanceToast, setBalanceToast] = useState(null)
@@ -1686,10 +1806,11 @@ export default function Dashboard() {
             }, 150)
         }
     }, [expandedSources])
-    const [activeTab, setActiveTabRaw] = useState(() => sessionStorage.getItem('budgeup_active_tab') || 'goals')
-    const setActiveTab = (tab) => { sessionStorage.setItem('budgeup_active_tab', tab); setActiveTabRaw(tab) }
+    const [activeTab, setActiveTabRaw] = useState(() => localStorage.getItem('budgeup_active_tab') || 'goals')
+    const setActiveTab = (tab) => { localStorage.setItem('budgeup_active_tab', tab); setActiveTabRaw(tab) }
     const [goalsShowMore, setGoalsShowMore] = useState(false)
-    const [warningMinimised, setWarningMinimised] = useState(false)
+    const [warningMinimised, setWarningMinimisedRaw] = useState(() => localStorage.getItem('budgeup_warning_minimised') === 'true')
+    const setWarningMinimised = (fn) => { setWarningMinimisedRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; localStorage.setItem('budgeup_warning_minimised', String(val)); return val }) }
     const [tappedSegment, setTappedSegment] = useState(null) // { label, amt, color }
     const [showAllIncome, setShowAllIncome] = useState(false)
     const [showAllExpenses, setShowAllExpenses] = useState(false)
@@ -1697,6 +1818,11 @@ export default function Dashboard() {
     const goalsTransCardRef = useRef(null)
     const tabScrollRef = useRef({})
     const tabExpandedRef = useRef({})
+    const tabGraphCoveredRef = useRef({
+        goals: sessionStorage.getItem('budgeup_graph_covered_goals') === 'true',
+        fixed: sessionStorage.getItem('budgeup_graph_covered_fixed') === 'true',
+        variable: sessionStorage.getItem('budgeup_graph_covered_variable') === 'true',
+    })
     const handleTabChange = (tab, targetScrollOverride) => {
         if (tab !== activeTab) {
             analytics.track(DASHBOARD_EVENTS.TAB_SWITCHED, { tab })
@@ -1733,8 +1859,8 @@ export default function Dashboard() {
             return
         }
 
-        // Switching to different tab
-        tabExpandedRef.current[activeTab] = expandedSources
+        // Switching to different tab — save scroll position
+        sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTab, String(el.scrollTop))
 
         // Check if tab is empty
         const isFixedEmpty = tab === 'fixed' &&
@@ -1746,8 +1872,7 @@ export default function Dashboard() {
             (formData.oneOffItems || []).filter(i => i.amount && i.name).length === 0
         const isTabEmpty = isFixedEmpty || isFlexEmpty
 
-        // Save current tab's scroll, restore target tab's saved scroll
-        sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTab, String(el.scrollTop))
+        // Restore saved scroll position for the target tab
         const savedScroll = parseInt(sessionStorage.getItem('budgeup_scroll_dashboard_' + tab) || '0', 10)
         const targetScroll = isTabEmpty ? 0 : savedScroll
 
@@ -1757,38 +1882,29 @@ export default function Dashboard() {
         if (snapTimerRef.current) clearTimeout(snapTimerRef.current)
 
         applyScrollStyles(targetScroll)
-        el.style.visibility = 'hidden'
+
+        // Disable transitions during tab switch so dropdowns don't animate
+        el.style.setProperty('--tab-switching', '1')
         cachedNodesRef.current = null
 
         flushSync(() => {
             setActiveTab(tab)
-            setExpandedSources(tabExpandedRef.current[tab] || new Set())
-            setGoalsShowMore(false)
         })
 
         cachedNodesRef.current = null
         el.scrollTop = targetScroll
         applyScrollStyles(targetScroll)
 
-        const unlock = () => {
-            isTabSwitchingRef.current = false
-            isAnimatingRef.current = false
-            if (snapTimerRef.current) { clearTimeout(snapTimerRef.current); snapTimerRef.current = null }
-        }
-        const safetyTimer = setTimeout(unlock, 500)
         requestAnimationFrame(() => {
             el.scrollTop = targetScroll
             applyScrollStyles(targetScroll)
-            el.style.visibility = ''
             requestAnimationFrame(() => {
                 el.scrollTop = targetScroll
                 applyScrollStyles(targetScroll)
-                setTimeout(() => {
-                    el.scrollTop = targetScroll
-                    applyScrollStyles(targetScroll)
-                    clearTimeout(safetyTimer)
-                    unlock()
-                }, 100)
+                // Re-enable transitions
+                el.style.removeProperty('--tab-switching')
+                isTabSwitchingRef.current = false
+                isAnimatingRef.current = false
             })
         })
     }
@@ -1808,7 +1924,7 @@ export default function Dashboard() {
     }
     const openFabBalance = () => {
         setFabBalanceOpen(true)
-        setThemeColor('#b3b3b3')
+        setThemeColor('#ffffff')
         window.dispatchEvent(new CustomEvent('nav-fab-balance', { detail: { open: true } }))
     }
     const closeFabBalance = () => {
@@ -2000,8 +2116,17 @@ export default function Dashboard() {
                     }
                     if (cancelled) return
                     if (result.formData) {
-                        // Supabase is the source of truth — prefer it over localStorage
+                        // Merge Supabase with localStorage to preserve unsaved local changes
+                        let localFD = {}
+                        try { const ls = localStorage.getItem(STORAGE_KEY); localFD = (ls ? JSON.parse(ls) : {}).formData || {} } catch {}
                         const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
+                        // Preserve local sources not yet synced to Supabase
+                        for (const k of ['incomeSources', 'expenseSources', 'flexIncomeSources', 'flexExpenseSources']) {
+                            if (localFD[k]?.length) merged[k] = [...new Set([...(merged[k] || []), ...localFD[k]])]
+                        }
+                        if (localFD.flexSourceData) merged.flexSourceData = { ...(merged.flexSourceData || {}), ...localFD.flexSourceData }
+                        if (localFD.otherIncomes?.length) merged.otherIncomes = [...new Set([...(merged.otherIncomes || []).map(i => JSON.stringify(i)), ...localFD.otherIncomes.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
+                        if (localFD.otherExpenses?.length) merged.otherExpenses = [...new Set([...(merged.otherExpenses || []).map(i => JSON.stringify(i)), ...localFD.otherExpenses.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
                         // Prefer localStorage term dates (Settings saves there immediately, Supabase may lag)
                         try {
                             const saved = localStorage.getItem(STORAGE_KEY)
@@ -2009,9 +2134,28 @@ export default function Dashboard() {
                             if (parsed.formData?.termDates?.terms?.length) {
                                 merged.termDates = parsed.formData.termDates
                             }
+                            // Re-run break name merge after localStorage override
+                            if (merged.university && hasCustomTermDates(merged.university) && merged.termDates?.terms?.length) {
+                                const custom = getTermDatesForUniversity(merged.university)
+                                if (custom?.terms?.length) {
+                                    for (let ti = 0; ti < merged.termDates.terms.length && ti < custom.terms.length; ti++) {
+                                        const breaks = merged.termDates.terms[ti].breaks
+                                        const customBreaks = custom.terms[ti].breaks
+                                        if (!breaks || !customBreaks) continue
+                                        for (let bi = 0; bi < breaks.length; bi++) {
+                                            const match = customBreaks.find(cb => cb.start === breaks[bi].start && cb.end === breaks[bi].end)
+                                            if (match?.name && !breaks[bi].name) {
+                                                breaks[bi].name = match.name
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, formData: merged }))
                         } catch { /* ignore */ }
                         setFormData(merged)
+                        // Persist merged data (break names etc.) back to Supabase
+                        saveUserFinances(userIdRef.current, { ...merged, onboardingCompleted: true }).catch(() => {})
                     }
                     if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
                     // Mark origin as set if balance already exists
@@ -2071,7 +2215,26 @@ export default function Dashboard() {
                 console.error('Failed to save to Supabase:', err)
             }
         }, 2000) // 2s debounce
-        return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+        return () => {
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current)
+                // Flush save immediately on cleanup
+                const userId = userIdRef.current
+                if (userId) {
+                    saveCashflowForecast(userId, formData).catch(() => {})
+                    saveUserFinances(userId, {
+                        university: formData.university,
+                        overdraft: formData.overdraft,
+                        savings: formData.savings,
+                        weeklySpend: formData.weeklySpend,
+                        weeklySpendNonTerm: formData.weeklySpendNonTerm,
+                        weeklySpendVariesByTerm: formData.weeklySpendVariesByTerm,
+                        balance: formData.balance,
+                    }).catch(() => {})
+                }
+                saveTimerRef.current = null
+            }
+        }
     }, [formData, dbLoaded])
 
     // Shrink graph on scroll: 200 → 108 (direct DOM for smooth perf)
@@ -2080,8 +2243,15 @@ export default function Dashboard() {
     const contentWrapRef = useRef(null)
     const stickyHeaderRef = useRef(null)
     const themeColorRef = useRef('#ffffff')
-    const [graphCovered, setGraphCoveredRaw] = useState(() => sessionStorage.getItem('budgeup_graph_covered') === 'true')
-    const setGraphCovered = (v) => { sessionStorage.setItem('budgeup_graph_covered', String(v)); setGraphCoveredRaw(v) }
+    const [graphCovered, setGraphCoveredRaw] = useState(() => {
+        const tab = sessionStorage.getItem('budgeup_active_tab') || 'goals'
+        return sessionStorage.getItem('budgeup_graph_covered_' + tab) === 'true'
+    })
+    const setGraphCovered = (v) => {
+        const tab = sessionStorage.getItem('budgeup_active_tab') || 'goals'
+        sessionStorage.setItem('budgeup_graph_covered_' + tab, String(v))
+        setGraphCoveredRaw(v)
+    }
     const graphCardRef = useRef(null)
     const heroHeaderRef = useRef(null)
     const rafRef = useRef(null)
@@ -2269,8 +2439,8 @@ export default function Dashboard() {
             }, 400)
 
             setGraphCovered(isCovered)
-            setThemeColor(isCovered ? '#f0f4f4' : '#ffffff')
-            themeColorRef.current = isCovered ? '#f0f4f4' : '#ffffff'
+            setThemeColor('#ffffff')
+            themeColorRef.current = '#ffffff'
         }
 
         const onUp = () => {
@@ -2375,7 +2545,7 @@ export default function Dashboard() {
         }
     }, [applyScrollStyles, activeTab, expandedSources])
 
-    // Apply saved scroll position immediately on mount to prevent graph flash
+    // Apply saved scroll position + graph state immediately on mount to prevent flash
     useLayoutEffect(() => {
         const saved = sessionStorage.getItem('budgeup_scroll_dashboard_' + activeTab)
         if (saved && scrollRef.current) {
@@ -2385,9 +2555,24 @@ export default function Dashboard() {
                 applyScrollStyles(pos)
             }
         }
+        // Restore graph visual state to match graphCovered
+        const gc = graphCardRef.current
+        const graphEl = graphContainerRef.current
+        const heroEl = heroHeaderRef.current
+        if (graphCovered) {
+            if (graphEl) graphEl.style.height = `${MIN_H}px`
+            if (gc) { gc.style.height = '0px'; gc.style.marginTop = '0px' }
+            if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+        } else {
+            const pos = parseInt(saved || '0', 10)
+            if (pos > 0) {
+                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+            }
+        }
     }, [])
 
-    // Re-apply scroll position after data loads (content may have changed)
+    // Re-apply scroll position + graph state after data loads (content may have changed)
     useLayoutEffect(() => {
         if (!dbLoaded) return
         const saved = sessionStorage.getItem('budgeup_scroll_dashboard_' + activeTab)
@@ -2396,6 +2581,20 @@ export default function Dashboard() {
             if (pos > 0) {
                 scrollRef.current.scrollTop = pos
                 applyScrollStyles(pos)
+            }
+        }
+        const gc = graphCardRef.current
+        const graphEl = graphContainerRef.current
+        const heroEl = heroHeaderRef.current
+        if (graphCovered) {
+            if (graphEl) graphEl.style.height = `${MIN_H}px`
+            if (gc) { gc.style.height = '0px'; gc.style.marginTop = '0px' }
+            if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+        } else {
+            const pos = parseInt(saved || '0', 10)
+            if (pos > 0) {
+                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
             }
         }
     }, [dbLoaded])
@@ -2992,7 +3191,7 @@ export default function Dashboard() {
                 }}
             >
                 {/* Graph + tabs — sticky, shrinks on scroll */}
-                <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 0, transform: 'translateZ(0)', backfaceVisibility: 'hidden' }}>
+                <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 0 }}>
 
                     {/* Graph area — clips when covered, blocks scroll */}
                     <div ref={graphCardRef} onTouchMove={e => e.preventDefault()} style={{
@@ -3249,6 +3448,7 @@ export default function Dashboard() {
                                 hiddenEventTypes={[
                                     ...(!showIncome ? ['loan', 'bursary', 'family', 'work', 'oneOffIncome', ...otherIncomes.map(i => i.id)] : []),
                                     ...(!showExpenses ? ['rent', 'bills', 'uniFees', 'savingsInv', 'weeklySpend', 'oneOffExpense', ...otherExpenses.map(i => i.id)] : []),
+                                    ...(!showFlexible ? [...(formData.flexIncomeSources || []), ...(formData.flexExpenseSources || [])] : []),
                                     // Per-source eye/hide toggles
                                     ...[...hiddenSources].flatMap(id => {
                                         const allMaps = { ...incomeEditTypeMap, ...expenseEditTypeMap }
@@ -3347,6 +3547,7 @@ export default function Dashboard() {
                 {/* Content below */}
                 <div ref={contentWrapRef} style={{
                     minHeight: '60vh',
+                    background: '#f0f4f4',
                     opacity: showInitialBalancePopup ? 0.35 : 1,
                     pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
                 }}>
@@ -3994,7 +4195,7 @@ export default function Dashboard() {
                             )
 
                             return (
-                                <div style={{ padding: '0 0 30px' }} >
+                                <div style={{ padding: '0 0 40px' }} >
 
                                     {/* Am I on track? */}
                                     {balanceHistory.length > 0 && (() => {
@@ -4264,6 +4465,8 @@ export default function Dashboard() {
                                         const net = totalInc - totalExp
                                         const total = totalInc + totalExp
 
+                                        if (totalInc === 0 && totalExp === 0) return null
+
                                         // Simple two-segment donut: income vs expense
                                         const donutSize = 130
                                         const strokeWidth = 16
@@ -4288,27 +4491,27 @@ export default function Dashboard() {
                                             }
                                             return (
                                                 <>
-                                                    <div style={{ position: 'relative', height: showTip ? 24 : 0, transition: 'height 0.15s ease', overflow: 'visible' }}>
+                                                    <div style={{ position: 'relative', marginBottom: 8 }}>
                                                         {showTip && (
                                                             <div style={{
-                                                                position: 'absolute', bottom: 2,
-                                                                left: `clamp(40px, ${tipLeft}%, calc(100% - 40px))`,
+                                                                position: 'absolute', bottom: '100%', marginBottom: 4,
+                                                                left: `clamp(30px, ${tipLeft}%, calc(100% - 30px))`,
                                                                 transform: 'translateX(-50%)',
-                                                                background: '#333', borderRadius: 6, padding: '3px 8px',
+                                                                background: tappedSegment.color, borderRadius: 6, padding: '3px 8px',
                                                                 whiteSpace: 'nowrap', zIndex: 1,
+                                                                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                                                             }}>
                                                                 <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>
-                                                                    {tappedSegment.label} \u00b7 {sym}{Math.round(tappedSegment.amt).toLocaleString()}
+                                                                    {tappedSegment.label} · {sym}{Math.round(tappedSegment.amt).toLocaleString()}
                                                                 </span>
                                                                 <div style={{
                                                                     position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)',
                                                                     borderLeft: '4px solid transparent', borderRight: '4px solid transparent',
-                                                                    borderTop: '4px solid #333',
+                                                                    borderTop: `4px solid ${tappedSegment.color}`,
                                                                 }} />
                                                             </div>
                                                         )}
-                                                    </div>
-                                                    <div style={{ display: 'flex', height: 14, borderRadius: 7, overflow: 'hidden', marginBottom: 8, cursor: 'pointer' }}>
+                                                        <div style={{ display: 'flex', height: 14, borderRadius: 7, overflow: 'hidden', cursor: 'pointer' }}>
                                                         {entries.map(([label, amt], i) => {
                                                             const color = colors[Math.min(i, colors.length - 1)]
                                                             const isTapped = tappedSegment?.label === label && tappedSegment?.type === key
@@ -4324,6 +4527,7 @@ export default function Dashboard() {
                                                                 />
                                                             )
                                                         })}
+                                                    </div>
                                                     </div>
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
                                                         {entries.map(([label, amt], i) => {
@@ -4505,7 +4709,7 @@ export default function Dashboard() {
                                     <div style={cardStyle}>
                                         <p style={cardTitle}>Academic Year Progress</p>
                                         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                                            <p style={{ ...bigNum, fontSize: 32, color: '#333' }}>{yearProgress}%</p>
+                                            <p style={{ ...bigNum, fontSize: 32, color: yearProgress < 33 ? '#e06470' : yearProgress < 66 ? '#EC8C17' : '#147b75' }}>{yearProgress}%</p>
                                             <p style={{ ...subText, margin: 0 }}>{termDaysLeft} term days left</p>
                                         </div>
                                         <div style={{
@@ -4548,29 +4752,7 @@ export default function Dashboard() {
                         })()}
 
                         {activeTab === 'variable' && (
-                            <div style={{ padding: '0 0 30px' }}>
-
-                                {/* Weekly Spend Card */}
-                                <div style={{
-                                    padding: '14px 16px 8px', background: '#fff', borderRadius: 14, marginBottom: 10,
-                                }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                                        <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
-                                            Weekly Spend
-                                        </span>
-                                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                            {getCurrencySymbol()}{Math.round(weeklySpendTotal).toLocaleString()}/yr
-                                        </span>
-                                    </div>
-                                    <WeeklySpendStep compact
-                                        weeklySpend={formData.weeklySpend}
-                                        updateWeeklySpend={(val) => updateField('weeklySpend', val)}
-                                        weeklySpendNonTerm={formData.weeklySpendNonTerm}
-                                        updateWeeklySpendNonTerm={(val) => updateField('weeklySpendNonTerm', val)}
-                                        weeklySpendVariesByTerm={formData.weeklySpendVariesByTerm}
-                                        updateWeeklySpendVariesByTerm={(val) => updateField('weeklySpendVariesByTerm', val)}
-                                    />
-                                </div>
+                            <div style={{ padding: '0 0 40px' }}>
 
                                 {/* Flexible Spend Overview */}
                                 {(() => {
@@ -4612,6 +4794,28 @@ export default function Dashboard() {
                                     )
                                 })()}
 
+                                {/* Weekly Spend Card */}
+                                <div style={{
+                                    padding: '14px 16px 8px', background: '#fff', borderRadius: 14, marginBottom: 10,
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                        <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                                            Weekly Spend
+                                        </span>
+                                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                            {getCurrencySymbol()}{Math.round(weeklySpendTotal).toLocaleString()}/yr
+                                        </span>
+                                    </div>
+                                    <WeeklySpendStep compact
+                                        weeklySpend={formData.weeklySpend}
+                                        updateWeeklySpend={(val) => updateField('weeklySpend', val)}
+                                        weeklySpendNonTerm={formData.weeklySpendNonTerm}
+                                        updateWeeklySpendNonTerm={(val) => updateField('weeklySpendNonTerm', val)}
+                                        weeklySpendVariesByTerm={formData.weeklySpendVariesByTerm}
+                                        updateWeeklySpendVariesByTerm={(val) => updateField('weeklySpendVariesByTerm', val)}
+                                    />
+                                </div>
+
                                 {/* Flex Income Section */}
                                 {(formData.flexIncomeSources || []).length > 0 && (
                                     <div data-section="flex-income" style={{ background: '#fff', borderRadius: 14, padding: '0 0 8px', marginBottom: 10 }}>
@@ -4624,36 +4828,28 @@ export default function Dashboard() {
                                                 if (!src) return null
                                                 const srcData = formData.flexSourceData?.[srcId] || { frequency: src.defaultFreq }
                                                 const si = SOURCE_ICONS[srcId]
-                                                const expanded = expandedSources.has(srcId)
                                                 const amt = parseFloat(String(srcData.amount || '0').replace(/,/g, ''))
                                                 return (
-                                                    <div key={srcId} data-source-row data-source-id={srcId} style={{ margin: '0 12px', borderRadius: 10, background: '#f0f4f4', overflow: 'hidden', marginBottom: 6 }}>
-                                                        <div onClick={() => handleExpandToggle(srcId)} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 12, cursor: 'pointer' }}>
-                                                            {si && <si.Icon size={20} color="#147b75" style={{ flexShrink: 0 }} />}
-                                                            <span style={{ flex: 1, fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>{src.label}</span>
-                                                            {amt > 0 && <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>+{getCurrencySymbol()}{amt.toLocaleString()}</span>}
-                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)' }}><path d="M6 9l6 6 6-6" /></svg>
-                                                        </div>
-                                                        <div style={{ maxHeight: expanded ? 400 : 0, opacity: expanded ? 1 : 0, overflow: 'hidden', transition: `max-height ${expanded ? '0.45s' : '0.3s'} cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${expanded ? '0.2s' : '0.2s'} ease` }}>
-                                                            <div style={{ borderTop: '1px solid #eee', padding: '8px 14px 4px', background: '#fafafa' }}>
-                                                                <FlexSourceStep
-                                                                    data={srcData}
-                                                                    onChange={(val) => setFormData(prev => ({ ...prev, flexSourceData: { ...prev.flexSourceData, [srcId]: val } }))}
-                                                                    isExpense={false}
-                                                                />
-                                                                <div style={{ padding: '4px 0 8px', textAlign: 'center' }}>
-                                                                    <span onClick={() => {
-                                                                        setFormData(prev => ({
-                                                                            ...prev,
-                                                                            flexIncomeSources: (prev.flexIncomeSources || []).filter(s => s !== srcId),
-                                                                            flexSourceData: { ...prev.flexSourceData, [srcId]: undefined },
-                                                                        }))
-                                                                        setExpandedSources(prev => { const n = new Set(prev); n.delete(srcId); return n })
-                                                                    }} style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470', cursor: 'pointer' }}>Delete {src.label.toLowerCase()}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                                    <FlexRow key={srcId} srcId={srcId} label={src.label} amt={amt} frequency={srcData.frequency} si={si}
+                                                        isExpense={false} expanded={expandedSources.has(srcId)}
+                                                        active={!hiddenSources.has(srcId)}
+                                                        onToggleVisibility={() => toggleSourceVisibility(srcId)}
+                                                        onExpandToggle={() => handleExpandToggle(srcId)}
+                                                        onDelete={() => {
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                flexIncomeSources: (prev.flexIncomeSources || []).filter(s => s !== srcId),
+                                                                flexSourceData: { ...prev.flexSourceData, [srcId]: undefined },
+                                                            }))
+                                                            setExpandedSources(prev => { const n = new Set(prev); n.delete(srcId); return n })
+                                                        }}
+                                                    >
+                                                        <FlexSourceStep
+                                                            data={srcData}
+                                                            onChange={(val) => setFormData(prev => ({ ...prev, flexSourceData: { ...prev.flexSourceData, [srcId]: val } }))}
+                                                            isExpense={false}
+                                                        />
+                                                    </FlexRow>
                                                 )
                                             })}
                                         </div>
@@ -4672,36 +4868,28 @@ export default function Dashboard() {
                                                 if (!src) return null
                                                 const srcData = formData.flexSourceData?.[srcId] || { frequency: src.defaultFreq }
                                                 const si = SOURCE_ICONS[srcId]
-                                                const expanded = expandedSources.has(srcId)
                                                 const amt = parseFloat(String(srcData.amount || '0').replace(/,/g, ''))
                                                 return (
-                                                    <div key={srcId} data-source-row data-source-id={srcId} style={{ margin: '0 12px', borderRadius: 10, background: '#f0f4f4', overflow: 'hidden', marginBottom: 6 }}>
-                                                        <div onClick={() => handleExpandToggle(srcId)} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 12, cursor: 'pointer' }}>
-                                                            {si && <si.Icon size={20} color="#e06470" style={{ flexShrink: 0 }} />}
-                                                            <span style={{ flex: 1, fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>{src.label}</span>
-                                                            {amt > 0 && <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>{'\u2212'}{getCurrencySymbol()}{amt.toLocaleString()}</span>}
-                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)' }}><path d="M6 9l6 6 6-6" /></svg>
-                                                        </div>
-                                                        <div style={{ maxHeight: expanded ? 400 : 0, opacity: expanded ? 1 : 0, overflow: 'hidden', transition: `max-height ${expanded ? '0.45s' : '0.3s'} cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity ${expanded ? '0.2s' : '0.2s'} ease` }}>
-                                                            <div style={{ borderTop: '1px solid #eee', padding: '8px 14px 4px', background: '#fafafa' }}>
-                                                                <FlexSourceStep
-                                                                    data={srcData}
-                                                                    onChange={(val) => setFormData(prev => ({ ...prev, flexSourceData: { ...prev.flexSourceData, [srcId]: val } }))}
-                                                                    isExpense={true}
-                                                                />
-                                                                <div style={{ padding: '4px 0 8px', textAlign: 'center' }}>
-                                                                    <span onClick={() => {
-                                                                        setFormData(prev => ({
-                                                                            ...prev,
-                                                                            flexExpenseSources: (prev.flexExpenseSources || []).filter(s => s !== srcId),
-                                                                            flexSourceData: { ...prev.flexSourceData, [srcId]: undefined },
-                                                                        }))
-                                                                        setExpandedSources(prev => { const n = new Set(prev); n.delete(srcId); return n })
-                                                                    }} style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470', cursor: 'pointer' }}>Delete {src.label.toLowerCase()}</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
+                                                    <FlexRow key={srcId} srcId={srcId} label={src.label} amt={amt} frequency={srcData.frequency} si={si}
+                                                        isExpense={true} expanded={expandedSources.has(srcId)}
+                                                        active={!hiddenSources.has(srcId)}
+                                                        onToggleVisibility={() => toggleSourceVisibility(srcId)}
+                                                        onExpandToggle={() => handleExpandToggle(srcId)}
+                                                        onDelete={() => {
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                flexExpenseSources: (prev.flexExpenseSources || []).filter(s => s !== srcId),
+                                                                flexSourceData: { ...prev.flexSourceData, [srcId]: undefined },
+                                                            }))
+                                                            setExpandedSources(prev => { const n = new Set(prev); n.delete(srcId); return n })
+                                                        }}
+                                                    >
+                                                        <FlexSourceStep
+                                                            data={srcData}
+                                                            onChange={(val) => setFormData(prev => ({ ...prev, flexSourceData: { ...prev.flexSourceData, [srcId]: val } }))}
+                                                            isExpense={true}
+                                                        />
+                                                    </FlexRow>
                                                 )
                                             })}
                                         </div>
@@ -5160,6 +5348,7 @@ export default function Dashboard() {
                     { label: 'Income', active: showIncome, color: '#147b75', toggle: () => setShowIncome(prev => { localStorage.setItem('budgeup_show_income', String(!prev)); return !prev }) },
                     { label: 'History', active: showBalanceHistory, color: '#EC8C17', toggle: () => { setShowBalanceHistory(prev => { analytics.track(DASHBOARD_EVENTS.BALANCE_HISTORY_TOGGLED, { visible: !prev }); localStorage.setItem('budgeup_show_balance_history', String(!prev)); return !prev }) } },
                     { label: 'Overdraft', active: showOverdraft, color: '#c0392b', toggle: () => setShowOverdraft(prev => { localStorage.setItem('budgeup_show_overdraft', String(!prev)); return !prev }) },
+                    { label: 'Flexible', active: showFlexible, color: '#1a9e97', toggle: () => setShowFlexible(prev => { localStorage.setItem('budgeup_show_flexible', String(!prev)); return !prev }) },
                     { label: 'Breaks', active: showHolidays, color: '#7c8ab8', toggle: () => setShowHolidays(prev => { localStorage.setItem('budgeup_show_holidays', String(!prev)); return !prev }) },
                 ]
                 return (
