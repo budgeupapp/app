@@ -1,4 +1,4 @@
-// DEV: set to 'onboarding' or 'dashboard' to bypass login and jump to that view. Set to null for normal behaviour.
+// DEV: set to 'onboarding', 'dashboard', or 'signup' to bypass login and jump to that view. Set to null for normal behaviour.
 const DEV_VIEW = null
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -228,7 +228,7 @@ export default function App() {
 
     /* ---------------- NOT AUTHENTICATED / PASSWORD RECOVERY ---------------- */
 
-    if (!DEV_VIEW && (!session || passwordRecovery)) {
+    if (DEV_VIEW === 'signup' || (!DEV_VIEW && (!session || passwordRecovery))) {
         return (
             <BrowserRouter>
                 <ThemeColorSync color="#ffffff" />

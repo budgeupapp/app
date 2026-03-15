@@ -177,7 +177,7 @@ export default function FlexSourceStep({ data, onChange, isExpense }) {
                     {/* Date range */}
                     <div style={{ background: colorBgStrong, borderRadius: 10, padding: '10px 12px' }}>
                         <DateRow label="Start" value={startDate} onChange={(val) => update({ startDate: val })} color={color} />
-                        <DateRow label="End (optional)" value={endDate} onChange={(val) => update({ endDate: val })} onClear={() => update({ endDate: '' })} color={color} />
+                        <DateRow label="End (optional)" value={endDate} onChange={(val) => update({ endDate: val })} color={color} />
                     </div>
                 </>
             )}

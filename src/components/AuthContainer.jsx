@@ -16,20 +16,18 @@ export default function AuthContainer() {
       {/* Logo */}
       <div
         style={{
-          flexShrink: 1,
-          minHeight: 60,
-          maxHeight: 180,
+          flexShrink: 0,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           gap: 10,
-          flex: '1 1 180px',
+          padding: 'calc(env(safe-area-inset-top, 0px) + 40px) 0 20px',
         }}
       >
-        <img src="/logo.svg" alt="Budge Up" style={{ height: 40 }} />
+        <img src="/logo.svg" alt="Budge Up" style={{ height: 36 }} />
         <span
           style={{
-            fontSize: 24,
+            fontSize: 22,
             fontWeight: 700,
             fontFamily: 'Nunito, sans-serif',
             color: '#147b75',
@@ -43,8 +41,11 @@ export default function AuthContainer() {
       <div
         key={pathname}
         style={{
-          flexShrink: 1,
-          overflowY: 'auto',
+          flex: 1,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
           padding: '0 28px 40px',
           maxWidth: 420,
           width: '100%',

@@ -801,10 +801,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
         const allSrc = flexType === 'income' ? FLEX_INCOME_SOURCES : FLEX_EXPENSE_SOURCES
         const srcDef = allSrc.find(s => s.id === flexId)
         const label = srcDef?.label || flexId
-        const startDate = srcData.startDate || AY_START
-        const endDate = srcData.endDate || AY_END
-        const ayStart = new Date(AY_START + 'T00:00:00')
-        const ayEndD = new Date(AY_END + 'T00:00:00')
+        const ayStartStr = toLocalDate(AY_START)
+        const ayEndStr = toLocalDate(AY_END)
+        const startDate = srcData.startDate || ayStartStr
+        const endDate = srcData.endDate || ayEndStr
+        const ayStart = new Date(ayStartStr + 'T00:00:00')
+        const ayEndD = new Date(ayEndStr + 'T00:00:00')
         const effStart = new Date(Math.max(new Date(startDate + 'T00:00:00'), ayStart))
         const effEnd = new Date(Math.min(endDate ? new Date(endDate + 'T00:00:00') : ayEndD, ayEndD))
 
@@ -1859,7 +1861,7 @@ export default function Dashboard() {
             return
         }
 
-        // Switching to different tab — save scroll position
+        // Switching to different tab — save scroll, keep graph state as-is
         sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTab, String(el.scrollTop))
 
         // Check if tab is empty
@@ -1883,8 +1885,8 @@ export default function Dashboard() {
 
         applyScrollStyles(targetScroll)
 
-        // Disable transitions during tab switch so dropdowns don't animate
-        el.style.setProperty('--tab-switching', '1')
+        // Hide content during switch to prevent flash
+        el.style.visibility = 'hidden'
         cachedNodesRef.current = null
 
         flushSync(() => {
@@ -1898,14 +1900,9 @@ export default function Dashboard() {
         requestAnimationFrame(() => {
             el.scrollTop = targetScroll
             applyScrollStyles(targetScroll)
-            requestAnimationFrame(() => {
-                el.scrollTop = targetScroll
-                applyScrollStyles(targetScroll)
-                // Re-enable transitions
-                el.style.removeProperty('--tab-switching')
-                isTabSwitchingRef.current = false
-                isAnimatingRef.current = false
-            })
+            el.style.visibility = ''
+            isTabSwitchingRef.current = false
+            isAnimatingRef.current = false
         })
     }
     const [editingEvent, setEditingEvent] = useState(null)
@@ -2539,9 +2536,9 @@ export default function Dashboard() {
                     break
                 }
             }
-            setVisibleExpandedSource(best)
+            setVisibleExpandedSource(prev => prev === best ? prev : best)
         } else {
-            setVisibleExpandedSource(null)
+            setVisibleExpandedSource(prev => prev === null ? prev : null)
         }
     }, [applyScrollStyles, activeTab, expandedSources])
 
@@ -3136,6 +3133,10 @@ export default function Dashboard() {
     // Map expandedSources to currentEventType for dot highlighting
     // Only show dots when the expanded dropdown is actually visible in the scroll viewport
     const sourceToEditType = { ...incomeEditTypeMap, ...expenseEditTypeMap }
+    // Flex sources use their ID directly as editType
+    for (const id of [...(formData.flexIncomeSources || []), ...(formData.flexExpenseSources || [])]) {
+        sourceToEditType[id] = [id]
+    }
     const activeSource = visibleExpandedSource && expandedSources.has(visibleExpandedSource)
         ? visibleExpandedSource : null
     const currentEventType = activeSource && sourceToEditType[activeSource]
@@ -3446,12 +3447,13 @@ export default function Dashboard() {
                                 onOverdraftClick={handleOverdraftClick}
                                 events={events}
                                 hiddenEventTypes={[
-                                    ...(!showIncome ? ['loan', 'bursary', 'family', 'work', 'oneOffIncome', ...otherIncomes.map(i => i.id)] : []),
-                                    ...(!showExpenses ? ['rent', 'bills', 'uniFees', 'savingsInv', 'weeklySpend', 'oneOffExpense', ...otherExpenses.map(i => i.id)] : []),
-                                    ...(!showFlexible ? [...(formData.flexIncomeSources || []), ...(formData.flexExpenseSources || [])] : []),
-                                    // Per-source eye/hide toggles
+                                    ...(!showIncome ? ['loan', 'bursary', 'family', 'work', 'oneOffIncome', ...otherIncomes.map(i => i.id), ...(formData.flexIncomeSources || [])] : []),
+                                    ...(!showExpenses ? ['rent', 'bills', 'uniFees', 'savingsInv', 'weeklySpend', 'oneOffExpense', ...otherExpenses.map(i => i.id), ...(formData.flexExpenseSources || [])] : []),
+                                    // Per-source eye/hide toggles (regular + flex)
                                     ...[...hiddenSources].flatMap(id => {
                                         const allMaps = { ...incomeEditTypeMap, ...expenseEditTypeMap }
+                                        // Flex sources use their ID directly as editType
+                                        if (id.startsWith('flex_')) return [id]
                                         return allMaps[id] || []
                                     }),
                                 ].filter(t => {
@@ -3461,6 +3463,7 @@ export default function Dashboard() {
                                     return true
                                 })}
                                 balanceHiddenTypes={[...hiddenSources].flatMap(id => {
+                                    if (id.startsWith('flex_')) return [id]
                                     const allMaps = { ...incomeEditTypeMap, ...expenseEditTypeMap }
                                     return allMaps[id] || []
                                 })}
@@ -3480,7 +3483,7 @@ export default function Dashboard() {
                     </div>{/* end graph card */}
 
                     {/* Handle + tabs — inside sticky header so they stick */}
-                    <div style={{ background: '#f0f4f4', borderRadius: '20px 20px 0 0', padding: '0 10px 0', marginBottom: -1 }}>
+                    <div style={{ background: '#f0f4f4', borderRadius: '20px 20px 0 0', padding: '0 10px 0', marginTop: 5, marginBottom: -1 }}>
                         {/* Drag handle line — drag to collapse/cover graph */}
                         <div
                             onPointerDown={onHandlePointerDown}
@@ -4754,8 +4757,8 @@ export default function Dashboard() {
                         {activeTab === 'variable' && (
                             <div style={{ padding: '0 0 40px' }}>
 
-                                {/* Flexible Spend Overview */}
-                                {(() => {
+                                {/* Flexible Spend Overview — commented out */}
+                                {false && (() => {
                                     const flexEvents = events.filter(e => !e.removed && (e.editType?.startsWith('flex_') || e.editType === 'oneOffIncome' || e.editType === 'oneOffExpense' || e.editType === 'weeklySpend'))
                                     const flexIn = flexEvents.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0)
                                     const flexOut = flexEvents.filter(e => e.type === 'expense').reduce((s, e) => s + e.amount, 0)

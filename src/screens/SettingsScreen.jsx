@@ -841,17 +841,6 @@ export default function SettingsScreen() {
               <Share2 size={16} /> Invite friends
             </button>
             <button
-              onClick={handleCopyLink}
-              style={{
-                width: 42, height: 42, borderRadius: 10,
-                background: '#fff', border: '1.5px solid #e0e0e0',
-                cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Copy size={16} color="#555" />
-            </button>
-            <button
               onClick={handleShowQr}
               style={{
                 width: 42, height: 42, borderRadius: 10,
