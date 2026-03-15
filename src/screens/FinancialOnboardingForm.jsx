@@ -1870,14 +1870,18 @@ export default function FinancialOnboardingForm({ onComplete }) {
             return
         }
 
-        // Shrink button first, then switch step
+        // Fade illustration + shrink button, then slide card down to reveal graph
         setUniConfirming(true)
         transitionRef.current = true
         setTimeout(() => {
-            goNext()
-            setGraphAnimated(true)
-            setUniConfirming(false)
-            transitionRef.current = null
+            setUniSlideOut(true)
+            setTimeout(() => {
+                goNext()
+                setGraphAnimated(true)
+                setUniConfirming(false)
+                setUniSlideOut(false)
+                transitionRef.current = null
+            }, 450)
         }, 100)
     }
 
@@ -3088,7 +3092,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 </div>
 
                 {/* University overlay — present during university step and reverse slide-in */}
-                {(currentStep.id === 'university' || uniSlideIn) && (
+                {(currentStep.id === 'university' || uniSlideIn || uniSlideOut) && (
                     <>
                         {/* Backdrop — only in steady-state university step, not during reverse slide */}
                         <div style={{
@@ -3172,7 +3176,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             height: 'auto',
                                             objectFit: 'contain',
                                             opacity: (uniConfirming || uniSlideOut) ? 0 : 1,
-                                            transition: 'opacity 0.8s ease-in-out',
+                                            transition: 'opacity 0.35s ease-in-out',
                                         }}
                                     />
                                 </div>
