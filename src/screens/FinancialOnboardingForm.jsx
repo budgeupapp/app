@@ -2212,16 +2212,16 @@ export default function FinancialOnboardingForm({ onComplete }) {
         )
 
         return (
-            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#efefef' }}>
+            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#f0f4f4' }}>
                 {toastEl}
                 {/* Single TermGraph — props change based on panel */}
                 <div style={{
-                    height: graphAnimated ? 185 : 0,
+                    height: graphAnimated ? 220 : 0,
                     opacity: graphAnimated ? 1 : 0,
                     transform: graphAnimated ? 'translateY(0)' : 'translateY(-8px)',
                     overflow: 'hidden',
                     flexShrink: 0,
-                    margin: graphAnimated ? '0 16px' : '0',
+                    margin: graphAnimated ? '16px 16px 0' : '0',
                     background: graphAnimated ? '#fff' : 'transparent',
                     borderRadius: graphAnimated ? 14 : 0,
                     transition: graphAnimated
@@ -2229,8 +2229,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         : 'height 0.35s ease, opacity 0.25s ease, transform 0.25s ease, margin 0.35s ease, background 0.25s ease, border-radius 0.25s ease',
                 }}>
                     <TermGraph
-                        graphHeight={130}
-                        marginTop={8}
+                        graphHeight={160}
+                        marginTop={12}
                         terms={terms}
                         expandedTerm={activePanel === 0 ? activeExpanded : undefined}
                         balance={activePanel >= 1 ? balanceNum : undefined}
@@ -3094,7 +3094,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         <div style={{
                             position: 'fixed',
                             inset: 0,
-                            background: '#efefef',
+                            background: '#f0f4f4',
                             pointerEvents: 'none',
                             zIndex: 5,
                             opacity: uniSlideIn ? 0 : 1,
@@ -3104,7 +3104,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         {/* University card — top contracts down into form card position */}
                         <div style={{
                             position: 'fixed',
-                            top: uniSlideOut ? 185 : 10,
+                            top: uniSlideOut ? 220 : 10,
                             left: 16,
                             right: 16,
                             bottom: 12,

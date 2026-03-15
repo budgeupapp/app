@@ -390,47 +390,45 @@ export default function TermDatesStep({
 
         const newTerms = terms.map(t => t.id === cleanUpdated.id ? cleanUpdated : { ...t })
 
-        // Push subsequent terms forward, preserving gaps and durations
+        // Only push subsequent terms forward if there's an overlap
         for (let i = idx + 1; i < newTerms.length; i++) {
             const prev = newTerms[i - 1]
             const curr = newTerms[i]
-            const origGap = Math.round((toMs(terms[i].start) - toMs(terms[i - 1].end)) / DAY)
-            const gap = Math.max(1, origGap) // at least 1 day gap
-            const expectedStart = shiftDate(prev.end, gap)
-
-            if (expectedStart !== curr.start) {
-                const delta = Math.round((toMs(expectedStart) - toMs(curr.start)) / DAY)
+            // Only adjust if the previous term's end overlaps with or passes this term's start
+            if (toMs(prev.end) >= toMs(curr.start)) {
+                const newStart = shiftDate(prev.end, 1) // 1 day gap
+                const delta = Math.round((toMs(newStart) - toMs(curr.start)) / DAY)
                 const duration = Math.round((toMs(curr.end) - toMs(curr.start)) / DAY)
-                curr.start = expectedStart
+                curr.start = newStart
                 curr.end = shiftDate(curr.start, duration)
-                // Shift breaks too
                 curr.breaks = (curr.breaks || []).map(b => ({
                     ...b,
                     start: shiftDate(b.start, delta),
                     end: shiftDate(b.end, delta),
                 }))
+            } else {
+                break // no overlap, no need to check further terms
             }
         }
 
-        // Push previous terms backward, preserving gaps and durations
+        // Only push previous terms backward if there's an overlap
         for (let i = idx - 1; i >= 0; i--) {
             const next = newTerms[i + 1]
             const curr = newTerms[i]
-            const origGap = Math.round((toMs(terms[i + 1].start) - toMs(terms[i].end)) / DAY)
-            const gap = Math.max(1, origGap)
-            const expectedEnd = shiftDate(next.start, -gap)
-
-            if (expectedEnd !== curr.end) {
-                const delta = Math.round((toMs(expectedEnd) - toMs(curr.end)) / DAY)
+            // Only adjust if this term's end overlaps with or passes the next term's start
+            if (toMs(curr.end) >= toMs(next.start)) {
+                const newEnd = shiftDate(next.start, -1) // 1 day gap
+                const delta = Math.round((toMs(newEnd) - toMs(curr.end)) / DAY)
                 const duration = Math.round((toMs(curr.end) - toMs(curr.start)) / DAY)
-                curr.end = expectedEnd
+                curr.end = newEnd
                 curr.start = shiftDate(curr.end, -duration)
-                // Shift breaks too
                 curr.breaks = (curr.breaks || []).map(b => ({
                     ...b,
                     start: shiftDate(b.start, delta),
                     end: shiftDate(b.end, delta),
                 }))
+            } else {
+                break // no overlap, no need to check further terms
             }
         }
 
