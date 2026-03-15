@@ -372,18 +372,18 @@ export default function BottomNav() {
                             '0 4px 16px rgba(224,100,112,0.35), 0 -8px 40px 10px rgba(246,246,246,0.95)',
                             mainVisible && !fabOpen ? `all ${tOut}` : (mainVisible ? `opacity 0.25s ease, transform 0.25s ease` : undefined)
                         )}
-                        {/* Expense: FLEXIBLE on left */}
+                        {/* Expense: REGULAR on left */}
                         {fabBtn(isExpense && !fabClosing, 'translateX(0) scale(1)', fabClosing ? 'translateY(30px) scale(0.4)' : 'translateY(0) scale(0.85)', '0s',
-                            () => setFabSourcePicker('flex-expense'),
-                            '#e8838e', <PiShuffle size={22} color="#fff" />, 'FLEXIBLE',
-                            '0 4px 16px rgba(232,131,142,0.35)',
+                            () => setFabSourcePicker('expense'),
+                            '#d4566a', <PiCalendarBlank size={22} color="#fff" />, 'REGULAR',
+                            '0 4px 16px rgba(212,86,106,0.35)',
                             (isExpense && !fabClosing) ? `opacity 0.25s ease, transform 0.25s ease` : `opacity 0.2s ease, transform 0.2s ease`
                         )}
-                        {/* Income: FLEXIBLE on left */}
+                        {/* Income: REGULAR on left */}
                         {fabBtn(isIncome && !fabClosing, 'translateX(0) scale(1)', fabClosing ? 'translateY(30px) scale(0.4)' : 'translateY(0) scale(0.85)', '0s',
-                            () => setFabSourcePicker('flex-income'),
-                            '#1a9e97', <PiShuffle size={22} color="#fff" />, 'FLEXIBLE',
-                            '0 4px 16px rgba(26,158,151,0.35)',
+                            () => setFabSourcePicker('income'),
+                            '#147b75', <PiCalendarBlank size={22} color="#fff" />, 'REGULAR',
+                            '0 4px 16px rgba(20,123,117,0.35)',
                             (isIncome && !fabClosing) ? `opacity 0.25s ease, transform 0.25s ease` : `opacity 0.2s ease, transform 0.2s ease`
                         )}
                     </div>
@@ -408,18 +408,18 @@ export default function BottomNav() {
                             '0 4px 16px rgba(20,123,117,0.35), 0 -8px 40px 10px rgba(246,246,246,0.95)',
                             mainVisible && !fabOpen ? `all ${tOut}` : (mainVisible ? `opacity 0.25s ease, transform 0.25s ease` : undefined)
                         )}
-                        {/* Expense: REGULAR on right */}
+                        {/* Expense: FLEXIBLE on right */}
                         {fabBtn(isExpense && !fabClosing, 'translateX(0) scale(1)', fabClosing ? 'translateY(30px) scale(0.4)' : 'translateY(0) scale(0.85)', '0s',
-                            () => setFabSourcePicker('expense'),
-                            '#d4566a', <PiCalendarBlank size={22} color="#fff" />, 'REGULAR',
-                            '0 4px 16px rgba(212,86,106,0.35)',
+                            () => setFabSourcePicker('flex-expense'),
+                            '#e8838e', <PiShuffle size={22} color="#fff" />, 'FLEXIBLE',
+                            '0 4px 16px rgba(232,131,142,0.35)',
                             (isExpense && !fabClosing) ? `opacity 0.25s ease, transform 0.25s ease` : `opacity 0.2s ease, transform 0.2s ease`
                         )}
-                        {/* Income: REGULAR on right */}
+                        {/* Income: FLEXIBLE on right */}
                         {fabBtn(isIncome && !fabClosing, 'translateX(0) scale(1)', fabClosing ? 'translateY(30px) scale(0.4)' : 'translateY(0) scale(0.85)', '0s',
-                            () => setFabSourcePicker('income'),
-                            '#147b75', <PiCalendarBlank size={22} color="#fff" />, 'REGULAR',
-                            '0 4px 16px rgba(20,123,117,0.35)',
+                            () => setFabSourcePicker('flex-income'),
+                            '#1a9e97', <PiShuffle size={22} color="#fff" />, 'FLEXIBLE',
+                            '0 4px 16px rgba(26,158,151,0.35)',
                             (isIncome && !fabClosing) ? `opacity 0.25s ease, transform 0.25s ease` : `opacity 0.2s ease, transform 0.2s ease`
                         )}
                     </div>
