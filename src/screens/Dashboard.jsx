@@ -1332,15 +1332,15 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
                     {removedCount > 0 && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2 }}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2, display: 'block' }}
                         >
-                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#c4c4c4' }}>
                                 {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted
                             </span>
                         </button>
                     )}
                     {overrideCount > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#6b7cdb', marginTop: 2, display: 'block' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#EC8C17', marginTop: 2, display: 'block' }}>
                             {overrideCount} payment{overrideCount !== 1 ? 's' : ''} edited
                         </span>
                     )}
@@ -1519,13 +1519,13 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                             onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
                             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2 }}
                         >
-                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#c4c4c4' }}>
                                 {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted
                             </span>
                         </button>
                     )}
                     {overrideCount > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#6b7cdb', marginTop: 2, display: 'block' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#EC8C17', marginTop: 2, display: 'block' }}>
                             {overrideCount} payment{overrideCount !== 1 ? 's' : ''} edited
                         </span>
                     )}

@@ -1532,7 +1532,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                         boxShadow: isActive
                                             ? `0 0 8px ${isIncome ? 'rgba(20,123,117,0.7)' : 'rgba(224,100,112,0.7)'}`
                                             : dot.event.hasOverride && currentEventType && dot.event.editType === currentEventType
-                                                ? `0 0 0 1.5px #fff, 0 0 0 3px #6b7cdb`
+                                                ? `0 0 0 1px #fff, 0 0 0 2.5px #EC8C17`
                                                 : 'none',
                                         transition: 'width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease, border 0.15s ease',
                                     }} />
@@ -1563,9 +1563,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     const lineBal = getLineBal(x)
                                     const yPct = toTopPct(lineBal)
                                     const isIncome = evt.type === 'income'
-                                    const dotColor = isIncome ? '#147b75' : '#e06470'
+                                    const dotColor = '#c4c4c4'
                                     const isActive = activeEventDot && activeEventDot.date === evt.date && activeEventDot.editType === evt.editType
-                                    const size = isActive ? 14 : 8
+                                    const size = isActive ? 16 : 13
                                     const r = isActive ? 6 : 4.5
                                     return (
                                         <div
