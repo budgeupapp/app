@@ -169,14 +169,14 @@ children, }) {
     )
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {!compact && (
                 <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
                     <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>{heading}</h2>
                     <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>{subtitle}</p>
                 </div>
             )}
-            <div style={{ flex: 1, overflowY: 'visible', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+            <div style={{ overflowY: 'visible', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
                 <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much are your bills?</p>
                 <div style={{ display: 'flex', marginBottom: 16 }}>

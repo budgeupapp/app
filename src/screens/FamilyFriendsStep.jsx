@@ -225,7 +225,7 @@ children, }) {
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {!compact && (
                 <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
                     <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>
@@ -237,7 +237,7 @@ children, }) {
                 </div>
             )}
 
-            <div style={{ flex: 1, overflowY: 'visible', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+            <div style={{ overflowY: 'visible', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
                 {(() => {
                     const showDual = amountPeriod !== 'yearly' && familyVariesByTerm && (freq === 'weekly' || freq === 'monthly')

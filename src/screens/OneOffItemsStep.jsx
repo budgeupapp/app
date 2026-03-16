@@ -305,7 +305,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             <style>{`
                 @keyframes oneoff-slide-in {
                     from { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; border-width: 0; margin-bottom: -10px; }

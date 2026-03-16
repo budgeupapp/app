@@ -250,7 +250,7 @@ children, }) {
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {/* Title */}
             {!compact && (
                 <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
