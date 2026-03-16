@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { fmt } from '../components/TermGraph'
 
 function formatDisplay(raw) { if (!raw) return ''; const [whole, ...rest] = raw.split('.'); const f = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ','); return rest.length ? `${f}.${rest.join('.')}` : f }
-function cleanNum(val) { let v = val.replace(/[^0-9.]/g, ''); const p = v.split('.'); if (p.length > 2) v = p[0] + '.' + p.slice(1).join(''); if (parseFloat(v) > 500000) v = '500000'; return v }
+function cleanNum(val) { let v = val.replace(/[^0-9.]/g, ''); const p = v.split('.'); if (p.length > 2) v = p[0] + '.' + p.slice(1).join(''); if (p.length === 2 && p[1].length > 2) v = p[0] + '.' + p[1].slice(0, 2); if (parseFloat(v) > 500000) v = '500000'; return v }
 
 const PERIOD_OPTIONS = [
     { id: 'weekly', label: 'Weekly' }, { id: 'fortnightly', label: 'Fortnightly' }, { id: 'monthly', label: 'Monthly' },

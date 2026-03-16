@@ -27,6 +27,7 @@ export default function OverdraftStep({
         let val = e.target.value.replace(/[^0-9.]/g, '')
         const parts = val.split('.')
         if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('')
+        if (parts.length === 2 && parts[1].length > 2) val = parts[0] + '.' + parts[1].slice(0, 2)
         if (parseFloat(val) > 50000) val = '50000'
         setRawAmount(val)
         updateOverdraft(val)

@@ -756,6 +756,7 @@ function SlideToUnlock({ onUnlock }) {
       <div ref={labelRef} style={{
         position: 'absolute', inset: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        paddingLeft: 26,
         color: '#fff',
         fontSize: 17, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
         pointerEvents: 'none',

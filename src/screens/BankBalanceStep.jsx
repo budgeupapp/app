@@ -41,6 +41,7 @@ export default function BankBalanceStep({ balance, updateBalance, heading = 'Ban
         if (val.startsWith('-')) val = '-' + val.slice(1).replace(/-/g, '')
         const parts = val.replace(/^-/, '').split('.')
         if (parts.length > 2) val = (val.startsWith('-') ? '-' : '') + parts[0] + '.' + parts.slice(1).join('')
+        if (parts.length === 2 && parts[1].length > 2) val = (val.startsWith('-') ? '-' : '') + parts[0] + '.' + parts[1].slice(0, 2)
         const absVal = Math.abs(parseFloat(val) || 0)
         if (absVal > 500000) val = (val.startsWith('-') ? '-' : '') + '500000'
         setRawAmount(val)

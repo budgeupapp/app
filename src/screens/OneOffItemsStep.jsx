@@ -13,6 +13,7 @@ function cleanNum(val) {
     let v = val.replace(/[^0-9.]/g, '')
     const parts = v.split('.')
     if (parts.length > 2) v = parts[0] + '.' + parts.slice(1).join('')
+    if (parts.length === 2 && parts[1].length > 2) v = parts[0] + '.' + parts[1].slice(0, 2)
     if (parseFloat(v) > 500000) v = '500000'
     return v
 }
