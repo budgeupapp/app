@@ -1895,23 +1895,29 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     const handlePanelBack = () => {
         if (transitionRef.current) return
-        const panels = buildPanelSteps(formData.incomeSources, formData.expenseSources)
-        if (returnToSummaryRef.current) {
-            returnToSummaryRef.current = false
-            const summaryIdx = panels.indexOf('summary')
-            if (summaryIdx >= 0) {
-                setActivePanel(summaryIdx)
-                setCurrentStepId('summary')
-                scrollAreaRef.current?.scrollTo({ top: 0 })
-                return
+        // Collapse dropdowns first, then navigate after animation
+        setExpandedTerms(new Set())
+        setTitleBorderVisible(false)
+        // Scroll to top immediately
+        document.querySelector('[data-active-panel]')?.parentElement?.scrollTo({ top: 0 })
+
+        setTimeout(() => {
+            const panels = buildPanelSteps(formData.incomeSources, formData.expenseSources)
+            if (returnToSummaryRef.current) {
+                returnToSummaryRef.current = false
+                const summaryIdx = panels.indexOf('summary')
+                if (summaryIdx >= 0) {
+                    setActivePanel(summaryIdx)
+                    setCurrentStepId('summary')
+                    return
+                }
             }
-        }
-        let prev = activePanel - 1
-        if (prev < 0) prev = 0
-        const prevStepId = panels[prev]
-        setActivePanel(prev)
-        setCurrentStepId(prevStepId)
-        scrollAreaRef.current?.scrollTo({ top: 0 })
+            let prev = activePanel - 1
+            if (prev < 0) prev = 0
+            const prevStepId = panels[prev]
+            setActivePanel(prev)
+            setCurrentStepId(prevStepId)
+        }, 350)
     }
 
     const PANEL_TO_SOURCE = {
@@ -2015,6 +2021,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
             showToast(error)
             return
         }
+        setExpandedTerms(new Set())
+        setTitleBorderVisible(false)
         const panels = buildPanelSteps(formData.incomeSources, formData.expenseSources)
         if (returnToSummaryRef.current) {
             returnToSummaryRef.current = false
@@ -2022,7 +2030,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
             if (summaryIdx >= 0) {
                 setActivePanel(summaryIdx)
                 setCurrentStepId('summary')
-                scrollAreaRef.current?.scrollTo({ top: 0 })
+                requestAnimationFrame(() => {
+                    document.querySelector('[data-active-panel]')?.parentElement?.scrollTo({ top: 0 })
+                })
                 return
             }
         }
@@ -2030,8 +2040,12 @@ export default function FinancialOnboardingForm({ onComplete }) {
         if (nextPanelIdx < panels.length) {
             // Still in panel group — advance to next panel step
             setCurrentStepId(panels[nextPanelIdx])
-            scrollAreaRef.current?.scrollTo({ top: 0 })
-            setTimeout(() => setActivePanel(nextPanelIdx), 16)
+            setTimeout(() => {
+                setActivePanel(nextPanelIdx)
+                requestAnimationFrame(() => {
+                    document.querySelector('[data-active-panel]')?.parentElement?.scrollTo({ top: 0 })
+                })
+            }, 16)
         } else {
             // Last panel reached — submit and go to dashboard
             submit()
@@ -2192,7 +2206,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             </>
         )
 
-        const GRAPH_HEIGHT = 200
+        const GRAPH_HEIGHT = 210
         const SAFE_AREA_TOP = 'env(safe-area-inset-top, 0px)'
         const COLLAPSED_TOP = `calc(${SAFE_AREA_TOP} + ${GRAPH_HEIGHT}px)`
         const EXPANDED_TOP = `calc(${SAFE_AREA_TOP} + 8px)`
@@ -3228,32 +3242,27 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         padding: '24px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: 12,
+                                        gap: 0,
                                     }}>
-                                        <div style={{
-                                            width: activePanel > 0 ? 48 : 0,
-                                            height: 48,
-                                            opacity: activePanel > 0 ? 1 : 0,
-                                            overflow: 'hidden',
-                                            flexShrink: 0,
-                                            marginRight: activePanel > 0 ? 0 : -12,
-                                            transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-right 0.3s ease',
-                                        }}>
-                                            <button
-                                                onClick={panelOnBack}
-                                                style={{
-                                                    width: 48, height: 48, borderRadius: 50,
-                                                    border: 'none', background: '#e8e8e8',
-                                                    cursor: 'pointer', padding: 0,
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                }}
-                                            >
-                                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                                    <path d="M12 15L7 10L12 5" stroke="#4b4a4a"
-                                                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                                </svg>
-                                            </button>
-                                        </div>
+                                        <button
+                                            onClick={panelOnBack}
+                                            style={{
+                                                width: activePanel > 0 ? 48 : 0,
+                                                height: 48, borderRadius: 50,
+                                                border: 'none', background: '#e8e8e8',
+                                                cursor: 'pointer', padding: 0,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                flexShrink: 0, overflow: 'hidden',
+                                                marginRight: activePanel > 0 ? 12 : 0,
+                                                opacity: activePanel > 0 ? 1 : 0,
+                                                transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-right 0.3s cubic-bezier(.25,1,.5,1)',
+                                            }}
+                                        >
+                                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
+                                                <path d="M12 15L7 10L12 5" stroke="#4b4a4a"
+                                                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </button>
                                         <button
                                             onClick={panelOnNext}
                                             style={{
@@ -3264,31 +3273,28 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                 fontSize: 16, fontWeight: 700,
                                                 fontFamily: 'Nunito, sans-serif',
                                                 cursor: 'pointer', letterSpacing: 0.3,
-                                                transition: 'flex 0.3s cubic-bezier(.25,1,.5,1)',
+                                                overflow: 'hidden', whiteSpace: 'nowrap',
                                             }}
                                         >
                                             {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[activePanel]}
                                         </button>
-                                        <div style={{
-                                            overflow: 'hidden', flexShrink: 0,
-                                            width: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 36 : 0,
-                                            opacity: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 1 : 0,
-                                            transition: 'width 0.3s ease, opacity 0.2s ease, margin-left 0.3s ease',
-                                            marginLeft: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 0 : -12,
-                                        }}>
-                                            <button
-                                                onClick={handlePanelSkip}
-                                                style={{
-                                                    background: 'none', border: 'none',
-                                                    cursor: 'pointer', padding: '0 4px',
-                                                    fontSize: 13, fontWeight: 600,
-                                                    fontFamily: 'Nunito, sans-serif',
-                                                    color: '#888', whiteSpace: 'nowrap',
-                                                }}
-                                            >
-                                                Skip
-                                            </button>
-                                        </div>
+                                        <button
+                                            onClick={handlePanelSkip}
+                                            style={{
+                                                background: 'none', border: 'none',
+                                                cursor: 'pointer', padding: '0 4px',
+                                                fontSize: 13, fontWeight: 600,
+                                                fontFamily: 'Nunito, sans-serif',
+                                                color: '#888', whiteSpace: 'nowrap',
+                                                flexShrink: 0, overflow: 'hidden',
+                                                width: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 36 : 0,
+                                                opacity: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 1 : 0,
+                                                marginLeft: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 12 : 0,
+                                                transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-left 0.3s cubic-bezier(.25,1,.5,1)',
+                                            }}
+                                        >
+                                            Skip
+                                        </button>
                                     </div>
                                 )}
                             </div>

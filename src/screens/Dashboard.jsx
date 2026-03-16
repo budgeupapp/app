@@ -2277,6 +2277,7 @@ export default function Dashboard() {
     const graphContainerRef = useRef(null)
     const contentWrapRef = useRef(null)
     const stickyHeaderRef = useRef(null)
+    const tabsBarRef = useRef(null)
     const themeColorRef = useRef('#ffffff')
     const [graphCovered, setGraphCoveredRaw] = useState(() => {
         const tab = sessionStorage.getItem('budgeup_active_tab') || 'goals'
@@ -2507,6 +2508,120 @@ export default function Dashboard() {
         window.addEventListener('pointerup', onUp)
     }, [graphCovered])
 
+    // Pull-down-to-expand: when content is at scrollTop 0 and graph is collapsed/covered, dragging down expands graph
+    const pullDownRef = useRef({ active: false, startY: 0 })
+    const pullDownGraphCoveredRef = useRef(false)
+    useEffect(() => { pullDownGraphCoveredRef.current = graphCovered }, [graphCovered])
+
+    useEffect(() => {
+        const el = scrollRef.current
+        if (!el) return
+
+        const onStart = (e) => {
+            if (el.scrollTop > 1) return
+            const gc = graphCardRef.current
+            const graphEl = graphContainerRef.current
+            if (!gc || !graphEl) return
+            const isCovered = pullDownGraphCoveredRef.current
+            const currentH = graphEl.offsetHeight
+            if (currentH > MIN_H + 10 && !isCovered) return
+            pullDownRef.current = { active: true, startY: e.touches[0].clientY, wasCovered: isCovered }
+        }
+
+        const onMove = (e) => {
+            const pd = pullDownRef.current
+            if (!pd.active) return
+            const dy = e.touches[0].clientY - pd.startY
+            if (dy < 0) { pd.active = false; return }
+            if (el.scrollTop > 1) { pd.active = false; return }
+            e.preventDefault()
+            const gc = graphCardRef.current
+            const graphEl = graphContainerRef.current
+            const heroEl = heroHeaderRef.current
+            if (!gc || !graphEl) return
+
+            if (pd.wasCovered) {
+                const cardReveal = Math.min(1, dy / MIN_H)
+                gc.style.height = cardReveal < 1 ? `${dy}px` : ''
+                const expandT = Math.max(0, Math.min(1, (dy - MIN_H) / SHRINK_DIST))
+                graphEl.style.height = `${MIN_H + expandT * SHRINK_DIST}px`
+                if (heroEl) {
+                    heroEl.style.opacity = `${expandT}`
+                    heroEl.style.maxHeight = `${expandT * 80}px`
+                    heroEl.style.paddingTop = `${expandT * 4}px`
+                    heroEl.style.paddingBottom = `${expandT * 6}px`
+                }
+            } else {
+                const progress = Math.min(1, dy / SHRINK_DIST)
+                graphEl.style.height = `${MIN_H + progress * SHRINK_DIST}px`
+                if (heroEl) {
+                    heroEl.style.opacity = `${progress}`
+                    heroEl.style.maxHeight = `${progress * 80}px`
+                    heroEl.style.paddingTop = `${progress * 4}px`
+                    heroEl.style.paddingBottom = `${progress * 6}px`
+                }
+            }
+        }
+
+        const onEnd = () => {
+            const pd = pullDownRef.current
+            if (!pd.active) return
+            pd.active = false
+            const graphEl = graphContainerRef.current
+            const gc = graphCardRef.current
+            const heroEl = heroHeaderRef.current
+            if (!graphEl) return
+            const currentH = graphEl.offsetHeight
+            const progress = (currentH - MIN_H) / SHRINK_DIST
+            const cardH = gc ? gc.offsetHeight : MIN_H
+            const t = '0.35s cubic-bezier(0.4, 0, 0.2, 1)'
+            gc.style.transition = `height ${t}, margin-top ${t}`
+            graphEl.style.transition = `height ${t}`
+            if (heroEl) heroEl.style.transition = `opacity 0.3s ease, max-height ${t}, padding ${t}`
+
+            if (pd.wasCovered) {
+                if (cardH > MIN_H * 0.3 || progress > 0.1) {
+                    if (progress > 0.3) {
+                        graphEl.style.height = `${MAX_H}px`
+                        gc.style.height = ''
+                        if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
+                    } else {
+                        graphEl.style.height = `${MIN_H}px`
+                        gc.style.height = ''
+                        if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+                    }
+                    setGraphCovered(false)
+                } else {
+                    graphEl.style.height = `${MIN_H}px`
+                    gc.style.height = '0px'
+                    if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+                }
+            } else {
+                if (progress > 0.3) {
+                    graphEl.style.height = `${MAX_H}px`
+                    if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
+                } else {
+                    graphEl.style.height = `${MIN_H}px`
+                    if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+                }
+            }
+            setTimeout(() => {
+                gc.style.transition = ''
+                graphEl.style.transition = ''
+                if (heroEl) heroEl.style.transition = ''
+            }, 400)
+        }
+
+        el.addEventListener('touchstart', onStart, { passive: true })
+        el.addEventListener('touchmove', onMove, { passive: false })
+        el.addEventListener('touchend', onEnd, { passive: true })
+        return () => {
+            el.removeEventListener('touchstart', onStart)
+            el.removeEventListener('touchmove', onMove)
+            el.removeEventListener('touchend', onEnd)
+        }
+    }, [])
+
     const animateScroll = useCallback((el, target, durationOverride, onComplete) => {
         if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
         const start = el.scrollTop
@@ -2556,6 +2671,13 @@ export default function Dashboard() {
         if (!el) return
         applyScrollStyles(el.scrollTop)
         sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTab, String(el.scrollTop))
+
+        // Show/hide tab bar bottom line based on content scroll
+        if (tabsBarRef.current && contentWrapRef.current) {
+            const tabsBottom = tabsBarRef.current.getBoundingClientRect().bottom
+            const contentTop = contentWrapRef.current.getBoundingClientRect().top
+            tabsBarRef.current.style.boxShadow = contentTop < tabsBottom ? '0 1px 0 rgba(0,0,0,0.06)' : 'none'
+        }
 
         // Detect which expanded source row is currently in view
         if (expandedSources.size > 0) {
@@ -3248,7 +3370,7 @@ export default function Dashboard() {
                 }}
             >
                 {/* Graph + tabs — sticky, shrinks on scroll */}
-                <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 0, boxShadow: 'none' }}>
 
                     {/* Graph area — clips when covered, blocks scroll */}
                     <div ref={graphCardRef} onTouchMove={e => e.preventDefault()} style={{
@@ -3558,11 +3680,12 @@ export default function Dashboard() {
                     </div>{/* end graph card */}
 
                     {/* Tabs — inside sticky header so they stick */}
-                    <div style={{
+                    <div ref={tabsBarRef} style={{
                         background: '#f5f7f7',
                         borderRadius: '28px 28px 0 0',
                         padding: '0 14px 8px',
-                        boxShadow: '0 1px 0 rgba(0,0,0,0.04)',
+                        boxShadow: 'none',
+                        transition: 'box-shadow 0.2s ease',
                     }}>
                         {/* Drag handle line */}
                         <div
@@ -3586,7 +3709,7 @@ export default function Dashboard() {
                                 return (
                                     <div style={{
                                         display: 'flex', width: '100%', position: 'relative',
-                                        background: '#fff', borderRadius: 50, padding: 3,
+                                        background: 'rgba(0,0,0,0.04)', borderRadius: 50, padding: 3,
                                     }}>
                                         <div style={{
                                             position: 'absolute', top: 3, bottom: 3,
@@ -4326,13 +4449,13 @@ export default function Dashboard() {
                                                                 {clampedPct >= 0 ? '+' : ''}{clampedPct}%
                                                             </p>
                                                             <p style={{ margin: '4px 0 0', fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: healthColor }}>
-                                                                {isAhead ? 'Ahead!' : isClose ? 'On Track' : statusText === 'WATCH SPENDING' ? 'Watch Spending' : 'Needs Attention'}
+                                                                {isClose || clampedPct === 0 ? 'On Track!' : isAhead ? 'Ahead!' : statusText === 'WATCH SPENDING' ? 'Watch Spending' : 'Needs Attention'}
                                                             </p>
                                                         </div>
                                                     </div>
                                                     {/* Subtitle */}
-                                                    <p style={{ margin: '-30px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999', textAlign: 'center' }}>
-                                                        {isClose ? '' : isAhead
+                                                    <p style={{ margin: '-30px 0 8px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999', textAlign: 'center' }}>
+                                                        {isClose || clampedPct === 0 ? '' : isAhead
                                                             ? <>{sym}{absDiff.toLocaleString()} above forecast</>
                                                             : <>{sym}{absDiff.toLocaleString()} below forecast</>
                                                         }
@@ -4519,31 +4642,6 @@ export default function Dashboard() {
                                         )
                                     })()}
 
-                                    {/* Upcoming Transactions */}
-                                    {(() => {
-                                        const thirtyDays = new Date(today)
-                                        thirtyDays.setDate(thirtyDays.getDate() + 30)
-                                        const thirtyStr = toLocalDate(thirtyDays)
-                                        const allUpcoming = [...upcomingIncomeList, ...upcomingPayments].sort((a, b) => a.date.localeCompare(b.date))
-                                        const next30 = allUpcoming.filter(e => e.date <= thirtyStr)
-                                        const shown = goalsShowMore ? next30 : allUpcoming.slice(0, 5)
-                                        if (allUpcoming.length === 0) return null
-                                        return (
-                                            <div style={cardStyle}>
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                                                    <p style={{ ...cardTitle, margin: 0 }}>Upcoming Transactions</p>
-                                                    {allUpcoming.length > 5 && (
-                                                        <span onClick={() => setGoalsShowMore(p => !p)} style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75', cursor: 'pointer' }}>
-                                                            {goalsShowMore ? 'Show less' : 'Show all'}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                {shown.map((evt, i) => renderEventRow(evt, i, shown, evt.type === 'income' ? '#147b75' : '#e06470'))}
-                                            </div>
-                                        )
-                                    })()}
-
-
                                     {/* Spend & Income Breakdown */}
                                     {(() => {
                                         const activeEvents = events.filter(e => !e.removed && !e.noDot)
@@ -4720,6 +4818,30 @@ export default function Dashboard() {
                                                         {renderBreakdown(expEntries, totalExp, expColors, 'expense')}
                                                     </div>
                                                 )}
+                                            </div>
+                                        )
+                                    })()}
+
+                                    {/* Upcoming Transactions */}
+                                    {(() => {
+                                        const thirtyDays = new Date(today)
+                                        thirtyDays.setDate(thirtyDays.getDate() + 30)
+                                        const thirtyStr = toLocalDate(thirtyDays)
+                                        const allUpcoming = [...upcomingIncomeList, ...upcomingPayments].sort((a, b) => a.date.localeCompare(b.date))
+                                        const next30 = allUpcoming.filter(e => e.date <= thirtyStr)
+                                        const shown = goalsShowMore ? next30 : allUpcoming.slice(0, 5)
+                                        if (allUpcoming.length === 0) return null
+                                        return (
+                                            <div style={cardStyle}>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                                    <p style={{ ...cardTitle, margin: 0 }}>Upcoming Transactions</p>
+                                                    {allUpcoming.length > 5 && (
+                                                        <span onClick={() => setGoalsShowMore(p => !p)} style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75', cursor: 'pointer' }}>
+                                                            {goalsShowMore ? 'Show less' : 'Show all'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {shown.map((evt, i) => renderEventRow(evt, i, shown, evt.type === 'income' ? '#147b75' : '#e06470'))}
                                             </div>
                                         )
                                     })()}
