@@ -626,7 +626,7 @@ export default function TermDatesStep({
                 overflowY: 'auto',
                 overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
-                padding: '0 16px 16px',
+                padding: '0 16px 4px',
                 display: 'flex',
                 flexDirection: 'column',
             }}>

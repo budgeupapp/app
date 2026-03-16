@@ -2343,12 +2343,12 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     top: COLLAPSED_TOP,
                     left: 0, right: 0, bottom: 0,
                     background: '#f5f7f7',
-                    borderRadius: sheetExpanded ? 0 : '28px 28px 0 0',
+                    borderRadius: '28px 28px 0 0',
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
                     boxShadow: '0 -2px 8px rgba(0,0,0,0.15)',
-                    transition: 'top 0.35s cubic-bezier(.25,1,.5,1), border-radius 0.35s ease',
+                    transition: 'top 0.35s cubic-bezier(.25,1,.5,1)',
                     zIndex: 2,
                 }}>
                     {/* Drag handle — tap to toggle expand/collapse */}
