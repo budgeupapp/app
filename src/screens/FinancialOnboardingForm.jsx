@@ -2485,13 +2485,13 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             onClick={() => setShowAllEvents(s => !s)}
                                             style={{
                                                 position: 'absolute', top: 22, right: 24, zIndex: 10,
-                                                background: showAllEvents ? btnColor : '#f3f3f3',
+                                                background: showAllEvents ? btnColor : '#e8e8e8',
                                                 border: 'none', borderRadius: 20, cursor: 'pointer',
                                                 padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 5,
                                                 transition: 'background 0.2s ease',
                                             }}
                                         >
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={showAllEvents ? '#fff' : '#999'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={showAllEvents ? '#fff' : '#777'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                                 {!showAllEvents ? (
                                                     <>
                                                         <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
@@ -2508,7 +2508,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             <span style={{
                                                 fontSize: 11, fontWeight: 700,
                                                 fontFamily: 'Nunito, sans-serif',
-                                                color: showAllEvents ? '#fff' : '#999',
+                                                color: showAllEvents ? '#fff' : '#777',
                                             }}>
                                                 Show all
                                             </span>

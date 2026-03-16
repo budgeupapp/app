@@ -435,15 +435,15 @@ export default function MaintenanceLoanStep({
                                     onClick={() => toggleMonth(m)}
                                     style={{
                                         background: selected ? '#147b75' : '#fff',
-                                        color: selected ? '#fff' : '#999',
-                                        border: selected ? '1.5px solid #147b75' : '1.5px solid #e8e8e8',
+                                        color: selected ? '#fff' : '#666',
+                                        border: selected ? '1.5px solid #147b75' : '1.5px solid #ddd',
                                         borderRadius: 50,
                                         padding: '8px 0',
                                         fontSize: 12, fontWeight: 700,
                                         fontFamily: 'Nunito, sans-serif',
                                         cursor: 'pointer',
                                         transition: 'all 0.2s ease',
-                                        boxShadow: selected ? '0 2px 8px rgba(20,123,117,0.2)' : 'none',
+                                        boxShadow: 'none',
                                     }}
                                 >
                                     {SHORT_MONTH[m]}
@@ -453,54 +453,50 @@ export default function MaintenanceLoanStep({
                     </div>
 
                     {/* Per-instalment amount inputs */}
-                    {tab === 'instalment' && months.map((m, i) => (
-                        <div key={m} style={{
-                            display: 'flex', alignItems: 'center',
-                            borderTop: '1px solid #f3f3f3',
-                        }}>
-                            <div style={{
-                                width: 80, padding: '8px 12px',
-                                borderRight: '1px solid #f3f3f3',
-                                flexShrink: 0,
-                            }}>
-                                <span style={{
-                                    fontSize: 13, fontWeight: 600,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#444',
+                    {tab === 'instalment' && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                            {months.map((m) => (
+                                <div key={m} style={{
+                                    display: 'flex', alignItems: 'center',
+                                    background: '#fff', borderRadius: 10,
+                                    border: '1px solid #e8e8e8',
+                                    padding: '0 14px', height: 44,
+                                    gap: 8,
                                 }}>
-                                    {SHORT_MONTH[m]}
-                                </span>
-                            </div>
-                            <div style={{
-                                flex: 1, display: 'flex',
-                                alignItems: 'center', gap: 4,
-                                padding: '0 12px',
-                            }}>
-                                <span style={{
-                                    fontSize: 14, fontWeight: 600,
-                                    color: '#aaa', fontFamily: 'Nunito, sans-serif',
-                                }}>{getCurrencySymbol()}</span>
-                                <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    placeholder="0.00"
-                                    value={formatDisplay(rawInstalments[m] || '')}
-                                    onChange={(e) => handleInstalmentChange(m, e)}
-                                    onTouchStart={handleInputTouchStart}
-                                    onFocus={scrollInputToTop}
-                                    onBlur={handleInputBlur}
-                                    style={{
-                                        flex: 1, border: 'none',
-                                        background: 'transparent',
-                                        fontSize: 14, fontWeight: 500,
+                                    <span style={{
+                                        fontSize: 13, fontWeight: 700,
                                         fontFamily: 'Nunito, sans-serif',
-                                        color: '#000', outline: 'none',
-                                        padding: '10px 0',
-                                    }}
-                                />
-                            </div>
+                                        color: '#147b75', minWidth: 32,
+                                    }}>
+                                        {SHORT_MONTH[m]}
+                                    </span>
+                                    <div style={{ width: 1, height: 20, background: '#e8e8e8' }} />
+                                    <span style={{
+                                        fontSize: 15, fontWeight: 600,
+                                        color: '#888', fontFamily: 'Nunito, sans-serif',
+                                    }}>{getCurrencySymbol()}</span>
+                                    <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        value={formatDisplay(rawInstalments[m] || '')}
+                                        onChange={(e) => handleInstalmentChange(m, e)}
+                                        onTouchStart={handleInputTouchStart}
+                                        onFocus={scrollInputToTop}
+                                        onBlur={handleInputBlur}
+                                        style={{
+                                            flex: 1, border: 'none',
+                                            background: 'transparent',
+                                            fontSize: 15, fontWeight: 500,
+                                            fontFamily: 'Nunito, sans-serif',
+                                            color: '#000', outline: 'none',
+                                            padding: 0,
+                                        }}
+                                    />
+                                </div>
+                            ))}
                         </div>
-                    ))}
+                    )}
 
                     {/* Payment dates accordion */}
                     <div
@@ -522,10 +518,10 @@ export default function MaintenanceLoanStep({
                             }
                         }}
                         style={{
-                            background: 'rgba(20,123,117,0.1)',
-                            borderRadius: '0 0 10px 10px',
-                            padding: '10px 12px',
+                            padding: '14px 12px 12px',
                             cursor: 'pointer',
+                            marginTop: 12,
+                            borderTop: '1px solid #eee',
                         }}
                     >
                         <div style={{
@@ -568,22 +564,25 @@ export default function MaintenanceLoanStep({
                                     <div key={m} style={{
                                         display: 'flex', alignItems: 'center',
                                         justifyContent: 'space-between',
-                                        padding: '5px 0',
+                                        padding: '6px 0',
                                     }}>
                                         <span style={{
-                                            fontSize: 12, color: '#777',
+                                            fontSize: 13, color: '#888',
+                                            fontWeight: 600,
                                             fontFamily: 'Nunito, sans-serif',
                                         }}>
                                             {MONTH_LABELS[m]}
                                         </span>
                                         <div style={{ position: 'relative' }}>
                                             <span style={{
-                                                fontSize: 13, fontWeight: 600,
+                                                fontSize: 13, fontWeight: 700,
                                                 color: '#147b75',
-                                                borderBottom: '1px dotted rgba(20,123,117,0.45)',
-                                                paddingBottom: 1,
                                                 fontFamily: 'Nunito, sans-serif',
                                                 pointerEvents: 'none',
+                                                background: 'rgba(20,123,117,0.08)',
+                                                padding: '3px 10px',
+                                                borderRadius: 8,
+                                                display: 'inline-block',
                                             }}>
                                                 {loanDates?.[m] ? fmt(loanDates[m]) : 'Select date'}
                                             </span>
