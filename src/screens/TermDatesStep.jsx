@@ -346,7 +346,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                             width: '100%', textAlign: 'center',
                                         }}
                                     >
-                                        Delete {brk.name || 'holiday'}
+                                        Remove {brk.name || 'holiday'}
                                     </button>
                                 </div>
                             </div>
@@ -384,8 +384,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                 style={{
                                     fontSize: 12, fontWeight: 600,
                                     fontFamily: 'Nunito, sans-serif',
-                                    color: '#e06470', cursor: 'pointer',
-                                    opacity: 0.7,
+                                    color: '#d4566a', cursor: 'pointer',
                                 }}
                             >
                                 Remove term
@@ -613,9 +612,10 @@ export default function TermDatesStep({
                 overflowY: 'auto',
                 overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
-                padding: '0 16px 8px',
+                padding: '0 16px 0px',
                 display: 'flex',
                 flexDirection: 'column',
+                marginTop: '-2px'
             }}>
                 {termList(true)}
             </div>

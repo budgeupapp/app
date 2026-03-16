@@ -124,6 +124,20 @@ export default function BankBalanceStep({ balance, updateBalance, heading = 'Ban
             }}>
                 Don't include any savings or overdraft here.
             </p>
+
+            <div style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                marginTop: 24, background: '#e0edec', borderRadius: 14,
+                padding: '16px 18px',
+            }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#147b75" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#444' }}>
+                    Private and secure · Bank-level encryption
+                </span>
+            </div>
             </div>
         </div>
     )

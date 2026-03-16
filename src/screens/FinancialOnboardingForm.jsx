@@ -1386,6 +1386,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
     })
     const [expandedTerms, setExpandedTerms] = useState(new Set())
     const [showAllEvents, setShowAllEvents] = useState(false)
+    const defaultTermDatesRef = useRef(null)
+    const prevActivePanelRef = useRef(0)
     const returnToSummaryRef = useRef(false)
 
     /* --- State with localStorage restore --- */
@@ -1422,6 +1424,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         // Sync term dates with university-specific dates if available
         if (data.university && hasCustomTermDates(data.university)) {
             data.termDates = getTermDatesForUniversity(data.university)
+            defaultTermDatesRef.current = JSON.parse(JSON.stringify(data.termDates))
         }
         // Migrate legacy flat other expense fields to otherExpenses array
         if ((!data.otherExpenses || data.otherExpenses.length === 0) && data.otherExpenseAmount) {
@@ -1895,29 +1898,22 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     const handlePanelBack = () => {
         if (transitionRef.current) return
-        // Collapse dropdowns first, then navigate after animation
         setExpandedTerms(new Set())
         setTitleBorderVisible(false)
-        // Scroll to top immediately
-        document.querySelector('[data-active-panel]')?.parentElement?.scrollTo({ top: 0 })
-
-        setTimeout(() => {
-            const panels = buildPanelSteps(formData.incomeSources, formData.expenseSources)
-            if (returnToSummaryRef.current) {
-                returnToSummaryRef.current = false
-                const summaryIdx = panels.indexOf('summary')
-                if (summaryIdx >= 0) {
-                    setActivePanel(summaryIdx)
-                    setCurrentStepId('summary')
-                    return
-                }
+        const panels = buildPanelSteps(formData.incomeSources, formData.expenseSources)
+        if (returnToSummaryRef.current) {
+            returnToSummaryRef.current = false
+            const summaryIdx = panels.indexOf('summary')
+            if (summaryIdx >= 0) {
+                setActivePanel(summaryIdx)
+                setCurrentStepId('summary')
+                return
             }
-            let prev = activePanel - 1
-            if (prev < 0) prev = 0
-            const prevStepId = panels[prev]
-            setActivePanel(prev)
-            setCurrentStepId(prevStepId)
-        }, 350)
+        }
+        let prev = activePanel - 1
+        if (prev < 0) prev = 0
+        setActivePanel(prev)
+        setCurrentStepId(panels[prev])
     }
 
     const PANEL_TO_SOURCE = {
@@ -2188,11 +2184,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
         const toastEl = toast && (
             <>
-                <div onClick={dismissToast} style={{ position: 'fixed', inset: 0, zIndex: 9998 }} />
                 <div
                     onClick={dismissToast}
                     style={{
-                        position: 'fixed', bottom: 100, left: '50%', transform: 'translateX(-50%)',
+                        position: 'fixed', bottom: 'calc(60px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)',
                         background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
                         color: '#fff', padding: '10px 20px', borderRadius: 20,
                         fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
@@ -2269,7 +2264,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     margin: '0 8px',
                     transition: 'opacity 0.35s ease, transform 0.35s ease',
                     position: 'relative', zIndex: 0,
-                    visibility: sheetExpanded ? 'hidden' : 'visible',
                 }}>
                     <TermGraph
                         graphHeight={150}
@@ -2365,6 +2359,15 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     />
                 </div>
 
+                {/* Opaque backing behind sheet — covers rounded corner gaps */}
+                <div style={{
+                    position: 'absolute',
+                    top: COLLAPSED_TOP,
+                    left: 0, right: 0, bottom: 0,
+                    background: '#f5f7f7',
+                    zIndex: 1,
+                    pointerEvents: 'none',
+                }} />
                 {/* Form card — draggable bottom sheet */}
                 <div ref={(el) => { sheetRef.current = el; formCardCallbackRef(el) }} style={{
                     position: 'absolute',
@@ -2459,12 +2462,41 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         }}
                         style={{ touchAction: 'none', cursor: 'grab', flexShrink: 0, background: '#f5f7f7', borderBottom: `1px solid ${titleBorderVisible ? '#e0e0e0' : 'transparent'}`, transition: 'border-color 0.2s ease' }}
                     >
-                        <h2 style={{
-                            fontSize: 22, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                            color: '#000', margin: 0, padding: '10px 24px 8px',
-                        }}>
-                            {PANEL_HEADING_MAP[PANEL_STEPS[activePanel]] || ''}
-                        </h2>
+                        <div style={{ display: 'flex', alignItems: 'center', padding: '10px 24px 8px' }}>
+                            <h2 style={{
+                                fontSize: 22, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                color: '#000', margin: 0, flex: 1,
+                            }}>
+                                {PANEL_HEADING_MAP[PANEL_STEPS[activePanel]] || ''}
+                            </h2>
+                            {PANEL_STEPS[activePanel] === 'termDates' && defaultTermDatesRef.current &&
+                                JSON.stringify(formData.termDates) !== JSON.stringify(defaultTermDatesRef.current) && (
+                                <button
+                                    onTouchStart={(e) => e.stopPropagation()}
+                                    onTouchEnd={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        updateField('termDates', JSON.parse(JSON.stringify(defaultTermDatesRef.current)))
+                                        setExpandedTerms(new Set())
+                                    }}
+                                    style={{
+                                        background: 'none', border: '1.5px solid #ddd',
+                                        borderRadius: 20, cursor: 'pointer',
+                                        padding: '4px 12px',
+                                        fontSize: 12, fontWeight: 700,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        color: '#888', whiteSpace: 'nowrap',
+                                        display: 'flex', alignItems: 'center', gap: 4,
+                                    }}
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M1 4v6h6" />
+                                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                                    </svg>
+                                    Reset
+                                </button>
+                            )}
+                        </div>
                     </div>
                     {/* Income/expense indicator strip — draggable + tap to toggle */}
                     <div
@@ -2535,6 +2567,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
                     {/* Panel content area */}
                     <div
+                        ref={(el) => {
+                            if (!el || prevActivePanelRef.current === activePanel) return
+                            prevActivePanelRef.current = activePanel
+                            // Scroll new active panel to top
+                            const panels = el.querySelectorAll('.onboarding-panel')
+                            panels.forEach(p => { p.scrollTop = 0 })
+                            setTitleBorderVisible(false)
+                        }}
                         style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#f5f7f7' }}>
                         {PANEL_STEPS.map((panelId, i) => (
                             <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} className="onboarding-panel"
@@ -2543,12 +2583,18 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     const el = e.currentTarget
                                     sheetDragRef.current._panelStartY = e.touches[0].clientY
                                     sheetDragRef.current._panelScrollTop = el.scrollTop
+                                    sheetDragRef.current._panelNoScroll = el.scrollHeight <= el.clientHeight + 2
                                     sheetDragRef.current._panelDragging = false
                                 } : undefined}
                                 onTouchMove={i === activePanel ? (e) => {
                                     const dy = e.touches[0].clientY - sheetDragRef.current._panelStartY
-                                    // Only start sheet drag if at top and pulling down
+                                    // Pull down: only if at scroll top
                                     if (!sheetDragRef.current._panelDragging && sheetDragRef.current._panelScrollTop <= 0 && dy > 8) {
+                                        sheetDragRef.current._panelDragging = true
+                                        handleSheetDragStart(sheetDragRef.current._panelStartY)
+                                    }
+                                    // Swipe up: only if content doesn't scroll
+                                    if (!sheetDragRef.current._panelDragging && sheetDragRef.current._panelNoScroll && dy < -8) {
                                         sheetDragRef.current._panelDragging = true
                                         handleSheetDragStart(sheetDragRef.current._panelStartY)
                                     }
