@@ -207,28 +207,37 @@ function buildGraphEvents(formData) {
         }
     }
 
-    // Bursary income events
+    // Bursary income events (supports multiple bursaries)
     if (formData.incomeSources?.includes('bursary')) {
         const DEFAULT_BURSARY_MONTHS = ['october', 'february', 'march']
         const DEFAULT_BURSARY_DATES = { october: '2025-10-27', february: '2026-02-09', march: '2026-03-30' }
-        const months = formData.bursaryMonths || DEFAULT_BURSARY_MONTHS
-        const totalAmount = parseFloat(String(formData.bursaryAmount || '0').replace(/,/g, ''))
+        const bursaries = formData.bursaries || [{
+            amount: formData.bursaryAmount || '',
+            months: formData.bursaryMonths || DEFAULT_BURSARY_MONTHS,
+            dates: formData.bursaryDates || DEFAULT_BURSARY_DATES,
+            instalmentAmounts: formData.bursaryInstalmentAmounts || {},
+        }]
+        for (const bursary of bursaries) {
+            const months = bursary.months || DEFAULT_BURSARY_MONTHS
+            const totalAmount = parseFloat(String(bursary.amount || '0').replace(/,/g, ''))
+            const bDates = bursary.dates || DEFAULT_BURSARY_DATES
 
-        const bursaryDateObjs = months.map(m => ({ date: formData.bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m] || MONTH_KEY_TO_DATE[m] }))
-        const bursaryAmounts = distributeExcludingRemoved(totalAmount, bursaryDateObjs, 'bursary', removedSet)
-        for (let mi = 0; mi < months.length; mi++) {
-            const month = months[mi]
-            const date = formData.bursaryDates?.[month] || DEFAULT_BURSARY_DATES[month] || MONTH_KEY_TO_DATE[month]
-            if (!date) continue
-            const instalmentAmt = parseFloat(String(formData.bursaryInstalmentAmounts?.[month] || '0').replace(/,/g, ''))
-            const amount = instalmentAmt > 0 ? instalmentAmt : (totalAmount > 0 ? bursaryAmounts[mi] : 0)
-            if (amount <= 0) continue
-            events.push({
-                date, amount, type: 'income',
-                label: 'Bursary',
-                sublabel: `${MONTH_SHORT[month]} bursary`,
-                editType: 'bursary', editMonth: month,
-            })
+            const bursaryDateObjs = months.map(m => ({ date: bDates[m] || DEFAULT_BURSARY_DATES[m] || MONTH_KEY_TO_DATE[m] }))
+            const bursaryAmounts = distributeExcludingRemoved(totalAmount, bursaryDateObjs, 'bursary', removedSet)
+            for (let mi = 0; mi < months.length; mi++) {
+                const month = months[mi]
+                const date = bDates[month] || DEFAULT_BURSARY_DATES[month] || MONTH_KEY_TO_DATE[month]
+                if (!date) continue
+                const instalmentAmt = parseFloat(String(bursary.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
+                const amount = instalmentAmt > 0 ? instalmentAmt : (totalAmount > 0 ? bursaryAmounts[mi] : 0)
+                if (amount <= 0) continue
+                events.push({
+                    date, amount, type: 'income',
+                    label: 'Bursary',
+                    sublabel: `${MONTH_SHORT[month]} bursary`,
+                    editType: 'bursary', editMonth: month,
+                })
+            }
         }
     }
 
@@ -2718,15 +2727,35 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 )}
                                 {panelId === 'bursary' && (
                                     <BursaryStep
-                                        bursaryAmount={formData.bursaryAmount}
-                                        updateBursaryAmount={(val) => updateField('bursaryAmount', val)}
-                                        bursaryMonths={formData.bursaryMonths}
-                                        updateBursaryMonths={(val) => updateField('bursaryMonths', val)}
-                                        bursaryDates={formData.bursaryDates}
-                                        updateBursaryDates={(val) => updateField('bursaryDates', val)}
-                                        bursaryInstalmentAmounts={formData.bursaryInstalmentAmounts || {}}
-                                        updateBursaryInstalmentAmounts={(val) => updateField('bursaryInstalmentAmounts', val)}
-
+                                        bursaries={formData.bursaries || [{
+                                            id: 'bursary_0',
+                                            amount: formData.bursaryAmount || '',
+                                            months: formData.bursaryMonths || ['october', 'february', 'march'],
+                                            dates: formData.bursaryDates || { october: '2025-10-27', february: '2026-02-09', march: '2026-03-30' },
+                                            instalmentAmounts: formData.bursaryInstalmentAmounts || {},
+                                        }]}
+                                        updateBursaries={(bursariesOrFn) => {
+                                            setFormData(prev => {
+                                                const prevBursaries = prev.bursaries || [{
+                                                    id: 'bursary_0',
+                                                    amount: prev.bursaryAmount || '',
+                                                    months: prev.bursaryMonths || ['october', 'february', 'march'],
+                                                    dates: prev.bursaryDates || { october: '2025-10-27', february: '2026-02-09', march: '2026-03-30' },
+                                                    instalmentAmounts: prev.bursaryInstalmentAmounts || {},
+                                                }]
+                                                const newBursaries = typeof bursariesOrFn === 'function' ? bursariesOrFn(prevBursaries) : bursariesOrFn
+                                                return {
+                                                    ...prev,
+                                                    bursaries: newBursaries,
+                                                    ...(newBursaries[0] ? {
+                                                        bursaryAmount: newBursaries[0].amount,
+                                                        bursaryMonths: newBursaries[0].months,
+                                                        bursaryDates: newBursaries[0].dates,
+                                                        bursaryInstalmentAmounts: newBursaries[0].instalmentAmounts,
+                                                    } : {}),
+                                                }
+                                            })
+                                        }}
                                     />
                                 )}
                                 {panelId === 'familyFriends' && (
@@ -3279,7 +3308,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     position: 'absolute',
                     bottom: 0, left: 0, right: 0,
                     background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, #fff 40%)',
-                    padding: '28px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
+                    padding: '28px 24px calc(14px + env(safe-area-inset-bottom, 0px))',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 0,
@@ -3321,6 +3350,24 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         }}
                     >
                         {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[activePanel]}
+                    </button>
+                    <button
+                        onClick={handlePanelSkip}
+                        style={{
+                            background: 'none', border: 'none',
+                            cursor: 'pointer', padding: '0 4px',
+                            fontSize: 13, fontWeight: 600,
+                            fontFamily: 'Nunito, sans-serif',
+                            color: '#888', whiteSpace: 'nowrap',
+                            flexShrink: 0, overflow: 'hidden',
+                            width: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 36 : 0,
+                            opacity: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 1 : 0,
+                            marginLeft: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 12 : 0,
+                            transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-left 0.3s cubic-bezier(.25,1,.5,1)',
+                            pointerEvents: 'auto',
+                        }}
+                    >
+                        Skip
                     </button>
                 </div>
 

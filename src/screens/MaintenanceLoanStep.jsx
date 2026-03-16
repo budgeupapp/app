@@ -81,25 +81,43 @@ export default function MaintenanceLoanStep({
     heading = 'Maintenance Loan',
     subtitle = "Enter the loan you're given for rent and living costs.",
 }) {
+    const [newLoanId, setNewLoanId] = useState(null)
     const addLoan = () => {
+        const id = `loan_${Date.now()}`
+        setNewLoanId(id)
         updateLoans(prev => [...prev, {
-            id: `loan_${Date.now()}`,
+            id,
             amount: '',
             months: [...DEFAULT_LOAN_MONTHS],
             knowDates: false,
             dates: {},
-            instalmentAmounts: {}, _new: true,
+            instalmentAmounts: {},
         }])
+        // Clear new flag after animation
+        setTimeout(() => setNewLoanId(null), 400)
     }
 
     const [removingIdx, setRemovingIdx] = useState(null)
+    const [collapsingIdx, setCollapsingIdx] = useState(null)
+    const loanHeights = useRef({})
+
     const removeLoan = (idx) => {
         if (loans.length <= 1) return
+        const el = document.querySelector(`[data-loan-entry-${idx}]`)
+        if (el) loanHeights.current[idx] = el.offsetHeight
+        // Phase 1: fade out
         setRemovingIdx(idx)
+        // Phase 2: collapse after fade
         setTimeout(() => {
-            updateLoans(prev => prev.filter((_, i) => i !== idx))
-            setRemovingIdx(null)
-        }, 300)
+            setCollapsingIdx(idx)
+            // Phase 3: remove from DOM after collapse
+            setTimeout(() => {
+                setRemovingIdx(null)
+                setCollapsingIdx(null)
+                delete loanHeights.current[idx]
+                updateLoans(prev => prev.filter((_, i) => i !== idx))
+            }, 350)
+        }, 200)
     }
 
     const updateLoan = (idx, field, value) => {
@@ -122,16 +140,37 @@ export default function MaintenanceLoanStep({
                 padding: compact ? '0 24px 0' : '0 24px 24px',
                 minHeight: 0,
             }}>
-                {loans.map((loan, idx) => (
-                    <div key={loan.id || idx} data-loan-entry style={{
-                        maxHeight: removingIdx === idx ? 0 : 2000,
-                        opacity: removingIdx === idx ? 0 : 1,
-                        overflow: 'hidden',
-                        transition: removingIdx === idx ? 'max-height 0.3s ease, opacity 0.2s ease' : undefined,
-                        animation: loan._new ? 'loanSlideIn 0.3s ease' : undefined,
+                {loans.map((loan, idx) => {
+                    const isRemoving = removingIdx === idx
+                    const isCollapsing = collapsingIdx === idx
+                    const isNew = loan.id === newLoanId
+                    return (
+                    <div key={loan.id || idx} data-loan-entry {...{[`data-loan-entry-${idx}`]: ''}} style={{
+                        marginBottom: isCollapsing ? 0 : 10,
+                        ...(isCollapsing ? {
+                            maxHeight: 0,
+                            opacity: 0,
+                            overflow: 'hidden',
+                            transition: 'max-height 0.35s ease, margin-bottom 0.35s ease',
+                        } : isRemoving ? {
+                            maxHeight: (loanHeights.current[idx] || 500) + 2,
+                            opacity: 0,
+                            overflow: 'hidden',
+                            transform: 'scale(0.97)',
+                            transition: 'opacity 0.2s ease, transform 0.2s ease',
+                        } : isNew ? {
+                            animation: 'loanFadeIn 0.35s ease',
+                        } : {}),
                     }}>
-                        {loans.length > 1 && (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: idx === 0 ? '0 0 8px' : '16px 0 8px' }}>
+                        {(loans.length > 1 || removingIdx !== null) && (
+                            <div style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                margin: idx === 0 ? '0 0 8px' : '16px 0 8px',
+                                maxHeight: (loans.length > 1) ? 30 : 0,
+                                opacity: (loans.length > 1) ? 1 : 0,
+                                overflow: 'hidden',
+                                transition: 'max-height 0.35s ease, opacity 0.25s ease',
+                            }}>
                                 <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Loan {idx + 1}</span>
                                 <button onClick={() => removeLoan(idx)} style={{
                                     background: 'none', border: 'none', cursor: 'pointer',
@@ -154,7 +193,7 @@ export default function MaintenanceLoanStep({
                             scrollOnFocus={idx > 0}
                         />
                     </div>
-                ))}
+                )})}
                 <button
                     onClick={addLoan}
                     style={{
@@ -444,8 +483,8 @@ function LoanEntry({
                                 cursor: 'pointer', outline: 'none',
                             }}
                         >
-                            <option value="yearly">per year</option>
-                            <option value="instalment">per instalment</option>
+                            <option value="yearly">Yearly</option>
+                            <option value="instalment">Irregular</option>
                         </select>
                         <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
                             <path d="M1 1L5 5L9 1" stroke="#147b75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

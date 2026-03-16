@@ -74,142 +74,234 @@ function Chevron({ open }) {
     )
 }
 
-/* ---------- MAIN ---------- */
+/* ---------- MAIN (multi-bursary wrapper) ---------- */
 
 export default function BursaryStep({
-    bursaryAmount,
-    updateBursaryAmount,
-    bursaryMonths,
-    updateBursaryMonths,
-    bursaryDates,
-    updateBursaryDates,
-    bursaryInstalmentAmounts,
-    updateBursaryInstalmentAmounts,
+    bursaries = [],
+    updateBursaries,
     compact = false,
     heading = 'Bursary',
     subtitle = "Scholarships, grants, or uni bursaries you've been awarded.",
 }) {
+    const [newBursaryId, setNewBursaryId] = useState(null)
+    const addBursary = () => {
+        const id = `bursary_${Date.now()}`
+        setNewBursaryId(id)
+        updateBursaries(prev => [...prev, {
+            id,
+            amount: '',
+            months: [...DEFAULT_BURSARY_MONTHS],
+            dates: { ...DEFAULT_BURSARY_DATES },
+            instalmentAmounts: {},
+        }])
+        setTimeout(() => setNewBursaryId(null), 400)
+    }
+
+    const [removingIdx, setRemovingIdx] = useState(null)
+    const [collapsingIdx, setCollapsingIdx] = useState(null)
+    const bursaryHeights = useRef({})
+
+    const removeBursary = (idx) => {
+        if (bursaries.length <= 1) return
+        const el = document.querySelector(`[data-bursary-entry-${idx}]`)
+        if (el) bursaryHeights.current[idx] = el.offsetHeight
+        setRemovingIdx(idx)
+        setTimeout(() => {
+            setCollapsingIdx(idx)
+            setTimeout(() => {
+                setRemovingIdx(null)
+                setCollapsingIdx(null)
+                delete bursaryHeights.current[idx]
+                updateBursaries(prev => prev.filter((_, i) => i !== idx))
+            }, 350)
+        }, 200)
+    }
+
+    const updateBursary = (idx, field, value) => {
+        updateBursaries(prev => prev.map((b, i) => i === idx ? { ...b, [field]: value } : b))
+    }
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div style={{ padding: '0 24px 12px', flexShrink: 0 }}>
+                <p style={{
+                    fontSize: 15, fontFamily: 'Nunito, sans-serif',
+                    color: '#444', margin: 0, lineHeight: 1.5,
+                }}>
+                    {subtitle}
+                </p>
+            </div>
+            <div style={{
+                flex: 1, overflowY: 'auto', overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch',
+                padding: compact ? '0 24px 0' : '0 24px 24px',
+                minHeight: 0,
+            }}>
+                {bursaries.map((bursary, idx) => {
+                    const isRemoving = removingIdx === idx
+                    const isCollapsing = collapsingIdx === idx
+                    const isNew = bursary.id === newBursaryId
+                    return (
+                    <div key={bursary.id || idx} data-bursary-entry {...{[`data-bursary-entry-${idx}`]: ''}} style={{
+                        marginBottom: isCollapsing ? 0 : 10,
+                        ...(isCollapsing ? {
+                            maxHeight: 0,
+                            opacity: 0,
+                            overflow: 'hidden',
+                            transition: 'max-height 0.35s ease, margin-bottom 0.35s ease',
+                        } : isRemoving ? {
+                            maxHeight: (bursaryHeights.current[idx] || 500) + 2,
+                            opacity: 0,
+                            overflow: 'hidden',
+                            transform: 'scale(0.97)',
+                            transition: 'opacity 0.2s ease, transform 0.2s ease',
+                        } : isNew ? {
+                            animation: 'loanFadeIn 0.35s ease',
+                        } : {}),
+                    }}>
+                        {(bursaries.length > 1 || removingIdx !== null) && (
+                            <div style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                margin: idx === 0 ? '0 0 8px' : '16px 0 8px',
+                                maxHeight: (bursaries.length > 1) ? 30 : 0,
+                                opacity: (bursaries.length > 1) ? 1 : 0,
+                                overflow: 'hidden',
+                                transition: 'max-height 0.35s ease, opacity 0.25s ease',
+                            }}>
+                                <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Bursary {idx + 1}</span>
+                                <button onClick={() => removeBursary(idx)} style={{
+                                    background: 'none', border: 'none', cursor: 'pointer',
+                                    fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#d4566a',
+                                }}>Remove</button>
+                            </div>
+                        )}
+                        <BursaryEntry
+                            amount={bursary.amount}
+                            updateAmount={(val) => updateBursary(idx, 'amount', val)}
+                            months={bursary.months}
+                            updateMonths={(val) => updateBursary(idx, 'months', val)}
+                            dates={bursary.dates}
+                            updateDates={(val) => updateBursary(idx, 'dates', val)}
+                            instalmentAmounts={bursary.instalmentAmounts}
+                            updateInstalmentAmounts={(val) => updateBursary(idx, 'instalmentAmounts', val)}
+                            compact
+                            scrollOnFocus={idx > 0}
+                        />
+                    </div>
+                )})}
+                <button
+                    onClick={addBursary}
+                    style={{
+                        width: '100%', height: 40,
+                        background: 'transparent',
+                        border: '1.5px dashed #ddd',
+                        borderRadius: 14,
+                        fontSize: 14, fontWeight: 700,
+                        fontFamily: 'Nunito, sans-serif',
+                        color: '#147b75', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', gap: 6,
+                        marginTop: 16,
+                    }}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    Add another bursary
+                </button>
+                <div style={{ height: '15vh', flexShrink: 0 }} />
+            </div>
+        </div>
+    )
+}
+
+/* ---------- SINGLE BURSARY ENTRY ---------- */
+
+function BursaryEntry({
+    amount,
+    updateAmount,
+    months: monthsProp,
+    updateMonths,
+    dates: datesProp,
+    updateDates,
+    instalmentAmounts,
+    updateInstalmentAmounts,
+    compact = false,
+    scrollOnFocus = false,
+}) {
     const [tab, setTab] = useState('yearly')
     const [rawAmount, setRawAmount] = useState(() => {
-        const n = parseFloat(String(bursaryAmount || '').replace(/,/g, ''))
+        const n = parseFloat(String(amount || '').replace(/,/g, ''))
         return n ? String(n) : ''
     })
     const [rawInstalments, setRawInstalments] = useState(() => {
         const obj = {}
-        for (const m of (bursaryMonths || DEFAULT_BURSARY_MONTHS)) {
-            const existing = bursaryInstalmentAmounts?.[m]
+        for (const m of (monthsProp || DEFAULT_BURSARY_MONTHS)) {
+            const existing = instalmentAmounts?.[m]
             const n = parseFloat(String(existing || '').replace(/,/g, ''))
             obj[m] = n ? String(n) : ''
         }
         return obj
     })
     useEffect(() => {
-        const n = parseFloat(String(bursaryAmount || '').replace(/,/g, ''))
+        const n = parseFloat(String(amount || '').replace(/,/g, ''))
         setRawAmount(n ? String(n) : '')
-    }, [bursaryAmount])
+    }, [amount])
     useEffect(() => {
         const obj = {}
-        for (const m of (bursaryMonths || DEFAULT_BURSARY_MONTHS)) {
-            const existing = bursaryInstalmentAmounts?.[m]
+        for (const m of (monthsProp || DEFAULT_BURSARY_MONTHS)) {
+            const existing = instalmentAmounts?.[m]
             const n = parseFloat(String(existing || '').replace(/,/g, ''))
             obj[m] = n ? String(n) : ''
         }
         setRawInstalments(obj)
-    }, [bursaryInstalmentAmounts])
-    const [datesExpanded, setDatesExpanded] = useState(false)
-    const [inputFocused, setInputFocused] = useState(false)
-    const scrollRef = useRef(null)
-    const blurTimerRef = useRef(null)
-    const datesBoxRef = useRef(null)
+    }, [instalmentAmounts])
+
     const dateActiveRef = useRef(false)
     const amountInputRef = useRef(null)
 
-    const months = (bursaryMonths || DEFAULT_BURSARY_MONTHS)
+    const months = (monthsProp || DEFAULT_BURSARY_MONTHS)
         .slice()
         .sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
 
-    const questionRef = useRef(null)
-    const touchStartRef = useRef(null)
-
-    const handleInputTouchStart = (e) => {
-        touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-    }
-
-    const handleInputTouchEnd = (e) => {
-        if (!touchStartRef.current) return
-        const dx = e.changedTouches[0].clientX - touchStartRef.current.x
-        const dy = e.changedTouches[0].clientY - touchStartRef.current.y
-        touchStartRef.current = null
-        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return
-        if (!compact) return
-        const input = e.target
-        input.focus({ preventScroll: true })
-        const label = questionRef.current
-        if (!label) return
-        let scrollParent = label.parentElement
-        while (scrollParent) {
-            const style = window.getComputedStyle(scrollParent)
-            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollParent.scrollHeight > scrollParent.clientHeight) break
-            scrollParent = scrollParent.parentElement
-        }
-        if (scrollParent) {
-            const parentRect = scrollParent.getBoundingClientRect()
-            const labelRect = label.getBoundingClientRect()
-            const offset = labelRect.top - parentRect.top + scrollParent.scrollTop
-            const stickyHeader = scrollParent.querySelector('[data-sticky-header]')
-            const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
-            scrollParent.scrollTo({ top: Math.max(0, offset - headerH - 8), behavior: 'smooth' })
-        }
-    }
-
-    const scrollInputToTop = (e) => {
-        if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
-        setInputFocused(true)
-    }
-
-    const handleInputBlur = () => {
-        blurTimerRef.current = setTimeout(() => {
-            if (dateActiveRef.current) { setInputFocused(false); return }
-            scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-            setTimeout(() => { if (!dateActiveRef.current) setInputFocused(false) }, 500)
-        }, 50)
-    }
+    const bursaryDates = datesProp || DEFAULT_BURSARY_DATES
 
     const handleAmountChange = (e) => {
         const val = cleanNum(e.target.value)
         setRawAmount(val)
-        updateBursaryAmount(val)
-        // Recalculate instalments from new yearly total
-        const yearlyVal = parseFloat(val) || 0
-        if (yearlyVal > 0 && months.length > 0) {
-            const amounts = splitEvenly(yearlyVal, months.length)
-            const newInstalments = {}
-            const newRaw = {}
-            months.forEach((m, i) => {
-                newInstalments[m] = String(amounts[i])
-                newRaw[m] = String(amounts[i])
-            })
-            updateBursaryInstalmentAmounts(newInstalments)
-            setRawInstalments(newRaw)
+        updateAmount(val)
+        const numVal = parseFloat(val) || 0
+        if (numVal > 0 && months.length > 0) {
+            if (tab === 'instalment') {
+                const ni = {}, nr = {}
+                months.forEach(m => { ni[m] = val; nr[m] = val })
+                updateInstalmentAmounts(ni)
+                setRawInstalments(nr)
+            } else {
+                const amounts = splitEvenly(numVal, months.length)
+                const ni = {}, nr = {}
+                months.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
+                updateInstalmentAmounts(ni)
+                setRawInstalments(nr)
+            }
         } else {
-            updateBursaryInstalmentAmounts({})
+            updateInstalmentAmounts({})
             setRawInstalments({})
         }
     }
 
     const handleInstalmentChange = (month, e) => {
         const val = cleanNum(e.target.value)
-        const newInstalments = { ...bursaryInstalmentAmounts, [month]: val }
+        const newInstalments = { ...instalmentAmounts, [month]: val }
         setRawInstalments(prev => ({ ...prev, [month]: val }))
-        updateBursaryInstalmentAmounts(newInstalments)
-        // Update yearly total to sum of all instalments
+        updateInstalmentAmounts(newInstalments)
         const total = months.reduce((sum, m) => {
-            const v = m === month ? val : (bursaryInstalmentAmounts?.[m] || '')
+            const v = m === month ? val : (instalmentAmounts?.[m] || '')
             return sum + (parseFloat(String(v).replace(/,/g, '')) || 0)
         }, 0)
         const rounded = Math.round(total * 100) / 100
         setRawAmount(String(rounded))
-        updateBursaryAmount(String(rounded))
+        updateAmount(String(rounded))
     }
 
     const toggleMonth = (month) => {
@@ -217,188 +309,133 @@ export default function BursaryStep({
             ? months.filter(m => m !== month)
             : [...months, month]
         if (next.length === 0) return
-        updateBursaryMonths(next)
-        // Redistribute yearly total equally among new month set
-        const yearlyVal = parseFloat(String(bursaryAmount || '').replace(/,/g, '')) || 0
-        if (yearlyVal > 0 && next.length > 0) {
+        updateMonths(next)
+        const numVal = parseFloat(String(amount || '').replace(/,/g, '')) || 0
+        if (numVal > 0 && next.length > 0) {
             const sortedNext = next.slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
-            const amounts = splitEvenly(yearlyVal, sortedNext.length)
-            const newInstalments = {}
-            const newRaw = {}
-            sortedNext.forEach((m, i) => {
-                newInstalments[m] = String(amounts[i])
-                newRaw[m] = String(amounts[i])
-            })
-            updateBursaryInstalmentAmounts(newInstalments)
-            setRawInstalments(newRaw)
+            const ni = {}, nr = {}
+            if (tab === 'instalment') {
+                sortedNext.forEach(m => { ni[m] = String(numVal); nr[m] = String(numVal) })
+            } else {
+                const amounts = splitEvenly(numVal, sortedNext.length)
+                sortedNext.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
+            }
+            updateInstalmentAmounts(ni)
+            setRawInstalments(nr)
         } else {
-            updateBursaryInstalmentAmounts({})
+            updateInstalmentAmounts({})
             setRawInstalments({})
         }
-        // Clean up stale dates for removed months
         if (!next.includes(month) && bursaryDates?.[month]) {
             const { [month]: __, ...restDates } = bursaryDates
-            updateBursaryDates(restDates)
+            updateDates(restDates)
         }
     }
 
     const handleDateChange = (month, val) => {
-        updateBursaryDates({ ...bursaryDates, [month]: val })
+        updateDates({ ...bursaryDates, [month]: val })
     }
 
+    const [customAmounts, setCustomAmounts] = useState(
+        () => Object.values(instalmentAmounts || {}).some(v => parseFloat(String(v || '0').replace(/,/g, '')) > 0)
+    )
+
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            {!compact && (
-                <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                    <h2 style={{
-                        fontSize: 25, fontWeight: 700,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#000', margin: '0 0 8px', lineHeight: 1.3,
+        <div>
+                {/* Amount input with frequency dropdown */}
+                <div style={{
+                    display: 'flex', alignItems: 'center', gap: 0,
+                    marginBottom: 16,
+                }}>
+                    <div style={{
+                        display: 'flex', alignItems: 'center',
+                        border: '1px solid #e8e8e8', borderRight: 'none',
+                        borderRadius: '10px 0 0 10px', background: '#fff',
+                        padding: '0 14px', height: 44, gap: 6, flex: 1,
                     }}>
-                        {heading}
-                    </h2>
-                    <p style={{
-                        fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                        color: '#444', margin: '0 0 16px', lineHeight: 1.5,
-                    }}>
-                        {subtitle}
-                    </p>
+                        <span style={{
+                            fontSize: 16, fontWeight: 600,
+                            color: '#444', fontFamily: 'Nunito, sans-serif',
+                        }}>{getCurrencySymbol()}</span>
+                        <input
+                            ref={amountInputRef}
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={formatDisplay(rawAmount)}
+                            onChange={handleAmountChange}
+                            onFocus={scrollOnFocus ? (e) => {
+                                const entry = e.target.closest('[data-bursary-entry]')
+                                if (entry) setTimeout(() => entry.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
+                            } : undefined}
+                            style={{
+                                flex: 1, border: 'none',
+                                background: 'transparent',
+                                fontSize: 16, fontWeight: 500,
+                                fontFamily: 'Nunito, sans-serif',
+                                color: '#000', outline: 'none', padding: 0,
+                            }}
+                        />
+                    </div>
+                    <div style={{ position: 'relative' }}>
+                        <select
+                            value={tab}
+                            onChange={(e) => {
+                                const id = e.target.value
+                                const ms = months
+                                if (id === 'instalment' && tab !== 'instalment') {
+                                    const perVal = parseFloat(String(amount || '').replace(/,/g, ''))
+                                    if (perVal > 0 && ms.length > 0) {
+                                        const ni = {}, nr = {}
+                                        ms.forEach(m => { ni[m] = String(perVal); nr[m] = String(perVal) })
+                                        updateInstalmentAmounts(ni)
+                                        setRawInstalments(nr)
+                                    }
+                                }
+                                if (id === 'yearly' && tab !== 'yearly') {
+                                    const yearlyVal = parseFloat(String(amount || '').replace(/,/g, ''))
+                                    if (yearlyVal > 0 && ms.length > 0) {
+                                        const amounts = splitEvenly(yearlyVal, ms.length)
+                                        const ni = {}, nr = {}
+                                        ms.forEach((m, idx) => { ni[m] = String(amounts[idx]); nr[m] = String(amounts[idx]) })
+                                        updateInstalmentAmounts(ni)
+                                        setRawInstalments(nr)
+                                    }
+                                }
+                                setTab(id)
+                            }}
+                            style={{
+                                height: 44, border: '1px solid #e8e8e8',
+                                borderRadius: '0 10px 10px 0',
+                                padding: '0 28px 0 12px',
+                                fontSize: 13, fontWeight: 600,
+                                fontFamily: 'Nunito, sans-serif',
+                                color: '#147b75', background: 'rgba(20,123,117,0.06)',
+                                WebkitAppearance: 'none', appearance: 'none',
+                                cursor: 'pointer', outline: 'none',
+                            }}
+                        >
+                            <option value="yearly">Yearly</option>
+                            <option value="instalment">Irregular</option>
+                        </select>
+                        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                            <path d="M1 1L5 5L9 1" stroke="#147b75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                    </div>
                 </div>
-            )}
 
-            <div style={{
-                flex: 1, overflowY: 'auto', overflowX: 'hidden',
-                WebkitOverflowScrolling: 'touch',
-                padding: compact ? '0 24px 0' : '0 24px 24px',
-                marginBottom: -5,
-                minHeight: 0,
-            }} ref={scrollRef}>
-                {/* Tab switcher */}
-                {(() => {
-                    const tabs = [
-                        { id: 'yearly', label: 'Year Total' },
-                        { id: 'instalment', label: 'Per Instalment' },
-                    ]
-                    const activeIndex = tabs.findIndex(t => t.id === tab)
-                    return (
-                        <div style={{
-                            display: 'flex', width: '100%', position: 'relative',
-                            background: '#fff', borderRadius: 50, padding: 3,
-                            marginBottom: 20, flexShrink: 0,
-                            border: '1px solid #f0f0f0',
-                        }}>
-                            <div style={{
-                                position: 'absolute', top: 3, bottom: 3,
-                                left: `calc(${(activeIndex / 2) * 100}% + 3px)`,
-                                width: `calc(50% - 4px)`,
-                                background: '#147b75', borderRadius: 50,
-                                transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                            }} />
-                            {tabs.map(({ id, label }) => (
-                                <div
-                                    key={id}
-                                    onClick={() => {
-                                        const ms = (bursaryMonths || DEFAULT_BURSARY_MONTHS)
-                                            .slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
-                                        if (id === 'instalment' && tab !== 'instalment') {
-                                            const yearlyVal = parseFloat(String(bursaryAmount || '').replace(/,/g, ''))
-                                            if (yearlyVal > 0 && ms.length > 0) {
-                                                const amounts = splitEvenly(yearlyVal, ms.length)
-                                                const newInstalments = {}
-                                                const newRaw = {}
-                                                ms.forEach((m, i) => {
-                                                    newInstalments[m] = String(amounts[i])
-                                                    newRaw[m] = String(amounts[i])
-                                                })
-                                                updateBursaryInstalmentAmounts(newInstalments)
-                                                setRawInstalments(newRaw)
-                                            }
-                                        }
-                                        if (id === 'yearly' && tab !== 'yearly') {
-                                            const total = ms.reduce((sum, m) => {
-                                                return sum + (parseFloat(String(bursaryInstalmentAmounts?.[m] || '').replace(/,/g, '')) || 0)
-                                            }, 0)
-                                            if (total > 0) {
-                                                const rounded = Math.round(total * 100) / 100
-                                                setRawAmount(String(rounded))
-                                                updateBursaryAmount(String(rounded))
-                                            }
-                                        }
-                                        setTab(id)
-                                    }}
-                                    style={{
-                                        flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        padding: '8px 0', borderRadius: 50, cursor: 'pointer',
-                                        position: 'relative', zIndex: 1,
-                                        color: tab === id ? '#fff' : '#1a1a1a',
-                                        fontSize: 13, fontWeight: 700,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        transition: tab === id ? 'color 0.12s ease 0.12s' : 'color 0.15s ease 0.15s',
-                                    }}
-                                >
-                                    {label}
-                                </div>
-                            ))}
-                        </div>
-                    )
-                })()}
-
-                {/* Year Total */}
-                {tab === 'yearly' && (
-                    <>
-                        <p ref={questionRef} style={{
-                            fontSize: 14, fontWeight: 700,
-                            fontFamily: 'Nunito, sans-serif',
-                            color: '#000', margin: '0 0 8px',
-                        }}>
-                            Yearly bursary amount
-                        </p>
-                        <div style={{
-                            display: 'inline-flex', alignItems: 'center',
-                            border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
-                            padding: '0 14px', height: 38, gap: 6,
-                            marginBottom: 20, width: 160,
-                        }}>
-                            <span style={{
-                                fontSize: 16, fontWeight: 600,
-                                color: '#444', fontFamily: 'Nunito, sans-serif',
-                            }}>{getCurrencySymbol()}</span>
-                            <input
-                                ref={amountInputRef}
-                                type="text"
-                                inputMode="decimal"
-                                placeholder="0.00"
-                                value={formatDisplay(rawAmount)}
-                                onChange={handleAmountChange}
-                                onTouchStart={handleInputTouchStart}
-                                onTouchEnd={handleInputTouchEnd}
-                                onFocus={scrollInputToTop}
-                                onBlur={handleInputBlur}
-                                style={{
-                                    flex: 1, border: 'none',
-                                    background: 'transparent',
-                                    fontSize: 16, fontWeight: 500,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#000', outline: 'none', padding: 0,
-                                }}
-                            />
-                        </div>
-                    </>
-                )}
-
-                {/* Instalments section */}
+                {/* Month selector */}
                 <p style={{
                     fontSize: 14, fontWeight: 700,
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 10px',
                 }}>
-                    {tab === 'instalment' ? 'Instalment months & amounts' : 'Which months do you receive instalments?'}
+                    Which months do you receive instalments?
                 </p>
 
-                <div data-instalment-card style={{
+                <div style={{
                     border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
-                    overflow: 'hidden',
-                    marginBottom: 16,
+                    overflow: 'hidden', marginBottom: 16,
                 }}>
                     <div style={{
                         display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
@@ -428,169 +465,144 @@ export default function BursaryStep({
                             )
                         })}
                     </div>
+                </div>
 
-                    {/* Per-instalment amount rows */}
-                    {tab === 'instalment' && months.length > 0 && (
-                        <div style={{ borderTop: '1px solid #eee' }}>
-                            {months.map((m, i) => (
-                                <div key={m} style={{
-                                    display: 'flex', alignItems: 'center',
-                                    padding: '0 14px', height: 44,
-                                    gap: 8,
-                                    borderTop: i > 0 ? '1px solid #f0f0f0' : 'none',
-                                }}>
-                                    <span style={{
-                                        fontSize: 13, fontWeight: 700,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#147b75', minWidth: 32,
-                                    }}>
-                                        {SHORT_MONTH[m]}
-                                    </span>
-                                    <div style={{ width: 1, height: 20, background: '#e8e8e8' }} />
-                                    <span style={{
-                                        fontSize: 15, fontWeight: 600,
-                                        color: '#888', fontFamily: 'Nunito, sans-serif',
-                                    }}>{getCurrencySymbol()}</span>
-                                    <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        placeholder="0.00"
-                                        value={formatDisplay(rawInstalments[m] || '')}
-                                        onChange={(e) => handleInstalmentChange(m, e)}
-                                        onTouchStart={handleInputTouchStart}
-                                        onFocus={scrollInputToTop}
-                                        onBlur={handleInputBlur}
-                                        style={{
-                                            flex: 1, border: 'none',
-                                            background: 'transparent',
-                                            fontSize: 15, fontWeight: 500,
-                                            fontFamily: 'Nunito, sans-serif',
-                                            color: '#000', outline: 'none',
-                                            padding: 0,
-                                        }}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Payment dates accordion */}
-                    <div
-                        ref={datesBoxRef}
-                        onClick={() => {
-                            const next = !datesExpanded
-                            setDatesExpanded(next)
-                            if (next) {
-                                setTimeout(() => {
-                                    const container = scrollRef.current
-                                    const box = datesBoxRef.current
-                                    if (!container || !box) return
-                                    const containerRect = container.getBoundingClientRect()
-                                    const boxRect = box.getBoundingClientRect()
-                                    const scrollOffset = boxRect.top - containerRect.top + container.scrollTop
-                                    container.scrollTo({ top: Math.max(0, scrollOffset - 2), behavior: 'smooth' })
-                                }, 320)
-                            }
-                        }}
-                        style={{
-                            padding: '10px 12px 12px',
-                            cursor: 'pointer',
-                            borderTop: '1px solid #eee',
-                        }}
-                    >
-                        <div style={{
-                            display: 'flex', alignItems: 'center',
-                            justifyContent: 'space-between',
-                        }}>
-                            <div>
-                                <p style={{
-                                    fontSize: 14, fontWeight: 600,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#000', margin: 0,
-                                }}>
-                                    I know the exact payment dates
-                                </p>
-                                <p style={{
-                                    fontSize: 10, fontWeight: 500,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#444', margin: '2px 0 0',
-                                }}>
-                                    Optional – improves accuracy
-                                </p>
-                            </div>
-                            <Chevron open={datesExpanded} />
-                        </div>
-
+                {/* Customise amounts & dates — collapsible card */}
+                {months.length > 0 && (
+                    <div style={{
+                        border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
+                        overflow: 'hidden', marginBottom: 16,
+                    }}>
                         <div
-                            onClick={(e) => e.stopPropagation()}
+                            onClick={() => {
+                                const next = !customAmounts
+                                setCustomAmounts(next)
+                                if (next && tab !== 'instalment') {
+                                    const perVal = parseFloat(String(amount || '').replace(/,/g, ''))
+                                    if (perVal > 0 && months.length > 0) {
+                                        const ni = {}, nr = {}
+                                        months.forEach(m => { ni[m] = String(perVal); nr[m] = String(perVal) })
+                                        updateInstalmentAmounts(ni)
+                                        setRawInstalments(nr)
+                                    }
+                                    setTab('instalment')
+                                }
+                            }}
                             style={{
-                                maxHeight: datesExpanded ? 500 : 0,
-                                opacity: datesExpanded ? 1 : 0,
-                                overflow: 'hidden',
-                                transition: 'max-height 0.3s ease, opacity 0.2s ease',
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                cursor: 'pointer', padding: '12px 14px',
                             }}
                         >
-                            <div style={{
-                                marginTop: 10,
-                                display: 'flex', flexDirection: 'column', gap: 8,
-                            }}>
-                                {months.map(m => (
-                                    <div key={m} style={{
+                            <div>
+                                <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                    Customise amounts & dates
+                                </span>
+                                <p style={{ fontSize: 11, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', margin: '2px 0 0' }}>
+                                    Optional — set exact amount and date per instalment
+                                </p>
+                            </div>
+                            <Chevron open={customAmounts} />
+                        </div>
+
+                        <div style={{
+                            maxHeight: customAmounts ? 1000 : 0,
+                            opacity: customAmounts ? 1 : 0,
+                            overflow: 'hidden',
+                            transition: 'max-height 0.35s cubic-bezier(.25,1,.5,1), opacity 0.25s ease',
+                        }}>
+                            {months.map((m, i) => (
+                                <div key={m}>
+                                    <div style={{
                                         display: 'flex', alignItems: 'center',
                                         justifyContent: 'space-between',
-                                        padding: '6px 0',
+                                        padding: '10px 14px',
+                                        borderTop: '1px solid #f3f3f3',
                                     }}>
                                         <span style={{
-                                            fontSize: 13, color: '#888',
-                                            fontWeight: 600,
+                                            fontSize: 13, fontWeight: 600,
                                             fontFamily: 'Nunito, sans-serif',
+                                            color: '#888', minWidth: 70,
                                         }}>
                                             {MONTH_LABELS[m]}
                                         </span>
-                                        <div style={{ position: 'relative' }}>
-                                            <span style={{
-                                                fontSize: 13, fontWeight: 700,
-                                                color: '#147b75',
-                                                fontFamily: 'Nunito, sans-serif',
-                                                pointerEvents: 'none',
-                                                background: 'rgba(20,123,117,0.08)',
-                                                padding: '3px 10px',
-                                                borderRadius: 8,
-                                                display: 'inline-block',
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                            <div style={{
+                                                display: 'flex', alignItems: 'center', gap: 2,
+                                                background: '#f8f8f8', borderRadius: 8,
+                                                padding: '4px 8px', width: 80, boxSizing: 'border-box',
                                             }}>
-                                                {(bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m]) ? fmt(bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m]) : 'Set date'}
-                                            </span>
-                                            <input
-                                                type="date"
-                                                value={bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m] || getMonthRange(m).min}
-                                                min={getMonthRange(m).min}
-                                                max={getMonthRange(m).max}
-                                                onFocus={() => {
-                                                    dateActiveRef.current = true
-                                                    const container = scrollRef.current
-                                                    if (container) {
-                                                        const pos = container.scrollTop
-                                                        requestAnimationFrame(() => { container.scrollTop = pos })
-                                                    }
-                                                }}
-                                                onBlur={() => { dateActiveRef.current = false }}
-                                                onChange={(e) => e.target.value && handleDateChange(m, e.target.value)}
+                                                <span style={{
+                                                    fontSize: 13, fontWeight: 600,
+                                                    color: '#999', fontFamily: 'Nunito, sans-serif',
+                                                    flexShrink: 0,
+                                                }}>{getCurrencySymbol()}</span>
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    placeholder="0.00"
+                                                    value={formatDisplay(rawInstalments[m] || '')}
+                                                    onChange={(e) => handleInstalmentChange(m, e)}
+                                                    style={{
+                                                        flex: 1, border: 'none',
+                                                        background: 'transparent',
+                                                        fontSize: 13, fontWeight: 600,
+                                                        fontFamily: 'Nunito, sans-serif',
+                                                        color: '#000', outline: 'none',
+                                                        padding: 0, textAlign: 'left',
+                                                    }}
+                                                />
+                                            </div>
+                                            <div style={{ position: 'relative' }}>
+                                                <span style={{
+                                                    fontSize: 13, fontWeight: 600,
+                                                    color: '#888',
+                                                    fontFamily: 'Nunito, sans-serif',
+                                                    pointerEvents: 'none',
+                                                    background: '#f8f8f8',
+                                                    padding: '4px 10px',
+                                                    borderRadius: 8,
+                                                    display: 'inline-block',
+                                                    whiteSpace: 'nowrap',
+                                                    minWidth: 80,
+                                                    textAlign: 'center',
+                                                }}>
+                                                    {bursaryDates?.[m] ? fmt(bursaryDates[m]) : 'Set date'}
+                                                </span>
+                                                <input
+                                                    type="date"
+                                                    value={bursaryDates?.[m] || getMonthRange(m).min}
+                                                    min={getMonthRange(m).min}
+                                                    max={getMonthRange(m).max}
+                                                    onFocus={() => { dateActiveRef.current = true }}
+                                                    onBlur={() => { dateActiveRef.current = false }}
+                                                    onChange={(e) => e.target.value && handleDateChange(m, e.target.value)}
+                                                    style={{
+                                                        position: 'absolute', inset: 0,
+                                                        opacity: 0, width: '100%', height: '100%',
+                                                        cursor: 'pointer', fontSize: 16,
+                                                    }}
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => months.length > 1 && toggleMonth(m)}
                                                 style={{
-                                                    position: 'absolute', inset: 0,
-                                                    opacity: 0, width: '100%', height: '100%',
-                                                    cursor: 'pointer', fontSize: 16,
+                                                    background: 'none', border: 'none', cursor: 'pointer',
+                                                    padding: 4, display: 'flex', alignItems: 'center',
+                                                    opacity: months.length > 1 ? 0.4 : 0.15,
                                                 }}
-                                            />
+                                            >
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
-                </div>
+                )}
 
-                {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
-            </div>
         </div>
     )
 }
