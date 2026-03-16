@@ -88,7 +88,7 @@ export default function BursaryStep({
     compact = false,
     heading = 'Bursary',
     subtitle = "Scholarships, grants, or uni bursaries you've been awarded.",
-children, }) {
+}) {
     const [tab, setTab] = useState('yearly')
     const [rawAmount, setRawAmount] = useState(() => {
         const n = parseFloat(String(bursaryAmount || '').replace(/,/g, ''))
@@ -267,7 +267,7 @@ children, }) {
             )}
 
             <div style={{
-                flex: 1, overflowY: 'visible', overflowX: 'hidden',
+                flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: compact ? '0 24px 0' : '0 24px 24px',
                 marginBottom: -5,
@@ -591,7 +591,6 @@ children, }) {
 
                 {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
-            {children}
         </div>
     )
 }

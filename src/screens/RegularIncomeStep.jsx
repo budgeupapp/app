@@ -16,7 +16,7 @@ function CheckIcon() {
     )
 }
 
-export default function RegularIncomeStep({ incomeSources, children = [], updateIncomeSources, heading = 'Income', subtitle = "Include your main regular income sources." }) {
+export default function RegularIncomeStep({ incomeSources = [], updateIncomeSources, heading = 'Income', subtitle = "Include your main regular income sources." }) {
     const toggle = (id) => {
         const next = incomeSources.includes(id)
             ? incomeSources.filter(s => s !== id)
@@ -43,7 +43,7 @@ export default function RegularIncomeStep({ incomeSources, children = [], update
             </div>
 
             <div style={{
-                flex: 1, overflowY: 'visible',
+                flex: 1, overflowY: 'auto',
                 padding: '12px 19px 16px',
                 display: 'flex', flexDirection: 'column', gap: 6,
             }}>
@@ -99,7 +99,6 @@ export default function RegularIncomeStep({ incomeSources, children = [], update
                     )
                 })}
             </div>
-            {children}
         </div>
     )
 }

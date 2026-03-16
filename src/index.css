@@ -236,6 +236,17 @@ button:focus {
   }
 }
 
+/* Onboarding panels: disable internal flex/scroll so panel-level scroll works */
+.onboarding-panel > div {
+  flex: 0 0 auto !important;
+  min-height: auto !important;
+  overflow: visible !important;
+}
+.onboarding-panel > div > div {
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+}
+
 @keyframes authFadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }

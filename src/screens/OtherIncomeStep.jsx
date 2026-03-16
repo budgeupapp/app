@@ -106,7 +106,7 @@ export default function OtherIncomeStep({
     otherIncomeEntryMode,
     compact = false,
     onboarding = false,
-children, }) {
+}) {
     const amountPeriod = otherIncomeAmountPeriod || otherIncomeFrequency || 'monthly'
     // When amountPeriod is not yearly, frequency always matches amountPeriod
     const freq = amountPeriod === 'yearly' ? (otherIncomeFrequency || 'monthly') : amountPeriod
@@ -332,7 +332,7 @@ children, }) {
                 </div>
             )}
 
-            <div style={{ flex: 1, overflowY: 'visible', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
                 <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Give it a name</p>
                 <input type="text" placeholder="e.g. Any regular income" value={otherIncomeLabel || ''} onChange={(e) => updateOtherIncomeLabel(e.target.value)}
@@ -584,7 +584,6 @@ children, }) {
 
                 {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
-            {children}
         </div>
     )
 }

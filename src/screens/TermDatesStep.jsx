@@ -418,7 +418,7 @@ export default function TermDatesStep({
     noAutoScroll = false,
     heading = 'University Term Dates',
     subtitle = "If we've got anything wrong, tap on a date to edit it.",
-children, }) {
+}) {
     const updateTerm = (updated) => {
         const DAY = 24 * 60 * 60 * 1000
         const toMs = (d) => new Date(d + 'T00:00:00').getTime()
@@ -599,7 +599,6 @@ children, }) {
         return (
             <div data-term-scroll style={{ display: 'flex', flexDirection: 'column' }}>
                 {termList(false)}
-                {children}
             </div>
         )
     }
@@ -624,7 +623,7 @@ children, }) {
 
             <div data-term-scroll style={{
                 flex: 1,
-                overflowY: 'visible',
+                overflowY: 'auto',
                 overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: '0 16px 16px',
@@ -633,7 +632,6 @@ children, }) {
             }}>
                 {termList(true)}
             </div>
-            {children}
         </div>
     )
 }

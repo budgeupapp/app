@@ -149,7 +149,7 @@ export default function WeeklySpendStep({
     compact = false,
     heading = 'Weekly Spend',
     subtitle = "Food, transport, going out \u2014 just a rough weekly average.",
-children, }) {
+}) {
     const termVal = Number(weeklySpend) || 0
     const nonTermVal = Number(weeklySpendNonTerm) || 0
 
@@ -174,7 +174,7 @@ children, }) {
             )}
 
             <div style={{
-                flex: 1, overflowY: 'visible', overflowX: 'hidden',
+                flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: compact ? '0' : '0 24px 24px',
                 minHeight: 0,
@@ -192,7 +192,6 @@ children, }) {
                     onDragEnd={() => analytics.track(DASHBOARD_EVENTS.WEEKLY_SPEND_UPDATED)}
                 />
             </div>
-            {children}
         </div>
     )
 }

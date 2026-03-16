@@ -51,7 +51,7 @@ export default function BillsStep({
     compact = false,
     heading = 'Bills',
     subtitle = 'WiFi, electric, water \u2014 the boring but important stuff.',
-children, }) {
+}) {
     const amountPeriod = billsAmountPeriod || billsFrequency || 'monthly'
     const freq = amountPeriod === 'yearly' ? (billsFrequency || 'monthly') : amountPeriod
 
@@ -176,7 +176,7 @@ children, }) {
                     <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>{subtitle}</p>
                 </div>
             )}
-            <div style={{ flex: 1, overflowY: 'visible', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
                 <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much are your bills?</p>
                 <div style={{ display: 'flex', marginBottom: 16 }}>
@@ -399,7 +399,6 @@ children, }) {
 
                 {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
-            {children}
         </div>
     )
 }

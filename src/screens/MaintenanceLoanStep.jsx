@@ -87,7 +87,7 @@ export default function MaintenanceLoanStep({
     compact = false,
     heading = 'Maintenance Loan',
     subtitle = "Enter the loan you're given for rent and living costs.",
-children, }) {
+}) {
     const [tab, setTab] = useState('yearly') // 'yearly' | 'instalment'
     const [rawAmount, setRawAmount] = useState(() => {
         const n = parseFloat(String(loanAmount || '').replace(/,/g, ''))
@@ -280,7 +280,7 @@ children, }) {
 
             {/* Scrollable content */}
             <div style={{
-                flex: 1, overflowY: 'visible', overflowX: 'hidden',
+                flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: compact ? '0 24px 0' : '0 24px 24px',
                 marginBottom: -5,
@@ -607,7 +607,6 @@ children, }) {
                 {/* Extra space so last input can scroll to top — only when focused */}
                 {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
-            {children}
         </div>
     )
 }
