@@ -283,10 +283,22 @@ function buildGraphEvents(formData) {
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
                 while (d <= endDate) { events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Fortnightly support', editType: 'family' }); d = new Date(d.getTime() + 14 * 86400000) }
             } else if (freq === 'monthly') {
-                const dom = entry.dayOfMonth ? parseInt(entry.dayOfMonth) : (entry.nextDate ? new Date(entry.nextDate + 'T00:00:00').getDate() : 1)
-                let d = new Date(AY_START.getFullYear(), AY_START.getMonth(), dom)
-                if (d < AY_START) d = addMonths(d, 1, dom)
-                while (d <= ayEnd) { events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' }); d = addMonths(d, 1, dom) }
+                const domRaw = entry.dayOfMonth || '1'
+                const isLast = domRaw === 'last'
+                const domTarget = isLast ? 31 : parseInt(domRaw) || 1
+                // Generate monthly events, clamping to last day of month for shorter months
+                let month = AY_START.getMonth()
+                let year = AY_START.getFullYear()
+                for (let i = 0; i < 13; i++) {
+                    const lastDay = new Date(year, month + 1, 0).getDate()
+                    const day = Math.min(domTarget, lastDay)
+                    const d = new Date(year, month, day)
+                    if (d >= AY_START && d <= ayEnd) {
+                        events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' })
+                    }
+                    month++
+                    if (month > 11) { month = 0; year++ }
+                }
             } else if (freq === 'yearly') {
                 events.push({ date: entry.nextDate || ayStartStr(), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Yearly support', editType: 'family' })
             } else if (freq === 'one-off') {

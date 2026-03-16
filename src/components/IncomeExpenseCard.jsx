@@ -367,9 +367,9 @@ function EntryCard({
                             height: 44, border: '1px solid #e8e8e8',
                             borderRadius: '0 10px 10px 0',
                             padding: '0 28px 0 12px',
-                            fontSize: 13, fontWeight: 600,
+                            fontSize: 14, fontWeight: 600,
                             fontFamily: 'Nunito, sans-serif',
-                            color: '#444', background: '#f5f7f7',
+                            color: '#333', background: '#fff',
                             WebkitAppearance: 'none', appearance: 'none',
                             cursor: 'pointer', outline: 'none',
                         }}
@@ -492,9 +492,9 @@ function EntryCard({
                                                         fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                                                         background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
                                                         display: 'inline-block', whiteSpace: 'nowrap',
-                                                        minWidth: 80, textAlign: 'center',
+                                                        minWidth: 100, textAlign: 'center',
                                                     }}>
-                                                        {datesProp?.[m] ? fmt(datesProp[m]) : 'Set date'}
+                                                        {datesProp?.[m] ? fmt(datesProp[m]) : 'Select date'}
                                                     </span>
                                                     <input
                                                         type="date"
@@ -549,9 +549,9 @@ function EntryCard({
                             fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                             background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
                             display: 'inline-block', whiteSpace: 'nowrap',
-                            minWidth: 80, textAlign: 'center',
+                            minWidth: 100, textAlign: 'center',
                         }}>
-                            {nextDate ? fmt(nextDate) : 'Set date'}
+                            {nextDate ? fmt(nextDate) : 'Select date'}
                         </span>
                         <input
                             type="date"
@@ -569,18 +569,82 @@ function EntryCard({
                 </div>
             )}
 
-            {/* === WEEKLY / FORTNIGHTLY: start date + optional end date === */}
+            {/* === Day of week (weekly/fortnightly) === */}
             {(frequency === 'weekly' || frequency === 'fortnightly') && (
+                <div style={{ position: 'relative', marginBottom: 12 }}>
+                    <select
+                        value={entry.dayOfWeek || 'monday'}
+                        onChange={(e) => updateField('dayOfWeek', e.target.value)}
+                        style={{
+                            width: '100%', height: 44, boxSizing: 'border-box',
+                            background: '#fff', borderRadius: 10,
+                            padding: '0 36px 0 14px', border: '1px solid #e8e8e8',
+                            fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                            color: '#333', outline: 'none',
+                            WebkitAppearance: 'none', appearance: 'none',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => (
+                            <option key={d} value={d.toLowerCase()}>Every {d}</option>
+                        ))}
+                    </select>
+                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                        <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </div>
+            )}
+
+            {/* === Day of month (monthly) === */}
+            {frequency === 'monthly' && (
+                <div style={{ position: 'relative', marginBottom: 12 }}>
+                    <select
+                        value={entry.dayOfMonth || '1'}
+                        onChange={(e) => updateField('dayOfMonth', e.target.value)}
+                        style={{
+                            width: '100%', height: 44, boxSizing: 'border-box',
+                            background: '#fff', borderRadius: 10,
+                            padding: '0 36px 0 14px', border: '1px solid #e8e8e8',
+                            fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                            color: '#333', outline: 'none',
+                            WebkitAppearance: 'none', appearance: 'none',
+                            cursor: 'pointer',
+                        }}
+                    >
+                        {Array.from({ length: 31 }, (_, i) => {
+                            const d = i + 1
+                            const suffix = d === 1 || d === 21 || d === 31 ? 'st' : d === 2 || d === 22 ? 'nd' : d === 3 || d === 23 ? 'rd' : 'th'
+                            return <option key={d} value={String(d)}>{d}{suffix} of every month</option>
+                        })}
+                        <option value="last">Last day of every month</option>
+                    </select>
+                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                        <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    {(parseInt(entry.dayOfMonth) >= 29 || entry.dayOfMonth === 'last') && (
+                        <p style={{
+                            fontSize: 11, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
+                            color: '#999', margin: '6px 0 0',
+                        }}>
+                            {entry.dayOfMonth === 'last' ? 'Will use the last day of each month.' : 'For shorter months, we\'ll use the last day instead.'}
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {/* === Start/end dates (weekly/fortnightly/monthly) === */}
+            {(frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly') && (
                 <div style={{
                     border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
                     overflow: 'hidden', marginBottom: 16,
                 }}>
+                    {/* Start date */}
                     <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '12px 14px',
                     }}>
                         <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                            Start date
+                            Start date <span style={{ fontWeight: 500, color: '#bbb' }}>(optional)</span>
                         </span>
                         <div style={{ position: 'relative' }}>
                             <span style={{
@@ -588,9 +652,9 @@ function EntryCard({
                                 fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                                 background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
                                 display: 'inline-block', whiteSpace: 'nowrap',
-                                minWidth: 80, textAlign: 'center',
+                                minWidth: 100, textAlign: 'center',
                             }}>
-                                {nextDate ? fmt(nextDate) : 'Set date'}
+                                {nextDate ? fmt(nextDate) : 'Select date'}
                             </span>
                             <input
                                 type="date"
@@ -602,6 +666,8 @@ function EntryCard({
                             />
                         </div>
                     </div>
+
+                    {/* End date */}
                     <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '12px 14px', borderTop: '1px solid #f3f3f3',
@@ -615,9 +681,9 @@ function EntryCard({
                                 fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                                 background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
                                 display: 'inline-block', whiteSpace: 'nowrap',
-                                minWidth: 80, textAlign: 'center',
+                                minWidth: 100, textAlign: 'center',
                             }}>
-                                {entry.endDate ? fmt(entry.endDate) : 'Set date'}
+                                {entry.endDate ? fmt(entry.endDate) : 'Select date'}
                             </span>
                             <input
                                 type="date"
@@ -629,47 +695,7 @@ function EntryCard({
                             />
                         </div>
                     </div>
-                </div>
-            )}
 
-            {/* === MONTHLY: which day of month === */}
-            {frequency === 'monthly' && (
-                <div style={{
-                    border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
-                    overflow: 'hidden', marginBottom: 16,
-                }}>
-                    <div style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '12px 14px',
-                    }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                            Day of the month
-                        </span>
-                        <div style={{
-                            display: 'flex', alignItems: 'center', gap: 2,
-                            background: '#f8f8f8', borderRadius: 8,
-                            padding: '4px 8px', width: 50, boxSizing: 'border-box',
-                        }}>
-                            <input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder="1"
-                                value={entry.dayOfMonth || ''}
-                                onChange={(e) => {
-                                    let val = e.target.value.replace(/[^0-9]/g, '')
-                                    const num = parseInt(val)
-                                    if (num > 31) val = '31'
-                                    if (num < 0) val = '1'
-                                    updateField('dayOfMonth', val)
-                                }}
-                                style={{
-                                    width: '100%', border: 'none', background: 'transparent',
-                                    fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                    color: '#000', outline: 'none', padding: 0, textAlign: 'center',
-                                }}
-                            />
-                        </div>
-                    </div>
                 </div>
             )}
 
@@ -689,9 +715,9 @@ function EntryCard({
                             fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                             background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
                             display: 'inline-block', whiteSpace: 'nowrap',
-                            minWidth: 80, textAlign: 'center',
+                            minWidth: 100, textAlign: 'center',
                         }}>
-                            {nextDate ? fmt(nextDate) : 'Set date'}
+                            {nextDate ? fmt(nextDate) : 'Select date'}
                         </span>
                         <input
                             type="date"
