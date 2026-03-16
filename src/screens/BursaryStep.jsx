@@ -589,7 +589,7 @@ export default function BursaryStep({
                     </div>
                 </div>
 
-                
+                {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
         </div>
     )

@@ -605,7 +605,7 @@ export default function MaintenanceLoanStep({
                 </div>
 
                 {/* Extra space so last input can scroll to top — only when focused */}
-                
+                {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
         </div>
     )

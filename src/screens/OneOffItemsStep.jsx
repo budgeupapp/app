@@ -525,6 +525,12 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
                     + Add another item
                 </button>
 
+                <div style={{
+                    height: focusedField ? '60vh' : 0,
+                    flexShrink: 0,
+                    transition: 'height 0.3s ease',
+                    overflow: 'hidden',
+                }} />
             </div>
 
             {/* Date error toast */}
