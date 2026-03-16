@@ -605,7 +605,7 @@ children, }) {
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
             <div style={{ padding: '18px 24px 12px', flexShrink: 0 }}>
                 <h2 style={{
                     fontSize: 25, fontWeight: 700,
@@ -623,6 +623,7 @@ children, }) {
             </div>
 
             <div data-term-scroll style={{
+                flex: 1,
                 overflowY: 'visible',
                 overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',

@@ -34,7 +34,7 @@ children, }) {
     }
 
     return (
-        <div style={{ overflowY: 'visible', padding: '18px 24px 16px' }}>
+        <div style={{ flex: 1, overflowY: 'visible', padding: '18px 24px 16px' }}>
             <h2 style={{
                 fontSize: 25, fontWeight: 700,
                 fontFamily: 'Nunito, sans-serif',
