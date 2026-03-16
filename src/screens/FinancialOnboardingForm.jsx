@@ -241,69 +241,48 @@ function buildGraphEvents(formData) {
         }
     }
 
-    // Family/friends income events
+    // Family/friends income events (supports multiple entries)
     if (formData.incomeSources?.includes('family_friends')) {
-        const famAmtRaw = parseFloat(String(formData.familyAmount || '0').replace(/,/g, ''))
-        const freq = formData.familyFrequency || 'monthly'
-        const famAmtPeriod = formData.familyAmountPeriod || freq || 'monthly'
-        const isYearlyInput = famAmtPeriod === 'yearly'
-        const onlyTermTime = isYearlyInput && formData.familyVariesByTerm
-        if (famAmtRaw > 0) {
-            const ayStart = AY_START
-            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
-            const yearlyTotal = famAmtRaw * (YM[famAmtPeriod] || 1)
-            if (isYearlyInput) {
-                const allDates = []
-                if (freq === 'weekly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly support' }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (freq === 'monthly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
-                    const dom = d.getDate()
-                    while (d > ayStart) d = addMonths(d, -1, dom)
-                    while (d < ayStart) d = addMonths(d, 1, dom)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support` }); d = addMonths(d, 1, dom) }
-                } else if (freq === 'termly') {
-                    const overrides = formData.familyTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} support` }) }
-                } else if (freq === 'quarterly') {
-                    const qDates = formData.familyQuarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} support` })
-                } else if (freq === 'yearly') {
-                    allDates.push({ date: formData.familyNextDate || ayStartStr(), sublabel: 'Yearly support' })
+        const familyEntries = formData.familyEntries || [{
+            amount: formData.familyAmount || '',
+            frequency: formData.familyFrequency || 'monthly',
+            nextDate: formData.familyNextDate || '',
+            months: [],
+            dates: {},
+            instalmentAmounts: {},
+        }]
+        for (const entry of familyEntries) {
+            const amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
+            if (amt <= 0) continue
+            const freq = entry.frequency || 'monthly'
+
+            if (freq === 'irregular') {
+                // Irregular: use month pills like maintenance loan
+                const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
+                const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
+                const amounts = distributeExcludingRemoved(amt, dateObjs, 'family', removedSet)
+                for (let mi = 0; mi < months.length; mi++) {
+                    const month = months[mi]
+                    const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
+                    if (!date) continue
+                    const instAmt = parseFloat(String(entry.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
+                    const amount = instAmt > 0 ? instAmt : (amt > 0 ? amounts[mi] : 0)
+                    if (amount <= 0) continue
+                    events.push({ date, amount, type: 'income', label: 'Family/Friends', sublabel: `${MONTH_SHORT[month]} support`, editType: 'family', editMonth: month })
                 }
-                const dates = onlyTermTime ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
-                if (dates.length > 0) {
-                    const amounts = distributeExcludingRemoved(yearlyTotal, dates, 'family', removedSet)
-                    for (let i = 0; i < dates.length; i++) {
-                        events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: 'Family/Friends', sublabel: dates[i].sublabel, editType: 'family' })
-                    }
-                }
-            } else {
-                const famNonTermAmt = formData.familyVariesByTerm ? parseFloat(String(formData.familyNonTermAmount || '0').replace(/,/g, '')) : famAmtRaw
-                const getFamAmt = (ds) => formData.familyVariesByTerm ? (isInTerm(ds, terms) ? famAmtRaw : famNonTermAmt) : famAmtRaw
-                if (freq === 'weekly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (freq === 'monthly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
-                    const dom = d.getDate()
-                    while (d > ayStart) d = addMonths(d, -1, dom)
-                    while (d < ayStart) d = addMonths(d, 1, dom)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' }); d = addMonths(d, 1, dom) }
-                } else if (freq === 'termly') {
-                    const overrides = formData.familyTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: famAmtRaw, type: 'income', label: 'Family/Friends', sublabel: `${term.name} support`, editType: 'family' }) }
-                } else if (freq === 'quarterly') {
-                    const qDates = formData.familyQuarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getFamAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: 'Family/Friends', sublabel: `Q${i + 1} support`, editType: 'family' }) }
-                }
+            } else if (freq === 'weekly') {
+                let d = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
+                while (d > AY_START) d = new Date(d.getTime() - 7 * 86400000)
+                while (d < AY_START) d = new Date(d.getTime() + 7 * 86400000)
+                while (d <= ayEnd) { events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
+            } else if (freq === 'monthly') {
+                let d = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
+                const dom = d.getDate()
+                while (d > AY_START) d = addMonths(d, -1, dom)
+                while (d < AY_START) d = addMonths(d, 1, dom)
+                while (d <= ayEnd) { events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' }); d = addMonths(d, 1, dom) }
+            } else if (freq === 'yearly') {
+                events.push({ date: entry.nextDate || ayStartStr(), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Yearly support', editType: 'family' })
             }
         }
     }
@@ -2760,23 +2739,38 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 )}
                                 {panelId === 'familyFriends' && (
                                     <FamilyFriendsStep
-                                        familyAmount={formData.familyAmount}
-                                        updateFamilyAmount={(val) => updateField('familyAmount', val)}
-                                        familyFrequency={formData.familyFrequency}
-                                        updateFamilyFrequency={(val) => updateField('familyFrequency', val)}
-                                        familyAmountPeriod={formData.familyAmountPeriod}
-                                        updateFamilyAmountPeriod={(val) => updateField('familyAmountPeriod', val)}
-                                        familyNextDate={formData.familyNextDate}
-                                        updateFamilyNextDate={(val) => updateField('familyNextDate', val)}
-                                        terms={formData.termDates?.terms || []}
-                                        familyTermDates={formData.familyTermDates || {}}
-                                        updateFamilyTermDates={(val) => updateField('familyTermDates', val)}
-                                        familyQuarterlyDates={formData.familyQuarterlyDates || {}}
-                                        updateFamilyQuarterlyDates={(val) => updateField('familyQuarterlyDates', val)}
-                                        familyVariesByTerm={formData.familyVariesByTerm}
-                                        updateFamilyVariesByTerm={(val) => updateField('familyVariesByTerm', val)}
-                                        familyNonTermAmount={formData.familyNonTermAmount}
-                                        updateFamilyNonTermAmount={(val) => updateField('familyNonTermAmount', val)}
+                                        entries={formData.familyEntries || [{
+                                            id: 'family_0',
+                                            amount: formData.familyAmount || '',
+                                            frequency: formData.familyFrequency || 'monthly',
+                                            nextDate: formData.familyNextDate || '',
+                                            months: [],
+                                            dates: {},
+                                            instalmentAmounts: {},
+                                        }]}
+                                        updateEntries={(entriesOrFn) => {
+                                            setFormData(prev => {
+                                                const prevEntries = prev.familyEntries || [{
+                                                    id: 'family_0',
+                                                    amount: prev.familyAmount || '',
+                                                    frequency: prev.familyFrequency || 'monthly',
+                                                    nextDate: prev.familyNextDate || '',
+                                                    months: [],
+                                                    dates: {},
+                                                    instalmentAmounts: {},
+                                                }]
+                                                const newEntries = typeof entriesOrFn === 'function' ? entriesOrFn(prevEntries) : entriesOrFn
+                                                return {
+                                                    ...prev,
+                                                    familyEntries: newEntries,
+                                                    ...(newEntries[0] ? {
+                                                        familyAmount: newEntries[0].amount,
+                                                        familyFrequency: newEntries[0].frequency,
+                                                        familyNextDate: newEntries[0].nextDate,
+                                                    } : {}),
+                                                }
+                                            })
+                                        }}
                                     />
                                 )}
                                 {panelId === 'work' && (
