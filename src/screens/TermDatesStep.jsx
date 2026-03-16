@@ -77,6 +77,9 @@ function DateRow({ label, value, onChange, color = '#147b75' }) {
                     padding: '3px 10px',
                     borderRadius: 8,
                     display: 'inline-block',
+                    minWidth: 100,
+                    textAlign: 'center',
+                    boxSizing: 'border-box',
                 }}>{fmt(value)}</span>
                 <input
                     type="date"
@@ -256,17 +259,20 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                 width: Math.max(50, term.name.length * 9),
                             }}
                         />
-                        <span style={{
-                            fontSize: 11, fontWeight: 600, color: '#aaa',
-                            fontFamily: 'Nunito, sans-serif',
-                            whiteSpace: 'nowrap',
-                        }}>{weeks}w</span>
                     </div>
-                    <span style={{
-                        fontSize: 12, color: '#999',
-                        fontFamily: 'Nunito, sans-serif',
-                        marginTop: 2, display: 'block',
-                    }}>{fmt(term.start)} – {fmt(term.end)}</span>
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: 6,
+                        marginTop: 2,
+                    }}>
+                        <span style={{
+                            fontSize: 12, color: '#999',
+                            fontFamily: 'Nunito, sans-serif',
+                        }}>{fmt(term.start)} – {fmt(term.end)}</span>
+                        <span style={{
+                            fontSize: 12, fontWeight: 600, color: '#aaa',
+                            fontFamily: 'Nunito, sans-serif',
+                        }}>· {weeks}w</span>
+                    </div>
                 </div>
                 <Chevron open={expanded} />
             </div>

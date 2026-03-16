@@ -2271,7 +2271,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     overflow: 'hidden',
                     margin: '0 8px',
                     transition: 'opacity 0.35s ease, transform 0.35s ease',
-                    position: 'relative', zIndex: 0,
+                    position: 'relative', zIndex: -1,
                 }}>
                     <TermGraph
                         graphHeight={150}
@@ -2367,7 +2367,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     />
                 </div>
 
-                {/* Opaque backing behind sheet — covers rounded corner gaps */}
+                {/* Opaque backing behind sheet — covers rounded corner gaps and panel transitions */}
                 <div style={{
                     position: 'absolute',
                     top: COLLAPSED_TOP,
@@ -2504,6 +2504,53 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     Reset
                                 </button>
                             )}
+                            {(() => {
+                                const pid = PANEL_STEPS[activePanel]
+                                const hiddenPanels = ['termDates', 'balance', 'overdraft', 'regularIncome', 'regularExpenses', 'savingsInvestments', 'otherExpense', 'summary']
+                                if (hiddenPanels.includes(pid)) return null
+                                if (new Set(buildGraphEvents(formData).filter(e => !e.removed).map(e => e.editType)).size < 2) return null
+                                const incPanels = ['maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
+                                const expPanels = ['rent', 'bills', 'uniFees']
+                                const otherPanels = ['oneOffItems', 'weeklySpend']
+                                const btnColor = incPanels.includes(pid) ? '#147b75'
+                                    : expPanels.includes(pid) ? '#e06470'
+                                        : otherPanels.includes(pid) ? '#e06470' : '#147b75'
+                                return (
+                                    <button
+                                        onTouchStart={(e) => e.stopPropagation()}
+                                        onTouchEnd={(e) => e.stopPropagation()}
+                                        onClick={(e) => { e.stopPropagation(); setShowAllEvents(s => !s) }}
+                                        style={{
+                                            background: showAllEvents ? btnColor : '#e8e8e8',
+                                            border: 'none', borderRadius: 20, cursor: 'pointer',
+                                            padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 5,
+                                            transition: 'background 0.2s ease', flexShrink: 0,
+                                        }}
+                                    >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={showAllEvents ? '#fff' : '#777'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            {!showAllEvents ? (
+                                                <>
+                                                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                                                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                                                    <line x1="1" y1="1" x2="23" y2="23" />
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                    <circle cx="12" cy="12" r="3" />
+                                                </>
+                                            )}
+                                        </svg>
+                                        <span style={{
+                                            fontSize: 11, fontWeight: 700,
+                                            fontFamily: 'Nunito, sans-serif',
+                                            color: showAllEvents ? '#fff' : '#777',
+                                        }}>
+                                            Show all
+                                        </span>
+                                    </button>
+                                )
+                            })()}
                         </div>
                     </div>
                     {/* Income/expense indicator strip — draggable + tap to toggle */}
@@ -2587,30 +2634,17 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         {PANEL_STEPS.map((panelId, i) => (
                             <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} className="onboarding-panel"
                                 onScroll={i === activePanel ? (e) => setTitleBorderVisible(e.target.scrollTop > 2) : undefined}
-                                onTouchEnd={i === activePanel && !sheetExpanded ? (e) => {
-                                    const tag = e.target.tagName
-                                    if (tag === 'INPUT' || tag === 'TEXTAREA') {
-                                        const panel = e.currentTarget
-                                        const el = e.target
-                                        // Only scroll if input is below the top portion of the panel
-                                        const panelRect = panel.getBoundingClientRect()
-                                        const elRect = el.getBoundingClientRect()
-                                        if (elRect.top - panelRect.top > 120) {
-                                            setTimeout(() => {
-                                                el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                                            }, 300)
-                                        }
-                                    }
-                                } : undefined}
                                 style={{
                                 position: 'absolute', inset: 0,
                                 display: 'flex', flexDirection: 'column',
                                 overflowY: i === activePanel ? 'auto' : 'hidden',
                                 overflowX: 'hidden',
                                 WebkitOverflowScrolling: 'touch',
-                                opacity: i === activePanel ? 1 : 0,
+                                opacity: 1,
+                                zIndex: i === activePanel ? 2 : 1,
                                 pointerEvents: i === activePanel ? 'auto' : 'none',
                                 background: '#f5f7f7',
+                                paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))',
                             }}>
                                 {panelId === 'termDates' && (
                                     <TermDatesStep
@@ -2646,49 +2680,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateIncomeSources={(val) => updateField('incomeSources', val)}
                                     />
                                 )}
-                                {!['termDates', 'balance', 'overdraft', 'regularIncome', 'regularExpenses', 'savingsInvestments', 'otherExpense', 'summary'].includes(panelId) && new Set(buildGraphEvents(formData).filter(e => !e.removed).map(e => e.editType)).size >= 2 && (() => {
-                                    const incPanels = ['maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
-                                    const expPanels = ['rent', 'bills', 'uniFees']
-                                    const otherPanels = ['oneOffItems', 'weeklySpend']
-                                    const btnColor = incPanels.includes(panelId) ? '#147b75'
-                                        : expPanels.includes(panelId) ? '#e06470'
-                                            : otherPanels.includes(panelId) ? '#e06470'
-                                                : '#147b75'
-                                    return (
-                                        <button
-                                            onClick={() => setShowAllEvents(s => !s)}
-                                            style={{
-                                                position: 'absolute', top: 22, right: 24, zIndex: 10,
-                                                background: showAllEvents ? btnColor : '#e8e8e8',
-                                                border: 'none', borderRadius: 20, cursor: 'pointer',
-                                                padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 5,
-                                                transition: 'background 0.2s ease',
-                                            }}
-                                        >
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={showAllEvents ? '#fff' : '#777'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                {!showAllEvents ? (
-                                                    <>
-                                                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                                                        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                                                        <line x1="1" y1="1" x2="23" y2="23" />
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                                                        <circle cx="12" cy="12" r="3" />
-                                                    </>
-                                                )}
-                                            </svg>
-                                            <span style={{
-                                                fontSize: 11, fontWeight: 700,
-                                                fontFamily: 'Nunito, sans-serif',
-                                                color: showAllEvents ? '#fff' : '#777',
-                                            }}>
-                                                Show all
-                                            </span>
-                                        </button>
-                                    )
-                                })()}
                                 {panelId === 'maintenanceLoan' && (
                                     <MaintenanceLoanStep
                                         loans={formData.maintenanceLoans || [{
@@ -3277,8 +3268,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     )
                                 })()}
 
-                                {/* Bottom spacer so content can scroll past floating buttons */}
-                                <div style={{ height: '50vh', flexShrink: 0 }} />
                             </div>
                         ))}
                     </div>
@@ -3290,7 +3279,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     position: 'absolute',
                     bottom: 0, left: 0, right: 0,
                     background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, #fff 40%)',
-                    padding: '28px 16px calc(8px + env(safe-area-inset-bottom, 0px))',
+                    padding: '28px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
                     display: 'flex',
                     alignItems: 'center',
                     gap: 0,

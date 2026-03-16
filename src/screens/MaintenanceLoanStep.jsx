@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 import { DEFAULT_LOAN_MONTHS, ALL_MONTH_KEYS, MONTH_LABELS } from '../config/onboardingConfig'
 import { fmt } from '../components/TermGraph'
 
+
 /* ---------- HELPERS ---------- */
 
 // Split total into n amounts that sum exactly to total (handles remainders)
@@ -87,13 +88,18 @@ export default function MaintenanceLoanStep({
             months: [...DEFAULT_LOAN_MONTHS],
             knowDates: false,
             dates: {},
-            instalmentAmounts: {},
+            instalmentAmounts: {}, _new: true,
         }])
     }
 
+    const [removingIdx, setRemovingIdx] = useState(null)
     const removeLoan = (idx) => {
         if (loans.length <= 1) return
-        updateLoans(prev => prev.filter((_, i) => i !== idx))
+        setRemovingIdx(idx)
+        setTimeout(() => {
+            updateLoans(prev => prev.filter((_, i) => i !== idx))
+            setRemovingIdx(null)
+        }, 300)
     }
 
     const updateLoan = (idx, field, value) => {
@@ -102,23 +108,14 @@ export default function MaintenanceLoanStep({
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            {!compact && (
-                <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                    <h2 style={{
-                        fontSize: 25, fontWeight: 700,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#000', margin: '0 0 4px', lineHeight: 1.3,
-                    }}>
-                        {heading}
-                    </h2>
-                    <p style={{
-                        fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                        color: '#444', margin: '0 0 16px', lineHeight: 1.5,
-                    }}>
-                        {subtitle}
-                    </p>
-                </div>
-            )}
+            <div style={{ padding: '0 24px 12px', flexShrink: 0 }}>
+                <p style={{
+                    fontSize: 15, fontFamily: 'Nunito, sans-serif',
+                    color: '#444', margin: 0, lineHeight: 1.5,
+                }}>
+                    {subtitle}
+                </p>
+            </div>
             <div style={{
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
@@ -126,9 +123,15 @@ export default function MaintenanceLoanStep({
                 minHeight: 0,
             }}>
                 {loans.map((loan, idx) => (
-                    <div key={loan.id || idx}>
-                        {idx > 0 && (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '16px 0 8px' }}>
+                    <div key={loan.id || idx} data-loan-entry style={{
+                        maxHeight: removingIdx === idx ? 0 : 2000,
+                        opacity: removingIdx === idx ? 0 : 1,
+                        overflow: 'hidden',
+                        transition: removingIdx === idx ? 'max-height 0.3s ease, opacity 0.2s ease' : undefined,
+                        animation: loan._new ? 'loanSlideIn 0.3s ease' : undefined,
+                    }}>
+                        {loans.length > 1 && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: idx === 0 ? '0 0 8px' : '16px 0 8px' }}>
                                 <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Loan {idx + 1}</span>
                                 <button onClick={() => removeLoan(idx)} style={{
                                     background: 'none', border: 'none', cursor: 'pointer',
@@ -148,6 +151,7 @@ export default function MaintenanceLoanStep({
                             instalmentAmounts={loan.instalmentAmounts}
                             updateInstalmentAmounts={(val) => updateLoan(idx, 'instalmentAmounts', val)}
                             compact
+                            scrollOnFocus={idx > 0}
                         />
                     </div>
                 ))}
@@ -163,7 +167,7 @@ export default function MaintenanceLoanStep({
                         color: '#147b75', cursor: 'pointer',
                         display: 'flex', alignItems: 'center',
                         justifyContent: 'center', gap: 6,
-                        marginTop: 16
+                        marginTop: 16,
                     }}
                 >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -171,6 +175,7 @@ export default function MaintenanceLoanStep({
                     </svg>
                     Add another loan
                 </button>
+                <div style={{ height: '15vh', flexShrink: 0 }} />
             </div>
         </div>
     )
@@ -190,6 +195,7 @@ function LoanEntry({
     instalmentAmounts,
     updateInstalmentAmounts,
     compact = false,
+    scrollOnFocus = false,
 }) {
     const [tab, setTab] = useState('yearly') // 'yearly' | 'instalment'
     const [rawAmount, setRawAmount] = useState(() => {
@@ -219,9 +225,58 @@ function LoanEntry({
         setRawInstalments(obj)
     }, [instalmentAmounts])
     const [datesExpanded, setDatesExpanded] = useState(false)
+    const [inputFocused, setInputFocused] = useState(false)
+    const scrollRef = useRef(null)
+    const blurTimerRef = useRef(null)
     const datesBoxRef = useRef(null)
     const amountInputRef = useRef(null)
+
+    const questionRef = useRef(null)
+    const touchStartRef = useRef(null)
+
+    const handleInputTouchStart = (e) => {
+        touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    }
+
+    const handleInputTouchEnd = (e) => {
+        if (!touchStartRef.current) return
+        const dx = e.changedTouches[0].clientX - touchStartRef.current.x
+        const dy = e.changedTouches[0].clientY - touchStartRef.current.y
+        touchStartRef.current = null
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return
+        if (!compact) return
+        const input = e.target
+        input.focus({ preventScroll: true })
+        const label = questionRef.current
+        if (!label) return
+        let scrollParent = label.parentElement
+        while (scrollParent) {
+            const style = window.getComputedStyle(scrollParent)
+            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollParent.scrollHeight > scrollParent.clientHeight) break
+            scrollParent = scrollParent.parentElement
+        }
+        if (scrollParent) {
+            const parentRect = scrollParent.getBoundingClientRect()
+            const labelRect = label.getBoundingClientRect()
+            const offset = labelRect.top - parentRect.top + scrollParent.scrollTop
+            const stickyHeader = scrollParent.querySelector('[data-sticky-header]')
+            const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
+            scrollParent.scrollTo({ top: Math.max(0, offset - headerH - 8), behavior: 'smooth' })
+        }
+    }
+
+    const scrollInputToTop = (e) => {
+        if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
+        setInputFocused(true)
+    }
+
     const dateActiveRef = useRef(false)
+
+    const handleInputBlur = () => {
+        blurTimerRef.current = setTimeout(() => {
+            if (!dateActiveRef.current) setInputFocused(false)
+        }, 50)
+    }
 
     const months = (loanMonths || DEFAULT_LOAN_MONTHS)
         .slice()
@@ -231,18 +286,25 @@ function LoanEntry({
         const val = cleanNum(e.target.value)
         setRawAmount(val)
         updateLoanAmount(val)
-        // Recalculate instalments from new yearly total
-        const yearlyVal = parseFloat(val) || 0
-        if (yearlyVal > 0 && months.length > 0) {
-            const amounts = splitEvenly(yearlyVal, months.length)
-            const newInstalments = {}
-            const newRaw = {}
-            months.forEach((m, i) => {
-                newInstalments[m] = String(amounts[i])
-                newRaw[m] = String(amounts[i])
-            })
-            updateInstalmentAmounts(newInstalments)
-            setRawInstalments(newRaw)
+        // Set each instalment to the entered amount (per year: distribute, per instalment: same value)
+        const numVal = parseFloat(val) || 0
+        if (numVal > 0 && months.length > 0) {
+            if (tab === 'instalment') {
+                // Per instalment: each month gets the entered value
+                const newInstalments = {}
+                const newRaw = {}
+                months.forEach(m => { newInstalments[m] = val; newRaw[m] = val })
+                updateInstalmentAmounts(newInstalments)
+                setRawInstalments(newRaw)
+            } else {
+                // Per year: distribute evenly
+                const amounts = splitEvenly(numVal, months.length)
+                const newInstalments = {}
+                const newRaw = {}
+                months.forEach((m, i) => { newInstalments[m] = String(amounts[i]); newRaw[m] = String(amounts[i]) })
+                updateInstalmentAmounts(newInstalments)
+                setRawInstalments(newRaw)
+            }
         } else {
             updateInstalmentAmounts({})
             setRawInstalments({})
@@ -270,17 +332,20 @@ function LoanEntry({
             : [...months, month]
         if (next.length === 0) return
         updateLoanMonths(next)
-        // Redistribute yearly total equally among new month set
-        const yearlyVal = parseFloat(String(loanAmount || '').replace(/,/g, '')) || 0
-        if (yearlyVal > 0 && next.length > 0) {
+        // Recalculate instalments for new month set
+        const numVal = parseFloat(String(loanAmount || '').replace(/,/g, '')) || 0
+        if (numVal > 0 && next.length > 0) {
             const sortedNext = next.slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
-            const amounts = splitEvenly(yearlyVal, sortedNext.length)
             const newInstalments = {}
             const newRaw = {}
-            sortedNext.forEach((m, i) => {
-                newInstalments[m] = String(amounts[i])
-                newRaw[m] = String(amounts[i])
-            })
+            if (tab === 'instalment') {
+                // Per instalment: each month gets the entered value
+                sortedNext.forEach(m => { newInstalments[m] = String(numVal); newRaw[m] = String(numVal) })
+            } else {
+                // Per year: distribute evenly
+                const amounts = splitEvenly(numVal, sortedNext.length)
+                sortedNext.forEach((m, i) => { newInstalments[m] = String(amounts[i]); newRaw[m] = String(amounts[i]) })
+            }
             updateInstalmentAmounts(newInstalments)
             setRawInstalments(newRaw)
         } else {
@@ -298,174 +363,243 @@ function LoanEntry({
         updateLoanDates({ ...loanDates, [month]: val })
     }
 
-    const sym = getCurrencySymbol()
-    const yearlyVal = parseFloat(String(loanAmount || '0').replace(/,/g, '')) || 0
-    const perInstalment = months.length > 0 ? Math.round(yearlyVal / months.length * 100) / 100 : 0
-    const [customAmounts, setCustomAmounts] = useState(false)
+    const [customAmounts, setCustomAmounts] = useState(
+        () => Object.values(instalmentAmounts || {}).some(v => parseFloat(String(v || '0').replace(/,/g, '')) > 0)
+    )
 
     return (
         <div>
-            {/* Amount input + toggle */}
-            <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 4px' }}>
-                {tab === 'instalment' ? 'Amount per instalment' : 'Yearly loan amount'}
-            </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                {/* Amount input with frequency dropdown */}
                 <div style={{
-                    display: 'inline-flex', alignItems: 'center',
-                    border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
-                    padding: '0 14px', height: 38, gap: 6, width: 150,
+                    display: 'flex', alignItems: 'center', gap: 0,
+                    marginBottom: 16,
                 }}>
-                    <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{sym}</span>
-                    <input
-                        ref={amountInputRef}
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={formatDisplay(rawAmount)}
-                        onChange={tab === 'instalment' ? (e) => {
-                            const val = cleanNum(e.target.value)
-                            setRawAmount(val)
-                            const perVal = parseFloat(val) || 0
-                            // Set yearly = per instalment × months
-                            const yearly = Math.round(perVal * months.length * 100) / 100
-                            updateLoanAmount(String(yearly))
-                            // Set all instalments equal
-                            const newInstalments = {}
-                            const newRaw = {}
-                            months.forEach(m => { newInstalments[m] = val; newRaw[m] = val })
-                            updateInstalmentAmounts(newInstalments)
-                            setRawInstalments(newRaw)
-                        } : handleAmountChange}
-                        style={{
-                            flex: 1, border: 'none', background: 'transparent',
-                            fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
-                            color: '#000', outline: 'none', padding: 0,
-                        }}
-                    />
-                </div>
-            </div>
-
-            {/* Toggle: yearly / per instalment */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-                {['yearly', 'instalment'].map(id => (
-                    <button key={id} onClick={() => {
-                        if (id === 'instalment' && tab !== 'instalment') {
-                            // Switch to per-instalment: show per-instalment amount
-                            const per = months.length > 0 ? Math.round(yearlyVal / months.length * 100) / 100 : 0
-                            setRawAmount(per ? String(per) : '')
-                        }
-                        if (id === 'yearly' && tab !== 'yearly') {
-                            // Switch to yearly: show yearly total
-                            const total = months.reduce((sum, m) => sum + (parseFloat(String(instalmentAmounts?.[m] || '').replace(/,/g, '')) || 0), 0)
-                            setRawAmount(total ? String(Math.round(total * 100) / 100) : '')
-                            updateLoanAmount(String(Math.round(total * 100) / 100))
-                        }
-                        setTab(id)
-                    }} style={{
-                        background: tab === id ? '#147b75' : '#fff',
-                        color: tab === id ? '#fff' : '#666',
-                        border: tab === id ? '1.5px solid #147b75' : '1.5px solid #ddd',
-                        borderRadius: 50, padding: '6px 14px',
-                        fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                        cursor: 'pointer', transition: 'all 0.2s ease',
+                    <div style={{
+                        display: 'flex', alignItems: 'center',
+                        border: '1px solid #e8e8e8', borderRight: 'none',
+                        borderRadius: '10px 0 0 10px', background: '#fff',
+                        padding: '0 14px', height: 44, gap: 6, flex: 1,
                     }}>
-                        {id === 'yearly' ? 'Yearly total' : 'Per instalment'}
-                    </button>
-                ))}
-            </div>
-
-            {/* Summary */}
-            {yearlyVal > 0 && months.length > 0 && (
-                <p style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', margin: '0 0 16px' }}>
-                    {tab === 'instalment'
-                        ? `${sym}${rawAmount || '0'} × ${months.length} = ${sym}${Math.round(yearlyVal).toLocaleString()}/yr`
-                        : `${months.length} instalments of ${sym}${Math.round(perInstalment).toLocaleString()} each`
-                    }
-                </p>
-            )}
-
-            {/* Month pills */}
-            <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 10px' }}>
-                Which months do you receive instalments?
-            </p>
-            <div style={{
-                border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
-                overflow: 'hidden', marginBottom: 16,
-            }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '14px 12px' }}>
-                    {ALL_MONTH_KEYS.map(m => {
-                        const selected = months.includes(m)
-                        return (
-                            <button key={m} onClick={() => toggleMonth(m)} style={{
-                                background: selected ? '#147b75' : '#fff',
-                                color: selected ? '#fff' : '#666',
-                                border: selected ? '1.5px solid #147b75' : '1.5px solid #ddd',
-                                borderRadius: 50, padding: '8px 0',
-                                fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                                cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'none',
-                            }}>
-                                {SHORT_MONTH[m]}
-                            </button>
-                        )
-                    })}
+                        <span style={{
+                            fontSize: 16, fontWeight: 600,
+                            color: '#444', fontFamily: 'Nunito, sans-serif',
+                        }}>{getCurrencySymbol()}</span>
+                        <input
+                            ref={amountInputRef}
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={formatDisplay(rawAmount)}
+                            onChange={handleAmountChange}
+                            onFocus={scrollOnFocus ? (e) => {
+                                const entry = e.target.closest('[data-loan-entry]')
+                                if (entry) setTimeout(() => entry.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
+                            } : undefined}
+                            style={{
+                                flex: 1, border: 'none',
+                                background: 'transparent',
+                                fontSize: 16, fontWeight: 500,
+                                fontFamily: 'Nunito, sans-serif',
+                                color: '#000', outline: 'none', padding: 0,
+                            }}
+                        />
+                    </div>
+                    <div style={{ position: 'relative' }}>
+                        <select
+                            value={tab}
+                            onChange={(e) => {
+                                const id = e.target.value
+                                const ms = months
+                                if (id === 'instalment' && tab !== 'instalment') {
+                                    // Per instalment: set each month to the entered amount
+                                    const perVal = parseFloat(String(loanAmount || '').replace(/,/g, ''))
+                                    if (perVal > 0 && ms.length > 0) {
+                                        const ni = {}, nr = {}
+                                        ms.forEach(m => { ni[m] = String(perVal); nr[m] = String(perVal) })
+                                        updateInstalmentAmounts(ni)
+                                        setRawInstalments(nr)
+                                    }
+                                }
+                                if (id === 'yearly' && tab !== 'yearly') {
+                                    // Switching to per year: redistribute evenly
+                                    const yearlyVal = parseFloat(String(loanAmount || '').replace(/,/g, ''))
+                                    if (yearlyVal > 0 && ms.length > 0) {
+                                        const amounts = splitEvenly(yearlyVal, ms.length)
+                                        const ni = {}, nr = {}
+                                        ms.forEach((m, idx) => { ni[m] = String(amounts[idx]); nr[m] = String(amounts[idx]) })
+                                        updateInstalmentAmounts(ni)
+                                        setRawInstalments(nr)
+                                    }
+                                }
+                                setTab(id)
+                            }}
+                            style={{
+                                height: 44, border: '1px solid #e8e8e8',
+                                borderRadius: '0 10px 10px 0',
+                                padding: '0 28px 0 12px',
+                                fontSize: 13, fontWeight: 600,
+                                fontFamily: 'Nunito, sans-serif',
+                                color: '#147b75', background: 'rgba(20,123,117,0.06)',
+                                WebkitAppearance: 'none', appearance: 'none',
+                                cursor: 'pointer', outline: 'none',
+                            }}
+                        >
+                            <option value="yearly">per year</option>
+                            <option value="instalment">per instalment</option>
+                        </select>
+                        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                            <path d="M1 1L5 5L9 1" stroke="#147b75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                    </div>
                 </div>
 
-                {/* Customise amounts — expandable */}
+                {/* Month selector */}
+                <p style={{
+                    fontSize: 14, fontWeight: 700,
+                    fontFamily: 'Nunito, sans-serif',
+                    color: '#000', margin: '0 0 10px',
+                }}>
+                    Which months do you receive instalments?
+                </p>
+
+                <div style={{
+                    border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
+                    overflow: 'hidden', marginBottom: 16,
+                }}>
+                    <div style={{
+                        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
+                        padding: '14px 12px',
+                    }}>
+                        {ALL_MONTH_KEYS.map(m => {
+                            const selected = months.includes(m)
+                            return (
+                                <button
+                                    key={m}
+                                    onClick={() => toggleMonth(m)}
+                                    style={{
+                                        background: selected ? '#147b75' : '#fff',
+                                        color: selected ? '#fff' : '#666',
+                                        border: selected ? '1.5px solid #147b75' : '1.5px solid #ddd',
+                                        borderRadius: 50,
+                                        padding: '8px 0',
+                                        fontSize: 12, fontWeight: 700,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease',
+                                        boxShadow: 'none',
+                                    }}
+                                >
+                                    {SHORT_MONTH[m]}
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+
+                {/* Customise amounts & dates — collapsible card */}
                 {months.length > 0 && (
-                    <div style={{ borderTop: '1px solid #eee' }}>
+                    <div style={{
+                        border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
+                        overflow: 'hidden', marginBottom: 16,
+                    }}>
                         <div
-                            onClick={() => setCustomAmounts(!customAmounts)}
-                            style={{ padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                            onClick={() => {
+                                const next = !customAmounts
+                                setCustomAmounts(next)
+                                if (next && tab !== 'instalment') {
+                                    const perVal = parseFloat(String(loanAmount || '').replace(/,/g, ''))
+                                    if (perVal > 0 && months.length > 0) {
+                                        const ni = {}, nr = {}
+                                        months.forEach(m => { ni[m] = String(perVal); nr[m] = String(perVal) })
+                                        updateInstalmentAmounts(ni)
+                                        setRawInstalments(nr)
+                                    }
+                                    setTab('instalment')
+                                }
+                            }}
+                            style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                cursor: 'pointer', padding: '12px 14px',
+                            }}
                         >
-                            <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
-                                Customise amounts & dates
-                            </span>
+                            <div>
+                                <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                    Customise amounts & dates
+                                </span>
+                                <p style={{ fontSize: 11, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', margin: '2px 0 0' }}>
+                                    Optional — set exact amount and date per instalment
+                                </p>
+                            </div>
                             <Chevron open={customAmounts} />
                         </div>
+
                         <div style={{
-                            maxHeight: customAmounts ? 600 : 0,
+                            maxHeight: customAmounts ? 1000 : 0,
                             opacity: customAmounts ? 1 : 0,
                             overflow: 'hidden',
-                            transition: 'max-height 0.35s ease, opacity 0.25s ease',
+                            transition: 'max-height 0.35s cubic-bezier(.25,1,.5,1), opacity 0.25s ease',
                         }}>
-                            <div style={{ padding: '0 12px 12px' }}>
-                                {months.map(m => (
-                                    <div key={m} style={{
+                            {months.map((m, i) => (
+                                <div key={m}>
+                                    <div style={{
                                         display: 'flex', alignItems: 'center',
                                         justifyContent: 'space-between',
-                                        padding: '8px 0',
+                                        padding: '10px 14px',
+                                        borderTop: '1px solid #f3f3f3',
                                     }}>
-                                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                                        <span style={{
+                                            fontSize: 13, fontWeight: 600,
+                                            fontFamily: 'Nunito, sans-serif',
+                                            color: '#888', minWidth: 70,
+                                        }}>
                                             {MONTH_LABELS[m]}
                                         </span>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                            <div
-                                                onClick={(e) => { const inp = e.currentTarget.querySelector('input'); if (inp) inp.focus() }}
-                                                style={{ display: 'flex', alignItems: 'center', gap: 3, cursor: 'text' }}
-                                            >
-                                                <span style={{ fontSize: 13, fontWeight: 600, color: '#888', fontFamily: 'Nunito, sans-serif' }}>{sym}</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                            <div style={{
+                                                display: 'flex', alignItems: 'center', gap: 2,
+                                                background: '#f8f8f8', borderRadius: 8,
+                                                padding: '4px 8px', width: 80, boxSizing: 'border-box',
+                                            }}>
+                                                <span style={{
+                                                    fontSize: 13, fontWeight: 600,
+                                                    color: '#999', fontFamily: 'Nunito, sans-serif',
+                                                    flexShrink: 0,
+                                                }}>{getCurrencySymbol()}</span>
                                                 <input
                                                     type="text"
                                                     inputMode="decimal"
                                                     placeholder="0.00"
                                                     value={formatDisplay(rawInstalments[m] || '')}
                                                     onChange={(e) => handleInstalmentChange(m, e)}
+                                                    onFocus={(e) => {
+                                                    const row = e.target.closest('[style*="border-top"]') || e.target.parentElement.parentElement.parentElement
+                                                    if (row) setTimeout(() => row.scrollIntoView({ behavior: 'smooth', block: 'start' }), 301)
+                                                    }}
                                                     style={{
-                                                        width: 55, border: 'none', background: 'transparent',
-                                                        fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
-                                                        color: '#000', outline: 'none', padding: 0,
+                                                        flex: 1, border: 'none',
+                                                        background: 'transparent',
+                                                        fontSize: 13, fontWeight: 600,
+                                                        fontFamily: 'Nunito, sans-serif',
+                                                        color: '#000', outline: 'none',
+                                                        padding: 0, textAlign: 'left',
                                                     }}
                                                 />
                                             </div>
                                             <div style={{ position: 'relative' }}>
                                                 <span style={{
-                                                    fontSize: 13, fontWeight: 700, color: '#147b75',
-                                                    fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                                                    background: 'rgba(20,123,117,0.08)',
-                                                    padding: '3px 10px', borderRadius: 8,
-                                                    display: 'inline-block', whiteSpace: 'nowrap',
+                                                    fontSize: 13, fontWeight: 600,
+                                                    color: '#888',
+                                                    fontFamily: 'Nunito, sans-serif',
+                                                    pointerEvents: 'none',
+                                                    background: '#f8f8f8',
+                                                    padding: '4px 10px',
+                                                    borderRadius: 8,
+                                                    display: 'inline-block',
+                                                    whiteSpace: 'nowrap',
+                                                    minWidth: 80,
+                                                    textAlign: 'center',
                                                 }}>
-                                                    {loanDates?.[m] ? fmt(loanDates[m]) : 'Select date'}
+                                                    {loanDates?.[m] ? fmt(loanDates[m]) : 'Set date'}
                                                 </span>
                                                 <input
                                                     type="date"
@@ -475,17 +609,33 @@ function LoanEntry({
                                                     onFocus={() => { dateActiveRef.current = true }}
                                                     onBlur={() => { dateActiveRef.current = false }}
                                                     onChange={(e) => e.target.value && handleDateChange(m, e.target.value)}
-                                                    style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
+                                                    style={{
+                                                        position: 'absolute', inset: 0,
+                                                        opacity: 0, width: '100%', height: '100%',
+                                                        cursor: 'pointer', fontSize: 16,
+                                                    }}
                                                 />
                                             </div>
+                                            <button
+                                                onClick={() => months.length > 1 && toggleMonth(m)}
+                                                style={{
+                                                    background: 'none', border: 'none', cursor: 'pointer',
+                                                    padding: 4, display: 'flex', alignItems: 'center',
+                                                    opacity: months.length > 1 ? 0.4 : 0.15,
+                                                }}
+                                            >
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                                                </svg>
+                                            </button>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
-            </div>
+
         </div>
     )
 }

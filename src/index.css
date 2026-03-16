@@ -247,7 +247,6 @@ button:focus {
 /* Disable scroll anchoring in onboarding panels */
 .onboarding-panel {
   overflow-anchor: none;
-  scroll-padding-top: 35px;
 }
 /* Hide h2 inside onboarding steps — title rendered in fixed header instead */
 .onboarding-panel > div:first-child > div:first-child > h2 {
@@ -315,4 +314,8 @@ button:focus {
 @keyframes btnShrinkIn {
   from { transform: scaleX(1.08); }
   to { transform: scaleX(1); }
+}
+@keyframes loanSlideIn {
+  from { max-height: 0; opacity: 0; }
+  to { max-height: 2000px; opacity: 1; }
 }

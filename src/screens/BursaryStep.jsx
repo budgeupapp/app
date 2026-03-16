@@ -558,7 +558,7 @@ export default function BursaryStep({
                                                 borderRadius: 8,
                                                 display: 'inline-block',
                                             }}>
-                                                {(bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m]) ? fmt(bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m]) : 'Select date'}
+                                                {(bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m]) ? fmt(bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m]) : 'Set date'}
                                             </span>
                                             <input
                                                 type="date"
