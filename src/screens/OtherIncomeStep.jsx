@@ -582,7 +582,7 @@ export default function OtherIncomeStep({
                     </div>
                 )}
 
-                {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
+                
             </div>
         </div>
     )

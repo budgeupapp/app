@@ -2579,34 +2579,16 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         {PANEL_STEPS.map((panelId, i) => (
                             <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} className="onboarding-panel"
                                 onScroll={i === activePanel ? (e) => setTitleBorderVisible(e.target.scrollTop > 2) : undefined}
-                                onTouchStart={i === activePanel ? (e) => {
-                                    const el = e.currentTarget
-                                    sheetDragRef.current._panelStartY = e.touches[0].clientY
-                                    sheetDragRef.current._panelScrollTop = el.scrollTop
-                                    sheetDragRef.current._panelNoScroll = el.scrollHeight <= el.clientHeight + 2
-                                    sheetDragRef.current._panelDragging = false
-                                } : undefined}
-                                onTouchMove={i === activePanel ? (e) => {
-                                    const dy = e.touches[0].clientY - sheetDragRef.current._panelStartY
-                                    // Pull down: only if at scroll top
-                                    if (!sheetDragRef.current._panelDragging && sheetDragRef.current._panelScrollTop <= 0 && dy > 8) {
-                                        sheetDragRef.current._panelDragging = true
-                                        handleSheetDragStart(sheetDragRef.current._panelStartY)
-                                    }
-                                    // Swipe up: only if content doesn't scroll
-                                    if (!sheetDragRef.current._panelDragging && sheetDragRef.current._panelNoScroll && dy < -8) {
-                                        sheetDragRef.current._panelDragging = true
-                                        handleSheetDragStart(sheetDragRef.current._panelStartY)
-                                    }
-                                    if (sheetDragRef.current._panelDragging) {
-                                        e.preventDefault()
-                                        handleSheetDragMove(e.touches[0].clientY)
-                                    }
-                                } : undefined}
-                                onTouchEnd={i === activePanel ? () => {
-                                    if (sheetDragRef.current._panelDragging) {
-                                        sheetDragRef.current._panelDragging = false
-                                        handleSheetDragEnd()
+                                onFocusCapture={i === activePanel && !sheetExpanded ? (e) => {
+                                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                                        const panel = e.currentTarget
+                                        const input = e.target
+                                        setTimeout(() => {
+                                            const panelRect = panel.getBoundingClientRect()
+                                            const inputRect = input.getBoundingClientRect()
+                                            const offset = inputRect.top - panelRect.top + panel.scrollTop - 35
+                                            panel.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
+                                        }, 350)
                                     }
                                 } : undefined}
                                 style={{
@@ -3323,23 +3305,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             }}
                                         >
                                             {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[activePanel]}
-                                        </button>
-                                        <button
-                                            onClick={handlePanelSkip}
-                                            style={{
-                                                background: 'none', border: 'none',
-                                                cursor: 'pointer', padding: '0 4px',
-                                                fontSize: 13, fontWeight: 600,
-                                                fontFamily: 'Nunito, sans-serif',
-                                                color: '#888', whiteSpace: 'nowrap',
-                                                flexShrink: 0, overflow: 'hidden',
-                                                width: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 36 : 0,
-                                                opacity: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 1 : 0,
-                                                marginLeft: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 12 : 0,
-                                                transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-left 0.3s cubic-bezier(.25,1,.5,1)',
-                                            }}
-                                        >
-                                            Skip
                                         </button>
                                     </div>
                                 )}

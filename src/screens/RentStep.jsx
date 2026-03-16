@@ -351,7 +351,7 @@ children, }) {
                     </div>
                 )}
 
-                {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
+                
             </div>
             {children}
         </div>
