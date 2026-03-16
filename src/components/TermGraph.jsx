@@ -190,7 +190,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             setBalanceVisible(true)
             requestAnimationFrame(() => {
                 setDotAnimated(true)
-                setBalanceAnimated(true)
+                // Delay line expansion so it visibly grows out of the dot
+                setTimeout(() => setBalanceAnimated(true), 300)
             })
         } else if (!hasBalance && prevHasBalance.current) {
             // Exiting: lines shrink into dot first, then dot shrinks
@@ -602,16 +603,15 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         }
     }, [steppedPath?.zeroDate, steppedPath?.overdraftBreachDate])
 
-    // Build past events path (faded, leading up to where steppedPath begins)
+    // Build past events path (faded, leading up to orange dot)
     const pastPath = (() => {
         if (!hasBalance) return null
 
         const y = steppedPath?.points?.[0]?.y ?? toTopPct(balNum)
-        const endX = steppedPath ? steppedPath.points[0].x : todayPct
+        const endX = steppedPath ? steppedPath.points[0].x : markerPct
         const points = [{ x: 0, y }, { x: endX, y }]
         const linePath = `M 0 ${y} L ${endX} ${y}`
         const fillPath = linePath + ` L ${endX} 100 L 0 100 Z`
-
         return { linePath, fillPath, dots: [], points }
     })()
 
@@ -1352,12 +1352,12 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             )
                         })}
 
-                        {/* Balance line extending left from today to start (only when no past events) */}
+                        {/* Balance line extending left from orange dot to start (only when no past events) */}
                         {balanceVisible && showToday && !pastPath && (
                             <>
                                 <div style={{
                                     position: 'absolute',
-                                    left: 0, right: `${100 - todayPct}%`,
+                                    left: 0, right: `${100 - markerPct}%`,
                                     top: `${greenTopPct}%`, bottom: 0,
                                     background: 'linear-gradient(to bottom, rgba(20,123,117,0.05), rgba(20,123,117,0))',
                                     pointerEvents: 'none',
@@ -1370,7 +1370,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                 }} />
                                 <div style={{
                                     position: 'absolute',
-                                    left: 0, right: `${100 - todayPct}%`,
+                                    left: 0, right: `${100 - markerPct}%`,
                                     top: `${greenTopPct}%`,
                                     height: 0,
                                     borderTop: `1.5px solid rgba(20,123,117,0.25)`,
@@ -1444,14 +1444,14 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
                         {/* (Stepped path SVGs rendered outside zoom div below) */}
 
-                        {/* Balance-mode: flat projection (no events) */}
+                        {/* Balance-mode: flat projection (no events) — dark green */}
                         {balanceVisible && showToday && !steppedPath && (
                             <>
                                 <div style={{
                                     position: 'absolute',
                                     left: `${markerPct}%`, right: 0,
                                     top: `${greenTopPct}%`, bottom: 0,
-                                    background: 'linear-gradient(to bottom, rgba(20,123,117,0.05), rgba(20,123,117,0))',
+                                    background: 'linear-gradient(to bottom, rgba(20,123,117,0.08), rgba(20,123,117,0))',
                                     pointerEvents: 'none',
                                     transformOrigin: 'left',
                                     transform: balanceAnimated ? 'scaleX(1)' : 'scaleX(0)',
@@ -1465,7 +1465,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     left: `${markerPct}%`, right: 0,
                                     top: `${greenTopPct}%`,
                                     height: 0,
-                                    borderTop: `1.5px solid rgba(20,123,117,0.25)`,
+                                    borderTop: `1.5px solid #147b75`,
                                     pointerEvents: 'none',
                                     transformOrigin: 'left',
                                     transform: balanceAnimated ? 'scaleX(1)' : 'scaleX(0)',
@@ -1724,40 +1724,33 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
                         {/* Past events: stepped line + fill (inside zoom div — no CSS scale so strokes stay clean) */}
                         {balanceVisible && pastPath && (
-                            <svg
-                                viewBox="0 0 100 100"
-                                preserveAspectRatio="none"
-                                style={{
-                                    position: 'absolute', inset: 0,
-                                    width: '100%', height: '100%',
-                                    overflow: 'visible',
-                                    pointerEvents: 'none',
-                                    zIndex: 1,
-                                }}
-                            >
-                                <defs>
-                                    <linearGradient id="pastStepGrad" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="rgba(20,123,117,0.05)" />
-                                        <stop offset="100%" stopColor="rgba(20,123,117,0)" />
-                                    </linearGradient>
-                                </defs>
-                                <path
-                                    d={pastPath.fillPath}
-                                    fill="url(#pastStepGrad)"
-                                    opacity={(pastRevealed || isZoomed) ? 1 : 0}
-                                    style={{ transition: 'opacity 0.5s ease 0.4s' }}
-                                />
-                                <path
-                                    d={pastPath.linePath}
-                                    fill="none"
-                                    stroke="rgba(20,123,117,0.2)"
-                                    strokeWidth="1.5"
-                                    strokeLinejoin="round"
-                                    vectorEffect="non-scaling-stroke"
-                                    opacity={(pastRevealed || isZoomed) ? 1 : 0}
-                                    style={{ transition: 'opacity 0.5s ease' }}
-                                />
-                            </svg>
+                            <div style={{
+                                position: 'absolute', top: 0, bottom: 0,
+                                left: 0, right: `${100 - markerPct}%`,
+                                pointerEvents: 'none',
+                                zIndex: 1,
+                                transformOrigin: 'right center',
+                                transform: balanceAnimated ? 'scaleX(1)' : 'scaleX(0)',
+                                transition: balanceAnimated
+                                    ? 'transform 0.6s cubic-bezier(.22,1,.36,1) 0.15s'
+                                    : 'transform 0.45s cubic-bezier(.22,1,.36,1)',
+                            }}>
+                                {/* Past gradient fill */}
+                                <div style={{
+                                    position: 'absolute',
+                                    left: 0, right: 0,
+                                    top: `${greenTopPct}%`, bottom: 0,
+                                    background: 'linear-gradient(to bottom, rgba(20,123,117,0.05), rgba(20,123,117,0))',
+                                }} />
+                                {/* Past line */}
+                                <div style={{
+                                    position: 'absolute',
+                                    left: 0, right: 0,
+                                    top: `${greenTopPct}%`,
+                                    height: 0,
+                                    borderTop: '1.5px solid rgba(20,123,117,0.25)',
+                                }} />
+                            </div>
                         )}
 
                         {/* Future events: stepped line + fill */}

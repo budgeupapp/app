@@ -407,7 +407,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
                                             fontSize: 15, fontWeight: 500,
                                             fontFamily: 'Nunito, sans-serif',
                                             color: '#000', outline: 'none',
-                                            marginBottom: 0,
+                                            marginBottom: 0, background: '#fff',
                                         }}
                                     />
                                 </div>
@@ -419,7 +419,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
                                         <div style={{
                                             display: 'flex', alignItems: 'center',
                                             border: '1px solid #e8e8e8', borderRadius: 10,
-                                            padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
+                                            padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6, background: '#fff',
                                         }}>
                                             <span style={{
                                                 fontSize: 16, fontWeight: 600,
@@ -451,7 +451,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
                                         <div style={{
                                             display: 'flex', alignItems: 'center',
                                             border: '1px solid #e8e8e8', borderRadius: 10,
-                                            height: 40, boxSizing: 'border-box', overflow: 'hidden',
+                                            height: 40, boxSizing: 'border-box', overflow: 'hidden', background: '#fff',
                                         }}>
                                             <input
                                                 type="date"

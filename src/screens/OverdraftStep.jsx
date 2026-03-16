@@ -52,7 +52,7 @@ export default function OverdraftStep({
                 display: 'flex', alignItems: 'center',
                 borderRadius: 10, border: '1px solid #e8e8e8',
                 padding: '0 14px', height: 50, gap: 8,
-                maxWidth: 160,
+                maxWidth: 160, background: '#fff',
             }}>
                 <span style={{
                     fontSize: 20, fontWeight: 600,

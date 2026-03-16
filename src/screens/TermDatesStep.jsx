@@ -1,35 +1,70 @@
 import { useState, useRef, useEffect } from 'react'
 import { fmt, weeksBetween, daysBetween } from '../components/TermGraph'
 
-/* ---------- DATE ROW
-   Invisible input[type=date] covers the whole row — tap anywhere opens the native picker.
-   The date value is styled as a teal pill to signal it's editable.
----------- */
+/* ---------- BREAK NAME FIELD ---------- */
 
-function DateRow({ label, value, onChange, last = false }) {
+function BreakNameField({ value, placeholder, onChange }) {
+    const ref = useRef(null)
+    return (
+        <input
+            ref={ref}
+            type="text"
+            value={value}
+            placeholder={placeholder}
+            onClick={(e) => e.stopPropagation()}
+            onFocus={() => {
+                // Prevent iOS from scrolling to top
+                if (ref.current) ref.current.focus({ preventScroll: true })
+            }}
+            onChange={(e) => onChange(e.target.value)}
+            style={{
+                fontSize: 13, fontWeight: 700, color: '#444',
+                fontFamily: 'Nunito, sans-serif',
+                border: 'none', background: 'transparent',
+                outline: 'none', padding: 0,
+                width: Math.max(60, (value || placeholder).length * 8),
+            }}
+        />
+    )
+}
+
+/* ---------- DATE ROW ---------- */
+
+function hexToRgba(hex, alpha) {
+    let h = hex.replace('#', '')
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2]
+    const r = parseInt(h.substring(0, 2), 16)
+    const g = parseInt(h.substring(2, 4), 16)
+    const b = parseInt(h.substring(4, 6), 16)
+    return `rgba(${r},${g},${b},${alpha})`
+}
+
+function DateRow({ label, value, onChange, color = '#147b75' }) {
     return (
         <div style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '5px 12px',
+            padding: '6px 0',
         }}>
             <span style={{
-                fontSize: 12,
-                color: '#777',
+                fontSize: 13,
+                color: '#888',
                 fontFamily: 'Nunito, sans-serif',
+                fontWeight: 600,
             }}>{label}</span>
 
-            {/* Teal date — tap to edit, input only covers the date text */}
             <div style={{ position: 'relative' }}>
                 <span style={{
                     fontSize: 13,
-                    fontWeight: 600,
-                    color: '#147b75',
-                    borderBottom: '1px dotted rgba(20,123,117,0.45)',
-                    paddingBottom: 1,
+                    fontWeight: 700,
+                    color,
                     fontFamily: 'Nunito, sans-serif',
                     pointerEvents: 'none',
+                    background: hexToRgba(color, 0.08),
+                    padding: '3px 10px',
+                    borderRadius: 8,
+                    display: 'inline-block',
                 }}>{fmt(value)}</span>
                 <input
                     type="date"
@@ -56,10 +91,10 @@ function Chevron({ open }) {
     return (
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{
             transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
-            transition: 'transform 0.2s ease',
+            transition: 'transform 0.25s cubic-bezier(.25,1,.5,1)',
             flexShrink: 0,
         }}>
-            <path d="M7 4.5L12 9L7 13.5" stroke="#777"
+            <path d="M7 4.5L12 9L7 13.5" stroke="#aaa"
                 strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
     )
@@ -75,19 +110,23 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
     const prevExpanded = useRef(expanded)
     const [removingBreak, setRemovingBreak] = useState(null)
 
+    // Re-measure content when breaks change
+    useEffect(() => {
+        if (expanded && contentRef.current) {
+            requestAnimationFrame(() => setContentHeight(contentRef.current.scrollHeight))
+        }
+    }, [expanded, term.breaks.length])
+
     useEffect(() => {
         if (expanded) {
-            // Measure content height when expanding
             const measure = () => {
                 if (contentRef.current) {
                     setContentHeight(contentRef.current.scrollHeight)
                 }
             }
             measure()
-            // Re-measure after a frame in case content is still rendering
             requestAnimationFrame(measure)
 
-            // Scroll the accordion header to top of container after expand animation
             if (!noAutoScroll && !prevExpanded.current && headerRef.current) {
                 setTimeout(() => {
                     if (headerRef.current) {
@@ -106,7 +145,6 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
 
     const updateDate = (field, v) => {
         const updated = { ...term, [field]: v, _changedField: field }
-        // If end is before start, move the other date to match
         if (updated.end < updated.start) {
             if (field === 'start') updated.end = v
             else updated.start = v
@@ -117,7 +155,6 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
     const updateBreak = (i, field, v) => {
         const breaks = [...term.breaks]
         const brk = { ...breaks[i], [field]: v }
-        // If end is before start, move the other date to match
         if (brk.end < brk.start) {
             if (field === 'start') brk.end = v
             else brk.start = v
@@ -164,7 +201,6 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
             onUpdate({ ...term, breaks: [...existingBreaks, { id: newId, start: s, end: e }] })
         }
 
-        // Scroll new holiday into view after render
         if (!noAutoScroll) {
             setTimeout(() => {
                 const el = document.querySelector(`[data-break-id="${newId}"]`)
@@ -182,61 +218,83 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
     }
 
     return (
-        <div ref={ref} style={{ border: '1px solid #f3f3f3', borderRadius: 10, background: '#fff' }}>
-
-            {/* ── Header (2-line) ── */}
-            <div ref={headerRef} onClick={onToggle} style={{ padding: '10px 12px', cursor: 'pointer', scrollMarginTop: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input
-                        value={term.name}
-                        onChange={(e) => onUpdate({ ...term, name: e.target.value })}
-                        onClick={(e) => e.stopPropagation()}
-                        onFocus={(e) => {
-                            e.stopPropagation()
-                        }}
-                        style={{
-                            fontSize: 14, fontWeight: 700, color: '#147b75',
+        <div ref={ref} style={{
+            borderRadius: 14,
+            background: '#fff',
+            overflow: 'hidden',
+            boxShadow: expanded ? '0 2px 12px rgba(0,0,0,0.06)' : '0 1px 4px rgba(0,0,0,0.04)',
+            transition: 'box-shadow 0.3s ease',
+        }}>
+            {/* Header */}
+            <div ref={headerRef} onClick={onToggle} style={{
+                padding: '14px 16px',
+                cursor: 'pointer',
+                scrollMarginTop: 10,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+            }}>
+                {/* Color dot */}
+                <div style={{
+                    width: 10, height: 10, borderRadius: '50%',
+                    background: '#147b75', flexShrink: 0,
+                    opacity: 0.7,
+                }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <input
+                            value={term.name}
+                            onChange={(e) => onUpdate({ ...term, name: e.target.value })}
+                            onClick={(e) => e.stopPropagation()}
+                            onFocus={(e) => e.stopPropagation()}
+                            style={{
+                                fontSize: 15, fontWeight: 700, color: '#222',
+                                fontFamily: 'Nunito, sans-serif',
+                                border: 'none', background: 'transparent',
+                                outline: 'none', padding: 0,
+                                width: Math.max(50, term.name.length * 9),
+                            }}
+                        />
+                        <span style={{
+                            fontSize: 11, fontWeight: 600, color: '#aaa',
                             fontFamily: 'Nunito, sans-serif',
-                            border: 'none', background: 'transparent',
-                            outline: 'none', padding: 0,
-                            width: Math.max(40, term.name.length * 8),
-                            borderBottom: '1px dotted rgba(20,123,117,0.45)',
-                        }}
-                    />
+                            whiteSpace: 'nowrap',
+                        }}>{weeks}w</span>
+                    </div>
                     <span style={{
-                        fontSize: 9, fontWeight: 600, color: '#777',
+                        fontSize: 12, color: '#999',
                         fontFamily: 'Nunito, sans-serif',
-                    }}>{weeks} weeks</span>
-                    <div style={{ flex: 1 }} />
-                    <Chevron open={expanded} />
+                        marginTop: 2, display: 'block',
+                    }}>{fmt(term.start)} – {fmt(term.end)}</span>
                 </div>
-                <div style={{ marginTop: 3 }}>
-                    <span style={{
-                        fontSize: 9, color: '#444',
-                        fontFamily: 'Nunito, sans-serif',
-                    }}>{fmt(term.start)} - {fmt(term.end)}</span>
-                </div>
+                <Chevron open={expanded} />
             </div>
 
+            {/* Expandable content */}
             <div style={{
-                maxHeight: expanded ? contentHeight + 20 : 0,
+                maxHeight: expanded ? contentHeight + 80 : 0,
                 opacity: expanded ? 1 : 0,
                 overflow: 'hidden',
-                transition: 'max-height 0.3s ease, opacity 0.2s ease',
+                transition: 'max-height 0.35s cubic-bezier(.25,1,.5,1), opacity 0.25s ease',
             }}>
                 <div ref={contentRef}>
-                    {/* ── Separator below header ── */}
-                    <div style={{ height: 1, background: '#f3f3f3' }} />
+                    <div style={{ height: 1, background: '#f0f0f0', margin: '0 16px' }} />
 
-                    {/* ── Term start / end ── */}
-                    <DateRow label="Start" value={term.start} onChange={v => updateDate('start', v)} />
-                    <DateRow label="End" value={term.end} onChange={v => updateDate('end', v)} last />
-                    <div style={{ height: 6 }} />
+                    {/* Term dates */}
+                    <div style={{ padding: '8px 16px' }}>
+                        <DateRow label="Starts" value={term.start} onChange={v => updateDate('start', v)} />
+                        <DateRow label="Ends" value={term.end} onChange={v => updateDate('end', v)} />
+                    </div>
 
-                    {/* ── Holidays ── */}
+                    {/* Holidays */}
                     {term.breaks.map((brk, i) => {
                         const days = daysBetween(brk.start, brk.end)
                         const isRemoving = removingBreak === i
+                        const isExam = brk.name && /exam/i.test(brk.name.trim())
+                        const isReading = brk.name && /reading/i.test(brk.name)
+                        const breakColor = isExam ? '#e06470' : isReading ? '#5b8fd9' : '#888'
+                        const breakBg = isExam ? 'rgba(224,100,112,0.06)' : isReading ? 'rgba(91,143,217,0.06)' : '#fafafa'
+
                         return (
                             <div key={brk.id || i} data-break-id={brk.id} style={{
                                 maxHeight: isRemoving ? 0 : 200,
@@ -245,92 +303,90 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                 transition: 'max-height 0.3s ease, opacity 0.2s ease',
                             }}>
                                 <div style={{
-                                    background: (brk.name && /exam/i.test(brk.name.trim()))
-                                        ? 'rgba(240,212,212,0.8)'
-                                        : (brk.name && /reading/i.test(brk.name))
-                                            ? 'rgba(212,228,240,0.8)'
-                                            : 'rgba(243,243,243,0.8)',
-                                    margin: '5px 10px',
-                                    borderRadius: 10,
-                                    overflow: 'hidden',
+                                    background: breakBg,
+                                    margin: '4px 12px',
+                                    borderRadius: 12,
+                                    padding: '10px 14px',
+                                    border: `1px solid ${breakColor}15`,
                                 }}>
-                                    {/* Holiday header */}
                                     <div style={{
-                                        display: 'flex', alignItems: 'center',
-                                        padding: '8px 12px 4px 12px', gap: 6,
+                                        display: 'flex', alignItems: 'center', gap: 8,
+                                        marginBottom: 6,
                                     }}>
-                                        <input
-                                            type="text"
+                                        <div style={{
+                                            width: 6, height: 6, borderRadius: '50%',
+                                            background: breakColor, opacity: 0.5, flexShrink: 0,
+                                        }} />
+                                        <BreakNameField
                                             value={brk.name || ''}
                                             placeholder="Holiday"
-                                            onClick={(e) => e.stopPropagation()}
-                                            onChange={(e) => {
+                                            onChange={(v) => {
                                                 const newBreaks = [...term.breaks]
-                                                newBreaks[i] = { ...newBreaks[i], name: e.target.value }
+                                                newBreaks[i] = { ...newBreaks[i], name: v }
                                                 onUpdate({ ...term, breaks: newBreaks })
-                                            }}
-                                            style={{
-                                                fontSize: 12, fontWeight: 700, color: '#4b4a4a',
-                                                fontFamily: 'Nunito, sans-serif',
-                                                border: 'none', background: 'transparent',
-                                                outline: 'none', padding: 0,
-                                                width: `${(brk.name || 'Holiday').length}ch`,
-                                                borderBottom: '1px dotted rgba(75,74,74,0.35)',
                                             }}
                                         />
                                         <span style={{
-                                            fontSize: 9, fontWeight: 600, color: '#777',
+                                            fontSize: 11, fontWeight: 600, color: '#aaa',
                                             fontFamily: 'Nunito, sans-serif',
-                                        }}>{days} days off</span>
-                                        <div style={{ flex: 1 }} />
-                                        <button
-                                            onClick={() => removeBreak(i)}
-                                            style={{
-                                                background: 'none', border: 'none',
-                                                cursor: 'pointer', fontSize: 18,
-                                                color: '#777', lineHeight: 1, padding: 0,
-                                            }}
-                                        >×</button>
+                                            whiteSpace: 'nowrap', flex: 1, textAlign: 'right',
+                                        }}>{days}d</span>
                                     </div>
-                                    <DateRow label="Start" value={brk.start} onChange={v => updateBreak(i, 'start', v)} />
-                                    <DateRow label="End" value={brk.end} onChange={v => updateBreak(i, 'end', v)} last />
-                                    <div style={{ height: 6 }} />
+                                    <DateRow label="From" value={brk.start} onChange={v => updateBreak(i, 'start', v)} color={breakColor} />
+                                    <DateRow label="To" value={brk.end} onChange={v => updateBreak(i, 'end', v)} color={breakColor} />
+                                    <button
+                                        onClick={() => removeBreak(i)}
+                                        style={{
+                                            background: 'none', border: 'none',
+                                            cursor: 'pointer', padding: '6px 0 0',
+                                            fontSize: 12, fontWeight: 600, color: '#aaa',
+                                            fontFamily: 'Nunito, sans-serif',
+                                            width: '100%', textAlign: 'center',
+                                        }}
+                                    >
+                                        Delete {brk.name || 'holiday'}
+                                    </button>
                                 </div>
                             </div>
                         )
                     })}
 
-                    {/* ── Add break ── */}
-                    <div style={{ padding: '8px 10px' }}>
+                    {/* Add holiday button */}
+                    <div style={{ padding: '8px 12px' }}>
                         <button
                             onClick={addBreak}
                             style={{
-                                width: '100%', height: 32,
-                                background: 'none',
-                                border: '1px solid #e0e0e0',
+                                width: '100%', height: 36,
+                                background: 'transparent',
+                                border: '1.5px dashed #ddd',
                                 borderRadius: 10,
-                                fontSize: 12, fontWeight: 600,
+                                fontSize: 13, fontWeight: 600,
                                 fontFamily: 'Nunito, sans-serif',
-                                color: '#4b4a4a', cursor: 'pointer',
+                                color: '#999', cursor: 'pointer',
                                 display: 'flex', alignItems: 'center',
-                                justifyContent: 'center', gap: 6,
+                                justifyContent: 'center', gap: 4,
+                                transition: 'border-color 0.2s ease, color 0.2s ease',
                             }}
                         >
-                            <span style={{ fontSize: 18, lineHeight: 1, marginTop: -1 }}>+</span>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                <path d="M12 5v14M5 12h14" />
+                            </svg>
                             Add Holiday
                         </button>
                     </div>
+
                     {canDelete && (
-                        <div style={{ padding: '0 10px 8px', textAlign: 'center' }}>
+                        <div style={{ padding: '2px 12px 10px', textAlign: 'center' }}>
                             <span
                                 onClick={onDelete}
                                 style={{
-                                    fontSize: 10, fontWeight: 600,
+                                    fontSize: 12, fontWeight: 600,
                                     fontFamily: 'Nunito, sans-serif',
                                     color: '#e06470', cursor: 'pointer',
+                                    opacity: 0.7,
                                 }}
                             >
-                                Delete term
+                                Remove term
                             </span>
                         </div>
                     )}
@@ -348,7 +404,7 @@ export default function TermDatesStep({
     compact = false,
     noAutoScroll = false,
     heading = 'University Term Dates',
-    subtitle = "If we've got anything wrong, tap on the date to edit it.",
+    subtitle = "If we've got anything wrong, tap on a date to edit it.",
 }) {
     const updateTerm = (updated) => {
         const DAY = 24 * 60 * 60 * 1000
@@ -361,12 +417,9 @@ export default function TermDatesStep({
         const old = terms[idx]
         const changedField = updated._changedField || null
 
-        // Clean up internal marker
         const { _changedField, ...cleanUpdated } = updated
 
-        // Shift breaks when term dates change
         if (changedField === 'start') {
-            // Start changed — shift entire term (end + breaks) by the delta
             const delta = Math.round((toMs(cleanUpdated.start) - toMs(old.start)) / DAY)
             if (delta !== 0) {
                 cleanUpdated.end = shiftDate(old.end, delta)
@@ -377,10 +430,8 @@ export default function TermDatesStep({
                 }))
             }
         } else if (changedField === 'end') {
-            // End changed — keep start fixed, shift breaks that fall after the new end back
             cleanUpdated.breaks = (old.breaks || []).map(b => {
                 if (b.end > cleanUpdated.end) {
-                    // Clamp break to fit within term
                     const clampedEnd = cleanUpdated.end < b.start ? b.start : cleanUpdated.end
                     return { ...b, end: clampedEnd > cleanUpdated.end ? cleanUpdated.end : clampedEnd, start: b.start > cleanUpdated.end ? cleanUpdated.end : b.start }
                 }
@@ -390,13 +441,11 @@ export default function TermDatesStep({
 
         const newTerms = terms.map(t => t.id === cleanUpdated.id ? cleanUpdated : { ...t })
 
-        // Only push subsequent terms forward if there's an overlap
         for (let i = idx + 1; i < newTerms.length; i++) {
             const prev = newTerms[i - 1]
             const curr = newTerms[i]
-            // Only adjust if the previous term's end overlaps with or passes this term's start
             if (toMs(prev.end) >= toMs(curr.start)) {
-                const newStart = shiftDate(prev.end, 1) // 1 day gap
+                const newStart = shiftDate(prev.end, 1)
                 const delta = Math.round((toMs(newStart) - toMs(curr.start)) / DAY)
                 const duration = Math.round((toMs(curr.end) - toMs(curr.start)) / DAY)
                 curr.start = newStart
@@ -407,17 +456,15 @@ export default function TermDatesStep({
                     end: shiftDate(b.end, delta),
                 }))
             } else {
-                break // no overlap, no need to check further terms
+                break
             }
         }
 
-        // Only push previous terms backward if there's an overlap
         for (let i = idx - 1; i >= 0; i--) {
             const next = newTerms[i + 1]
             const curr = newTerms[i]
-            // Only adjust if this term's end overlaps with or passes the next term's start
             if (toMs(curr.end) >= toMs(next.start)) {
-                const newEnd = shiftDate(next.start, -1) // 1 day gap
+                const newEnd = shiftDate(next.start, -1)
                 const delta = Math.round((toMs(newEnd) - toMs(curr.end)) / DAY)
                 const duration = Math.round((toMs(curr.end) - toMs(curr.start)) / DAY)
                 curr.end = newEnd
@@ -428,7 +475,7 @@ export default function TermDatesStep({
                     end: shiftDate(b.end, delta),
                 }))
             } else {
-                break // no overlap, no need to check further terms
+                break
             }
         }
 
@@ -443,9 +490,7 @@ export default function TermDatesStep({
         const el = document.querySelector(`[data-term-id="${id}"]`)
         if (el) termHeights.current[id] = el.offsetHeight
         if (expandedTerm === id) onExpandedTermChange?.(null)
-        // Phase 1: lock to measured height
         setRemovingTermId(id)
-        // Phase 2: collapse on next frame
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 setCollapsingTermId(id)
@@ -463,7 +508,6 @@ export default function TermDatesStep({
     const addTerm = () => {
         const existing = termData?.terms || []
         const num = existing.length + 1
-        // Default: 2 weeks after last term ends, 12 weeks long
         const lastEnd = existing.length > 0
             ? new Date(existing[existing.length - 1].end + 'T00:00:00')
             : new Date(2026, 0, 1)
@@ -482,140 +526,98 @@ export default function TermDatesStep({
 
     const terms = termData?.terms || []
 
+    const termList = (scrollable) => (
+        <>
+            {terms.map(term => {
+                const isRemoving = removingTermId === term.id
+                return (
+                    <div key={term.id} data-term-id={term.id} style={{
+                        marginBottom: collapsingTermId === term.id ? 0 : 10,
+                        ...(collapsingTermId === term.id ? {
+                            maxHeight: 0,
+                            opacity: 0,
+                            overflow: 'hidden',
+                            transition: 'max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease',
+                        } : isRemoving ? {
+                            maxHeight: termHeights.current[term.id],
+                            overflow: 'hidden',
+                            transition: 'max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease',
+                        } : {}),
+                    }}>
+                        <TermAccordion
+                            term={term}
+                            expanded={expandedTerm === term.id}
+                            onToggle={() => onExpandedTermChange?.(
+                                expandedTerm === term.id ? null : term.id
+                            )}
+                            onUpdate={updateTerm}
+                            onDelete={() => deleteTerm(term.id)}
+                            canDelete={terms.length > 1}
+                            noAutoScroll={noAutoScroll}
+                        />
+                    </div>
+                )
+            })}
+            <button
+                onClick={addTerm}
+                style={{
+                    width: '100%', height: 40,
+                    background: 'transparent',
+                    border: '1.5px dashed #ddd',
+                    borderRadius: 14,
+                    fontSize: 14, fontWeight: 700,
+                    fontFamily: 'Nunito, sans-serif',
+                    color: '#147b75', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', gap: 6,
+                    flexShrink: 0,
+                    transition: 'border-color 0.2s ease',
+                }}
+            >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
+                </svg>
+                Add Term
+            </button>
+        </>
+    )
+
     if (compact) {
         return (
             <div data-term-scroll style={{ display: 'flex', flexDirection: 'column' }}>
-                {terms.map(term => {
-                    const isRemoving = removingTermId === term.id
-                    return (
-                        <div key={term.id} data-term-id={term.id} style={{
-                            marginBottom: collapsingTermId === term.id ? 0 : 10,
-                            ...(collapsingTermId === term.id ? {
-                                maxHeight: 0,
-                                opacity: 0,
-                                overflow: 'hidden',
-                                transition: 'max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease',
-                            } : isRemoving ? {
-                                maxHeight: termHeights.current[term.id],
-                                overflow: 'hidden',
-                                transition: 'max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease',
-                            } : {}),
-                        }}>
-                            <TermAccordion
-                                term={term}
-                                expanded={expandedTerm === term.id}
-                                onToggle={() => onExpandedTermChange?.(
-                                    expandedTerm === term.id ? null : term.id
-                                )}
-                                onUpdate={updateTerm}
-                                onDelete={() => deleteTerm(term.id)}
-                                canDelete={terms.length > 1}
-                                noAutoScroll={noAutoScroll}
-                            />
-                        </div>
-                    )
-                })}
-                <button
-                    onClick={addTerm}
-                    style={{
-                        width: '100%', height: 38,
-                        background: 'none',
-                        border: '1px solid #e0e0e0',
-                        borderRadius: 10,
-                        fontSize: 13, fontWeight: 700,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#147b75', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', gap: 6,
-                        flexShrink: 0,
-                    }}
-                >
-                    <span style={{ fontSize: 20, lineHeight: 1, marginTop: -1 }}>+</span>
-                    Add Term
-                </button>
+                {termList(false)}
             </div>
         )
     }
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            {/* Title */}
             <div style={{ padding: '18px 24px 12px', flexShrink: 0 }}>
                 <h2 style={{
                     fontSize: 25, fontWeight: 700,
                     fontFamily: 'Nunito, sans-serif',
-                    color: '#000', margin: '0 0 8px', lineHeight: 1.3,
+                    color: '#000', margin: '0 0 6px', lineHeight: 1.3,
                 }}>
                     {heading}
                 </h2>
                 <p style={{
-                    fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                    color: '#444', margin: 0, lineHeight: 1.5,
+                    fontSize: 14, fontFamily: 'Nunito, sans-serif',
+                    color: '#888', margin: 0, lineHeight: 1.5,
                 }}>
                     {subtitle}
                 </p>
             </div>
 
-            {/* Scrollable terms */}
             <div data-term-scroll style={{
                 flex: 1,
                 overflowY: 'auto',
                 overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
-                padding: '0 19px 16px',
+                padding: '0 16px 16px',
                 display: 'flex',
                 flexDirection: 'column',
             }}>
-                {terms.map(term => {
-                    const isRemoving = removingTermId === term.id
-                    return (
-                        <div key={term.id} data-term-id={term.id} style={{
-                            marginBottom: collapsingTermId === term.id ? 0 : 10,
-                            ...(collapsingTermId === term.id ? {
-                                maxHeight: 0,
-                                opacity: 0,
-                                overflow: 'hidden',
-                                transition: 'max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease',
-                            } : isRemoving ? {
-                                maxHeight: termHeights.current[term.id],
-                                overflow: 'hidden',
-                                transition: 'max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease',
-                            } : {}),
-                        }}>
-                            <TermAccordion
-                                term={term}
-                                expanded={expandedTerm === term.id}
-                                onToggle={() => onExpandedTermChange?.(
-                                    expandedTerm === term.id ? null : term.id
-                                )}
-                                onUpdate={updateTerm}
-                                onDelete={() => deleteTerm(term.id)}
-                                canDelete={terms.length > 1}
-                                noAutoScroll={noAutoScroll}
-                            />
-                        </div>
-                    )
-                })}
-
-                {/* Add term button */}
-                <button
-                    onClick={addTerm}
-                    style={{
-                        width: '100%', height: 38,
-                        background: 'none',
-                        border: '1px solid #e0e0e0',
-                        borderRadius: 10,
-                        fontSize: 13, fontWeight: 700,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#147b75', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', gap: 6,
-                        flexShrink: 0,
-                    }}
-                >
-                    <span style={{ fontSize: 20, lineHeight: 1, marginTop: -1 }}>+</span>
-                    Add Term
-                </button>
+                {termList(true)}
             </div>
         </div>
     )

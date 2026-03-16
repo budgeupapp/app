@@ -338,7 +338,7 @@ export default function OtherExpenseStep({
                 <input type="text" placeholder="e.g. Any regular expense" value={otherExpenseLabel || ''} onChange={(e) => updateOtherExpenseLabel(e.target.value)}
                     onTouchStart={handleInputTouchStart} onTouchEnd={handleNameTouchEnd}
                     onFocus={handleNameFocus} onBlur={handleInputBlur}
-                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 10, padding: '10px 14px', fontSize: 15, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', marginBottom: 20 }} />
+                    style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #e8e8e8', borderRadius: 10, padding: '10px 14px', fontSize: 15, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#000', outline: 'none', marginBottom: 20, background: '#fff' }} />
 
                 {(() => {
                     const showDual = amountPeriod !== 'yearly' && otherExpenseVariesByTerm && (freq === 'weekly' || freq === 'monthly')
@@ -352,7 +352,7 @@ export default function OtherExpenseStep({
                                         borderRadius: `10px 0 0 ${showDual ? '0' : '10px'}`,
                                         borderBottom: showDual ? '1px dashed #e8e8e8' : '1px solid #e8e8e8',
                                         padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
-                                        transition: 'border-radius 0.3s ease',
+                                        transition: 'border-radius 0.3s ease', background: '#fff',
                                     }}>
                                         <span style={{
                                             fontSize: 11, fontWeight: 600, color: '#777', fontFamily: 'Nunito, sans-serif',
@@ -374,7 +374,7 @@ export default function OtherExpenseStep({
                                     }}>
                                         <div style={{
                                             display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderTop: 'none',
-                                            borderRadius: '0 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
+                                            borderRadius: '0 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6, background: '#fff',
                                         }}>
                                             <span style={{ fontSize: 11, fontWeight: 600, color: '#777', fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap', width: 52, flexShrink: 0 }}>Holidays</span>
                                             <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>

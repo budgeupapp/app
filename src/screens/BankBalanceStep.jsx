@@ -88,7 +88,7 @@ export default function BankBalanceStep({ balance, updateBalance, heading = 'Ban
                     display: 'flex', alignItems: 'center',
                     borderRadius: 10, border: '1px solid #e8e8e8',
                     padding: '0 14px', height: 50, gap: 6,
-                    width: 160,
+                    width: 160, background: '#fff',
                 }}>
                     <span style={{
                         fontSize: 20, fontWeight: 600,

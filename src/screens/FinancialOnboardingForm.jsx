@@ -4,7 +4,6 @@ import { getCurrencySymbol, getGraphStart, setGraphStart } from '../lib/settings
 import { Button, Input, Modal, Radio, Typography, message } from 'antd'
 import StepProgress from '../components/StepProgress'
 import NativeSelect from '../components/NativeSelect'
-import universityIllustration from '../assets/university-illustration.svg'
 import incomeLoan from '../assets/income-loan.svg'
 import incomeFamily from '../assets/income-friends.svg'
 import incomeWork from '../assets/income-work.svg'
@@ -1064,7 +1063,7 @@ const RegularExpenseList = ({ items, onChange }) => {
                             placeholder="0"
                             inputMode="decimal"
                             size="large"
-                            style={{ width: '100%' }}
+                            style={{ width: '100%', background: '#fff' }}
                             value={item.amount}
                             onChange={e =>
                                 updateItem(
@@ -1090,7 +1089,8 @@ const RegularExpenseList = ({ items, onChange }) => {
                                     WebkitAppearance: 'none',
                                     display: 'flex',
                                     height: 40,
-                                    boxShadow: 'none'
+                                    boxShadow: 'none',
+                                    background: '#fff'
                                 }}
                                 value={item.date}
                                 onChange={e => updateItem(index, 'date', e.target.value)}
@@ -1121,7 +1121,8 @@ const RegularExpenseList = ({ items, onChange }) => {
                                     WebkitAppearance: 'none',
                                     display: 'flex',
                                     height: 40,
-                                    boxShadow: 'none'
+                                    boxShadow: 'none',
+                                    background: '#fff'
                                 }}
                                 value={item.endDate}
                                 onChange={e =>
@@ -1205,7 +1206,7 @@ const OneOffItemList = ({ items, onChange, type }) => {
                         <Input
                             placeholder="e.g., Birthday gift, Trip to London"
                             size="large"
-                            style={{ width: '100%' }}
+                            style={{ width: '100%', background: '#fff' }}
                             value={item.name}
                             onChange={e =>
                                 updateItem(index, 'name', e.target.value)
@@ -1222,7 +1223,7 @@ const OneOffItemList = ({ items, onChange, type }) => {
                             placeholder="0"
                             inputMode="decimal"
                             size="large"
-                            style={{ width: '100%' }}
+                            style={{ width: '100%', background: '#fff' }}
                             value={item.amount}
                             onChange={e =>
                                 updateItem(
@@ -1250,7 +1251,8 @@ const OneOffItemList = ({ items, onChange, type }) => {
                                     WebkitAppearance: 'none',
                                     display: 'flex',
                                     height: 40,
-                                    boxShadow: 'none'
+                                    boxShadow: 'none',
+                                    background: '#fff'
                                 }}
                             />
                         </div>
@@ -1303,20 +1305,17 @@ export default function FinancialOnboardingForm({ onComplete }) {
         setToast(null)
     }
 
-    const [uniSlideOut, setUniSlideOut] = useState(false)
-    const [uniSlideIn, setUniSlideIn] = useState(false)
-    const [uniConfirming, setUniConfirming] = useState(false)
-    const [uniReversing, setUniReversing] = useState(false)
     const [editingEvent, setEditingEvent] = useState(null)  // { ...event, clickX, clickY }
     const [editAmount, setEditAmount] = useState('')
     const [editingBalance, setEditingBalance] = useState(false)
     const [editBalanceAmount, setEditBalanceAmount] = useState('')
     const transitionRef = useRef(null) // guards against overlapping transitions
+    const sheetRef = useRef(null)
+    const graphWrapRef = useRef(null)
+    const sheetDragRef = useRef({ dragging: false, startY: 0, startTop: 0 })
+    const [sheetExpanded, setSheetExpanded] = useState(false)
     const [graphAnimated, setGraphAnimated] = useState(() => {
-        try {
-            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
-            return ['termDates', 'balance', 'overdraft', 'regularIncome', 'maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome', 'rent', 'regularExpenses', 'bills', 'uniFees', 'savingsInvestments', 'otherExpense', 'oneOffItems', 'weeklySpend', 'summary'].includes(saved.currentStepId)
-        } catch { return false }
+        return true
     })
     const getRemovedCount = (editTypes) => {
         const removed = formData.removedEvents || []
@@ -1876,46 +1875,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
         })
     }
 
-    const handleUniversityConfirm = () => {
-        if (transitionRef.current) return // block during active transition
-        const error = checkRequiredFields()
-        if (error) {
-            showToast(error)
-            return
-        }
-
-        // Shrink button first, then switch step
-        setUniConfirming(true)
-        transitionRef.current = true
-        setTimeout(() => {
-            goNext()
-            setGraphAnimated(true)
-            setUniConfirming(false)
-            transitionRef.current = null
-        }, 100)
-    }
 
 
-    const handleTermDatesBack = () => {
-        if (transitionRef.current) return // block double-tap
-        setUniSlideIn(true)
-        setUniSlideOut(true)
-        setUniReversing(true) // start with back button visible to match panel
-        // Double rAF ensures browser has painted initial position before animating
-        const r1 = requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                setUniSlideOut(false)
-                setUniReversing(false) // animate back button away
-            })
-        })
-        const t2 = setTimeout(() => {
-            goBack()
-            setUniSlideIn(false)
-            setGraphAnimated(false)
-            transitionRef.current = null
-        }, 550)
-        transitionRef.current = () => { cancelAnimationFrame(r1); clearTimeout(t2) }
-    }
+
+
 
     const handleTermDatesNext = () => {
         if (transitionRef.current) return
@@ -2162,13 +2125,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     /* ---------- RENDER ---------- */
 
-    const [imgLoaded, setImgLoaded] = useState(false)
 
-    useEffect(() => {
-        const img = new Image()
-        img.src = universityIllustration
-        img.onload = () => setImgLoaded(true)
-    }, [])
 
     // university + termDates share a single render block so TermDatesStep stays
     // mounted throughout the transition — prevents the flash on step switch
@@ -2194,7 +2151,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         summary: 'Build my budget',
     }
     const PANEL_LABELS = PANEL_STEPS.map(id => PANEL_LABEL_MAP[id])
-    const inPanelGroup = currentStep.id === 'university' || PANEL_STEPS.includes(currentStep.id) || activePanel > 0
+    const inPanelGroup = PANEL_STEPS.includes(currentStep.id) || activePanel > 0
 
     if (inPanelGroup) {
         const terms = formData.termDates?.terms || []
@@ -2203,7 +2160,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
         // Determine which handler to use based on active panel
         const panelOnNext = activePanel === 0 ? handleTermDatesNext : handlePanelNext
-        const panelOnBack = activePanel === 0 ? handleTermDatesBack : handlePanelBack
+        const panelOnBack = handlePanelBack
 
         const toastEl = toast && (
             <>
@@ -2225,22 +2182,68 @@ export default function FinancialOnboardingForm({ onComplete }) {
             </>
         )
 
+        const GRAPH_HEIGHT = 200
+        const SAFE_AREA_TOP = 'env(safe-area-inset-top, 0px)'
+        const COLLAPSED_TOP = `calc(${SAFE_AREA_TOP} + ${GRAPH_HEIGHT}px)`
+        const EXPANDED_TOP = `calc(${SAFE_AREA_TOP} + 8px)`
+
+        const handleSheetDragStart = (clientY) => {
+            const s = sheetDragRef.current
+            if (!sheetRef.current) return
+            s.dragging = true
+            s.startY = clientY
+            s.startTop = sheetRef.current.getBoundingClientRect().top
+            sheetRef.current.style.transition = 'none'
+            if (graphWrapRef.current) graphWrapRef.current.style.transition = 'none'
+        }
+        const handleSheetDragMove = (clientY) => {
+            const s = sheetDragRef.current
+            if (!s.dragging || !sheetRef.current) return
+            const safeTop = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sat') || '0')
+            const minTop = safeTop + 20
+            const maxTop = safeTop + GRAPH_HEIGHT
+            const delta = clientY - s.startY
+            const newTop = Math.max(minTop, Math.min(maxTop, s.startTop + delta))
+            sheetRef.current.style.top = newTop + 'px'
+            // Scale graph opacity based on position
+            if (graphWrapRef.current) {
+                const progress = (newTop - minTop) / (maxTop - minTop)
+                graphWrapRef.current.style.opacity = Math.max(0.3, progress)
+                graphWrapRef.current.style.transform = `scale(${0.95 + 0.05 * progress})`
+            }
+        }
+        const handleSheetDragEnd = () => {
+            const s = sheetDragRef.current
+            if (!s.dragging || !sheetRef.current) return
+            s.dragging = false
+            const currentTop = sheetRef.current.getBoundingClientRect().top
+            const safeTop = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sat') || '0')
+            const midpoint = safeTop + GRAPH_HEIGHT / 2
+            const shouldExpand = currentTop < midpoint
+            sheetRef.current.style.transition = 'top 0.35s cubic-bezier(.25,1,.5,1)'
+            if (graphWrapRef.current) graphWrapRef.current.style.transition = 'opacity 0.35s ease, transform 0.35s ease'
+            if (shouldExpand) {
+                sheetRef.current.style.top = EXPANDED_TOP
+                if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '0.3'; graphWrapRef.current.style.transform = 'scale(0.95)' }
+                setSheetExpanded(true)
+            } else {
+                sheetRef.current.style.top = COLLAPSED_TOP
+                if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '1'; graphWrapRef.current.style.transform = 'scale(1)' }
+                setSheetExpanded(false)
+            }
+        }
+
         return (
-            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#fff' }}>
+            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#fff' }}>
+                <style>{`:root { --sat: 0px; } @supports (padding-top: env(safe-area-inset-top)) { :root { --sat: env(safe-area-inset-top, 0px); } }`}</style>
                 {toastEl}
-                {/* Single TermGraph — props change based on panel */}
                 {/* Safe area spacer for notch */}
-                <div style={{ paddingTop: 'env(safe-area-inset-top, 0px)', flexShrink: 0, background: '#fff' }} />
-                <div style={{
-                    height: graphAnimated ? 200 : 0,
-                    opacity: graphAnimated ? 1 : 0,
-                    transform: graphAnimated ? 'translateY(0)' : 'translateY(-8px)',
+                <div style={{ paddingTop: 'env(safe-area-inset-top, 0px)', background: '#fff' }} />
+                <div ref={graphWrapRef} style={{
+                    height: 200,
                     overflow: 'hidden',
-                    flexShrink: 0,
-                    margin: graphAnimated ? '0 8px' : '0',
-                    transition: graphAnimated
-                        ? 'height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.45s ease, transform 0.45s cubic-bezier(.22,1,.36,1), margin 0.6s ease'
-                        : 'height 0.35s ease, opacity 0.25s ease, transform 0.25s ease, margin 0.35s ease',
+                    margin: '0 8px',
+                    transition: 'opacity 0.35s ease, transform 0.35s ease',
                 }}>
                     <TermGraph
                         graphHeight={150}
@@ -2249,7 +2252,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         expandedTerm={activePanel === 0 ? activeExpanded : undefined}
                         balance={activePanel >= 1 ? balanceNum : undefined}
                         overdraft={formData.overdraft ? parseFloat(String(formData.overdraft || '0').replace(/,/g, '')) : undefined}
-                        events={activePanel >= 3 ? buildGraphEvents(formData) : []}
+                        events={activePanel >= 3 ? buildGraphEvents(formData).filter(e => { const wsIdx = PANEL_STEPS.indexOf('weeklySpend'); return e.editType !== 'weeklySpend' || activePanel >= wsIdx }) : []}
                         hiddenEventTypes={(() => {
                             const panelId = PANEL_STEPS[activePanel]
                             if (panelId === 'summary') return []
@@ -2332,18 +2335,79 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     />
                 </div>
 
-                {/* Form card with sliding panels */}
-                <div ref={formCardCallbackRef} style={{
-                    flex: 1,
-                    background: '#f0f4f4',
-                    borderRadius: '16px 16px 0 0',
+                {/* Form card — draggable bottom sheet */}
+                <div ref={(el) => { sheetRef.current = el; formCardCallbackRef(el) }} style={{
+                    position: 'absolute',
+                    top: COLLAPSED_TOP,
+                    left: 0, right: 0, bottom: 0,
+                    background: '#f5f7f7',
+                    borderRadius: '28px 28px 0 0',
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
-                    minHeight: 0,
-                    position: 'relative',
+                    boxShadow: 'none',
+                    transition: 'top 0.35s cubic-bezier(.25,1,.5,1)',
+                    zIndex: 2,
                 }}>
-                    {/* Income/expense indicator strip */}
+                    {/* Drag handle — tap to toggle expand/collapse */}
+                    <div
+                        onTouchStart={(e) => {
+                            sheetDragRef.current._tapStartY = e.touches[0].clientY
+                            sheetDragRef.current._tapMoved = false
+                            handleSheetDragStart(e.touches[0].clientY)
+                        }}
+                        onTouchMove={(e) => {
+                            const dy = Math.abs(e.touches[0].clientY - sheetDragRef.current._tapStartY)
+                            if (dy > 5) sheetDragRef.current._tapMoved = true
+                            e.preventDefault()
+                            handleSheetDragMove(e.touches[0].clientY)
+                        }}
+                        onTouchEnd={() => {
+                            if (!sheetDragRef.current._tapMoved) {
+                                // Tap — toggle expand/collapse
+                                sheetDragRef.current.dragging = false
+                                if (sheetRef.current) {
+                                    sheetRef.current.style.transition = 'top 0.35s cubic-bezier(.25,1,.5,1)'
+                                    if (graphWrapRef.current) graphWrapRef.current.style.transition = 'opacity 0.35s ease, transform 0.35s ease'
+                                    if (sheetExpanded) {
+                                        sheetRef.current.style.top = COLLAPSED_TOP
+                                        if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '1'; graphWrapRef.current.style.transform = 'scale(1)' }
+                                        setSheetExpanded(false)
+                                    } else {
+                                        sheetRef.current.style.top = EXPANDED_TOP
+                                        if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '0.3'; graphWrapRef.current.style.transform = 'scale(0.95)' }
+                                        setSheetExpanded(true)
+                                    }
+                                }
+                            } else {
+                                handleSheetDragEnd()
+                            }
+                        }}
+                        onMouseDown={(e) => {
+                            handleSheetDragStart(e.clientY)
+                            const onMove = (ev) => handleSheetDragMove(ev.clientY)
+                            const onUp = () => { handleSheetDragEnd(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+                            document.addEventListener('mousemove', onMove)
+                            document.addEventListener('mouseup', onUp)
+                        }}
+                        style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 12px', cursor: 'grab', touchAction: 'none', flexShrink: 0, background: '#f5f7f7' }}
+                    >
+                        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#bbb' }} />
+                    </div>
+                    {/* Income/expense indicator strip — also draggable */}
+                    <div
+                        onTouchStart={(e) => handleSheetDragStart(e.touches[0].clientY)}
+                        onTouchMove={(e) => { e.preventDefault(); handleSheetDragMove(e.touches[0].clientY) }}
+                        onTouchEnd={handleSheetDragEnd}
+                        onMouseDown={(e) => {
+                            handleSheetDragStart(e.clientY)
+                            const onMove = (ev) => handleSheetDragMove(ev.clientY)
+                            const onUp = () => { handleSheetDragEnd(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp) }
+                            document.addEventListener('mousemove', onMove)
+                            document.addEventListener('mouseup', onUp)
+                        }}
+                        style={{ touchAction: 'none', cursor: 'grab', flexShrink: 0 }}
+                    >
                     {(() => {
                         const panelId = PANEL_STEPS[activePanel]
                         const incomeTypes = ['regularIncome', 'maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
@@ -2358,7 +2422,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                 : null
                         return (
                             <div style={{
-                                height: stripColor ? 4 : 0,
+                                height: 0,
                                 background: stripColor || 'transparent',
                                 borderRadius: '16px 16px 0 0',
                                 flexShrink: 0,
@@ -2367,20 +2431,19 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             }} />
                         )
                     })()}
+                    </div>
 
-                    {/* Panel content area */}
-                    <div style={{ flex: 1, position: 'relative', overflow: 'clip', minHeight: 0, margin: '8px 8px 0', borderRadius: '14px 14px 0 0' }}>
+                    {/* Panel content area — only drag sheet from handle, not from scrolling */}
+                    <div
+                        style={{ flex: 1, position: 'relative', overflow: 'clip', minHeight: 0 }}>
                         {PANEL_STEPS.map((panelId, i) => (
-                            <div key={panelId} style={{
+                            <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} style={{
                                 position: 'absolute', inset: 0,
                                 display: 'flex', flexDirection: 'column',
                                 overflow: 'hidden',
-                                transform: i < activePanel ? 'translateY(-100%)'
-                                    : i > activePanel ? 'translateY(100%)'
-                                        : 'translateY(0)',
-                                transition: 'transform 0.5s cubic-bezier(.25,.46,.45,.94)',
-                                background: '#fff',
-                                borderRadius: '14px 14px 0 0',
+                                opacity: i === activePanel ? 1 : 0,
+                                pointerEvents: i === activePanel ? 'auto' : 'none',
+                                background: '#f5f7f7',
                             }}>
                                 {panelId === 'termDates' && (
                                     <TermDatesStep
@@ -2957,33 +3020,31 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
                                                 {/* Income section */}
                                                 {(incomeSources.length > 0 || otherIncSources.length > 0) && (
-                                                    <>
+                                                    <div style={{ background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 10 }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                                                             <PiTrendUp size={16} color="#333" />
                                                             <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Regular Income</span>
                                                         </div>
                                                         {incomeSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getYearly([s.editType])} color="rgba(20,123,117,0.8)" onTap={() => goToPanel(s.panelId)} />)}
                                                         {otherIncSources.map(inst => <SummaryRow key={inst.id} sourceId="other_income" label={inst.label || 'Other Income'} amount={getYearly([inst.id])} color="rgba(20,123,117,0.8)" onTap={() => goToPanel('otherIncome')} />)}
-                                                        <div style={{ height: 1, background: '#f0f0f0', margin: '8px 0' }} />
-                                                    </>
+                                                    </div>
                                                 )}
 
                                                 {/* Expense section */}
                                                 {(expenseSources.length > 0 || otherExpSources.length > 0) && (
-                                                    <>
+                                                    <div style={{ background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 10 }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                                                             <PiTrendDown size={16} color="#333" />
                                                             <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Regular Expenses</span>
                                                         </div>
                                                         {expenseSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getYearly([s.editType])} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel(s.panelId)} />)}
                                                         {otherExpSources.map(inst => <SummaryRow key={inst.id} sourceId="other_expense" label={inst.label || 'Other Expense'} amount={getYearly([inst.id])} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel('otherExpense')} />)}
-                                                    </>
+                                                    </div>
                                                 )}
 
                                                 {/* Flexible section */}
                                                 {(weeklySpendAmt > 0 || oneOffCount > 0) && (
-                                                    <>
-                                                        {(expenseSources.length > 0 || otherExpSources.length > 0) && <div style={{ height: 1, background: '#f0f0f0', margin: '8px 0' }} />}
+                                                    <div style={{ background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 10 }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                                                             <PiShuffle size={16} color="#333" />
                                                             <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Flexible</span>
@@ -3013,7 +3074,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                                 {chevron}
                                                             </div>
                                                         )}
-                                                    </>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
@@ -3039,40 +3100,52 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         return <RestoreDeletedBar editTypes={editTypes} color="#e07b3c" />
                     })()}
 
-                    {/* Bottom buttons — hidden during uni overlay transition to avoid double-render jitter */}
+
+
+                    {/* Bottom buttons with white fade */}
                     <div style={{
                         flexShrink: 0,
-                        padding: '10px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
+                        background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 30%, #fff 100%)',
+                        padding: '20px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 12,
-                        background: '#f0f4f4',
-                        visibility: (uniConfirming || uniSlideIn) ? 'hidden' : 'visible',
                     }}>
-                        <button
-                            onClick={panelOnBack}
-                            style={{
-                                width: 45, height: 45, borderRadius: 50,
-                                border: 'none', background: '#f0f0f0',
-                                cursor: 'pointer', flexShrink: 0, padding: 0,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', transform: 'translateZ(0)'
-                            }}
-                        >
-                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                <path d="M12 15L7 10L12 5" stroke="#4b4a4a"
-                                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                        </button>
+                        <div style={{
+                            width: activePanel > 0 ? 48 : 0,
+                            height: 48,
+                            opacity: activePanel > 0 ? 1 : 0,
+                            overflow: 'hidden',
+                            flexShrink: 0,
+                            marginRight: activePanel > 0 ? 0 : -12,
+                            transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-right 0.3s ease',
+                        }}>
+                            <button
+                                onClick={panelOnBack}
+                                style={{
+                                    width: 48, height: 48, borderRadius: 50,
+                                    border: 'none', background: '#f0f0f0',
+                                    cursor: 'pointer', padding: 0,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}
+                            >
+                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                    <path d="M12 15L7 10L12 5" stroke="#4b4a4a"
+                                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </button>
+                        </div>
                         <button
                             onClick={panelOnNext}
                             style={{
-                                flex: 1, height: 45,
+                                flex: 1, height: 48,
                                 background: '#147b75',
                                 color: '#fff',
                                 border: 'none', borderRadius: 50,
-                                fontSize: 15, fontWeight: 700,
+                                fontSize: 16, fontWeight: 700,
                                 fontFamily: 'Nunito, sans-serif',
-                                cursor: 'pointer', letterSpacing: 0,
+                                cursor: 'pointer', letterSpacing: 0.3,
+                                
                             }}
                         >
                             {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[activePanel]}
@@ -3100,148 +3173,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     </div>
                 </div>
 
-                {/* University overlay — present during university step and reverse slide-in */}
-                {(currentStep.id === 'university' || uniSlideIn) && (
-                    <>
-                        {/* Backdrop — only in steady-state university step, not during reverse slide */}
-                        <div style={{
-                            position: 'fixed',
-                            inset: 0,
-                            background: '#fff',
-                            pointerEvents: 'none',
-                            zIndex: 5,
-                            opacity: uniSlideIn ? 0 : 1,
-                            transition: 'opacity 0.3s ease',
-                        }} />
 
-                        {/* University card — top contracts down into form card position */}
-                        <div style={{
-                            position: 'fixed',
-                            top: uniSlideOut ? 200 : 10,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            zIndex: 6,
-                            overflow: 'hidden',
-                            borderRadius: uniSlideOut ? '16px 16px 0 0' : 14,
-                            boxShadow: 'none',
-                            background: '#fff',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            transition: 'top 0.55s cubic-bezier(0.25, 1, 0.5, 1)'
-                        }}>
-                            {/* Content fades out as card contracts */}
-                            <div style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                flex: 1,
-                                minHeight: 0,
-                            }}>
-                                <div style={{ padding: '18px 24px 0' }}>
-                                    <h2 style={{
-                                        fontSize: 25,
-                                        fontWeight: 700,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#000',
-                                        margin: '0 0 12px',
-                                        lineHeight: 1.3,
-                                    }}>
-                                        Your University
-                                    </h2>
-                                    <p style={{
-                                        fontSize: 15,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#444',
-                                        margin: '0 0 24px',
-                                        lineHeight: 1.5,
-                                    }}>
-                                        This helps us match your budget to your term dates and connect you with university support if needed
-                                    </p>
-                                    <NativeSelect
-                                        value={formData.university}
-                                        onChange={(value) => {
-                                            updateField('university', value)
-                                            updateField('termDates', getTermDatesForUniversity(value))
-                                        }}
-                                        options={UK_UNIVERSITIES.map(uni => ({ value: uni, label: uni }))}
-                                        placeholder="Select your university"
-                                        style={{ fontSize: 17, height: '40px' }}
-                                    />
-                                </div>
-                                <div style={{
-                                    flex: 1,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    padding: '16px 24px 0',
-                                    minHeight: 0,
-                                }}>
-                                    <img
-                                        src={universityIllustration}
-                                        alt=""
-                                        style={{
-                                            width: '100%',
-                                            maxWidth: 303,
-                                            height: 'auto',
-                                            objectFit: 'contain',
-                                            opacity: (uniConfirming || uniSlideOut) ? 0 : 1,
-                                            transition: 'opacity 0.8s ease-in-out',
-                                        }}
-                                    />
-                                </div>
-                                <div style={{ padding: '10px 19px 14px 19px', borderTop: '1px solid #f3f3f3', position: 'relative', zIndex: 1, background: '#fff' }}>
-                                    <div style={{
-                                        display: 'flex', alignItems: 'center', gap: 12,
-                                    }}>
-                                        {/* Ghost back button — fades in during confirm, starts visible during reverse */}
-                                        <div style={{
-                                            width: uniConfirming ? 60 : uniReversing ? 45 : 0,
-                                            height: 45,
-                                            borderRadius: 50,
-                                            background: '#f0f0f0',
-                                            flexShrink: 0,
-                                            opacity: (uniConfirming || uniReversing) ? 1 : 0,
-                                            overflow: 'hidden',
-                                            position: 'relative',
-                                            transition: 'width 0.35s cubic-bezier(.22,1,.36,1), opacity 0.25s ease',
-                                        }}>
-                                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"
-                                                style={{
-                                                    position: 'absolute',
-                                                    top: '50%', left: '50%',
-                                                    transform: 'translate(-50%, -50%)',
-                                                    display: 'block',
-                                                }}>
-                                                <path d="M12 15L7 10L12 5" stroke="#4b4a4a"
-                                                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>
-                                        </div>
-                                        <button
-                                            onClick={handleUniversityConfirm}
-                                            style={{
-                                                flex: 1,
-                                                height: 45,
-                                                background: '#147b75',
-                                                color: '#fff',
-                                                border: 'none',
-                                                borderRadius: 50,
-                                                fontSize: 15,
-                                                fontWeight: 700,
-                                                fontFamily: 'Nunito, sans-serif',
-                                                cursor: 'pointer',
-                                                letterSpacing: 0,
-                                                transition: 'flex 0.35s cubic-bezier(.22,1,.36,1)',
-                                            }}
-                                        >
-                                            {(uniConfirming || uniReversing) ? 'Confirm Term Dates' : 'Confirm University'}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </>
-                )
-                }
 
                 {/* Event edit modal */}
                 {editingEvent && (() => {

@@ -203,7 +203,7 @@ function SpendRulerCard({ label, value, onChange, max, color, variesByTerm, onTo
     const nonTermYearly = (nonTermVal || 0) * 52
 
     return (
-        <div>
+        <div style={{ background: '#fff', borderRadius: 14, padding: '14px 16px' }}>
             {label && (
                 <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: '0 0 12px' }}>{label}</p>
             )}

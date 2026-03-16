@@ -3240,7 +3240,7 @@ export default function Dashboard() {
                     WebkitOverflowScrolling: 'touch',
                     overscrollBehavior: 'none',
                     paddingBottom: 'calc(120px + env(safe-area-inset-bottom))',
-                    background: '#f0f4f4',
+                    background: '#f5f7f7',
                 }}
             >
                 {/* Graph + tabs — sticky, shrinks on scroll */}
@@ -3439,7 +3439,7 @@ export default function Dashboard() {
                                     <button
                                         onClick={() => zoomOutRef.current?.()}
                                         style={{
-                                            background: '#f0f4f4',
+                                            background: '#f5f7f7',
                                             border: 'none',
                                             borderRadius: '50%', cursor: 'pointer',
                                             width: 34, height: 34,
@@ -3554,8 +3554,8 @@ export default function Dashboard() {
 
                     {/* Tabs — inside sticky header so they stick */}
                     <div style={{
-                        background: '#f0f4f4',
-                        borderRadius: '16px 16px 0 0',
+                        background: '#f5f7f7',
+                        borderRadius: '28px 28px 0 0',
                         padding: '0 14px 8px',
                         boxShadow: '0 1px 0 rgba(0,0,0,0.04)',
                     }}>
@@ -3623,12 +3623,12 @@ export default function Dashboard() {
                 {/* Content below */}
                 <div ref={contentWrapRef} style={{
                     minHeight: '60vh',
-                    background: '#f0f4f4',
+                    background: '#f5f7f7',
                     opacity: showInitialBalancePopup ? 0.35 : 1,
                     pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
                 }}>
                     <div style={{
-                        background: '#f0f4f4',
+                        background: '#f5f7f7',
                         padding: '8px 16px 16px',
                         minHeight: '50vh',
                     }}>
@@ -4263,7 +4263,7 @@ export default function Dashboard() {
                                             onClick={() => removeEvent(evt)}
                                             style={{
                                                 width: 24, height: 24, borderRadius: 6, border: 'none',
-                                                background: '#f0f4f4', cursor: 'pointer',
+                                                background: '#f5f7f7', cursor: 'pointer',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 padding: 0, flexShrink: 0,
                                             }}
@@ -5115,7 +5115,7 @@ export default function Dashboard() {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                                         <div style={{
                                             display: 'flex', alignItems: 'center', flex: 1,
-                                            background: '#f0f4f4', borderRadius: 5,
+                                            background: '#f5f7f7', borderRadius: 5,
                                             padding: '0 6px', height: 24, gap: 2,
                                         }}>
                                             <span style={{
@@ -5319,7 +5319,7 @@ export default function Dashboard() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                                 <div style={{
                                     display: 'flex', alignItems: 'center',
-                                    background: '#f0f4f4', borderRadius: 5,
+                                    background: '#f5f7f7', borderRadius: 5,
                                     padding: '0 6px', height: 24, gap: 2,
                                     width: 76,
                                 }}>
