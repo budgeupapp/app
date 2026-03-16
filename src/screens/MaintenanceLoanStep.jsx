@@ -267,99 +267,87 @@ function LoanEntry({
 
     return (
         <div>
-            {/* Entry mode toggle */}
-            <div style={{
-                display: 'flex', width: '100%', position: 'relative',
-                background: '#fff', borderRadius: 50, padding: 3,
-                marginBottom: 16, border: '1px solid #f0f0f0',
-            }}>
+            {/* Amount input + frequency dropdown (joined) */}
+            <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>
+                How much is your maintenance loan?
+            </p>
+            <div style={{ display: 'flex', marginBottom: 10 }}>
                 <div style={{
-                    position: 'absolute', top: 3, bottom: 3,
-                    left: entryMode === 'yearly' ? 3 : '50%',
-                    width: 'calc(50% - 4px)',
-                    background: '#147b75', borderRadius: 50,
-                    transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                }} />
-                {[{ id: 'yearly', label: 'Yearly Total' }, { id: 'per_instalment', label: 'Per Instalment' }].map(({ id, label }) => (
-                    <div
-                        key={id}
-                        onClick={() => {
+                    display: 'flex', alignItems: 'center',
+                    border: '1px solid #e8e8e8', borderRight: 'none',
+                    borderRadius: '10px 0 0 10px', background: '#fff',
+                    padding: '0 14px', height: 44, gap: 6, flex: 1,
+                }}>
+                    <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{sym}</span>
+                    <input
+                        ref={amountInputRef}
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        value={formatDisplay(rawAmount)}
+                        onChange={(e) => {
+                            const val = cleanNum(e.target.value)
+                            setRawAmount(val)
+                            const num = parseFloat(val) || 0
+                            if (entryMode === 'yearly') {
+                                updateLoanAmount(val)
+                                if (num > 0 && monthCount > 0) {
+                                    const amounts = splitEvenly(num, monthCount)
+                                    const ni = {}; const nr = {}
+                                    months.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
+                                    updateInstalmentAmounts(ni); setRawInstalments(nr)
+                                }
+                            } else {
+                                const yearly = num * monthCount
+                                updateLoanAmount(String(Math.round(yearly * 100) / 100))
+                                const ni = {}; const nr = {}
+                                months.forEach(m => { ni[m] = val; nr[m] = val })
+                                updateInstalmentAmounts(ni); setRawInstalments(nr)
+                            }
+                        }}
+                        style={{
+                            flex: 1, border: 'none', background: 'transparent',
+                            fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
+                            color: '#000', outline: 'none', padding: 0,
+                        }}
+                    />
+                </div>
+                <div style={{ position: 'relative' }}>
+                    <select
+                        value={entryMode}
+                        onChange={(e) => {
+                            const id = e.target.value
                             if (id === 'per_instalment' && entryMode !== 'per_instalment') {
-                                // Split yearly into equal instalments
                                 if (totalNum > 0 && monthCount > 0) {
-                                    const amounts = splitEvenly(totalNum, monthCount)
-                                    const newInstalments = {}; const newRaw = {}
-                                    months.forEach((m, i) => { newInstalments[m] = String(amounts[i]); newRaw[m] = String(amounts[i]) })
-                                    updateInstalmentAmounts(newInstalments)
-                                    setRawInstalments(newRaw)
+                                    const perAmt = Math.round(totalNum / monthCount * 100) / 100
+                                    setRawAmount(String(perAmt))
+                                    const ni = {}; const nr = {}
+                                    months.forEach(m => { ni[m] = String(perAmt); nr[m] = String(perAmt) })
+                                    updateInstalmentAmounts(ni); setRawInstalments(nr)
                                 }
                             }
                             if (id === 'yearly' && entryMode !== 'yearly') {
-                                // Sum instalments back to yearly
                                 const total = months.reduce((s, m) => s + (parseFloat(String(instalmentAmounts?.[m] || '').replace(/,/g, '')) || 0), 0)
                                 if (total > 0) { setRawAmount(String(Math.round(total * 100) / 100)); updateLoanAmount(String(Math.round(total * 100) / 100)) }
                             }
                             setEntryMode(id)
                         }}
                         style={{
-                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            padding: '8px 0', borderRadius: 50, cursor: 'pointer',
-                            position: 'relative', zIndex: 1,
-                            color: entryMode === id ? '#fff' : '#1a1a1a',
-                            fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                            transition: entryMode === id ? 'color 0.12s ease 0.12s' : 'color 0.15s ease 0.15s',
+                            height: 44, border: '1px solid #e8e8e8',
+                            borderRadius: '0 10px 10px 0', padding: '0 28px 0 12px',
+                            fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                            color: '#147b75', background: 'rgba(20,123,117,0.06)',
+                            WebkitAppearance: 'none', appearance: 'none',
+                            cursor: 'pointer', outline: 'none',
                         }}
-                    >{label}</div>
-                ))}
-            </div>
-
-            {/* Amount input */}
-            <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>
-                {entryMode === 'yearly' ? 'Yearly loan amount' : 'Amount per instalment'}
-            </p>
-            <div style={{
-                display: 'inline-flex', alignItems: 'center',
-                border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
-                padding: '0 14px', height: 44, gap: 6, width: 160, marginBottom: 12,
-            }}>
-                <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{sym}</span>
-                <input
-                    ref={amountInputRef}
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    value={formatDisplay(rawAmount)}
-                    onChange={(e) => {
-                        const val = cleanNum(e.target.value)
-                        setRawAmount(val)
-                        const num = parseFloat(val) || 0
-                        if (entryMode === 'yearly') {
-                            updateLoanAmount(val)
-                            // Auto-split into equal instalments
-                            if (num > 0 && monthCount > 0) {
-                                const amounts = splitEvenly(num, monthCount)
-                                const newInstalments = {}; const newRaw = {}
-                                months.forEach((m, i) => { newInstalments[m] = String(amounts[i]); newRaw[m] = String(amounts[i]) })
-                                updateInstalmentAmounts(newInstalments)
-                                setRawInstalments(newRaw)
-                            }
-                        } else {
-                            // Per instalment — multiply to get yearly
-                            const yearly = num * monthCount
-                            updateLoanAmount(String(Math.round(yearly * 100) / 100))
-                            // Set all months to same amount
-                            const newInstalments = {}; const newRaw = {}
-                            months.forEach(m => { newInstalments[m] = val; newRaw[m] = val })
-                            updateInstalmentAmounts(newInstalments)
-                            setRawInstalments(newRaw)
-                        }
-                    }}
-                    style={{
-                        flex: 1, border: 'none', background: 'transparent',
-                        fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
-                        color: '#000', outline: 'none', padding: 0,
-                    }}
-                />
+                    >
+                        <option value="yearly">per year</option>
+                        <option value="per_instalment">per instalment</option>
+                    </select>
+                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                        <path d="M1 1L5 5L9 1" stroke="#147b75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </div>
             </div>
 
             {/* Summary */}
