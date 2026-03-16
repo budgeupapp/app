@@ -103,7 +103,7 @@ export default function FamilyFriendsStep({
     compact = false,
     heading = 'Family & Friends',
     subtitle = 'Regular money from parents, family, or friends.',
-}) {
+children, }) {
     const amountPeriod = familyAmountPeriod || familyFrequency || 'monthly'
     // When amountPeriod is not yearly, frequency always matches amountPeriod
     const freq = amountPeriod === 'yearly' ? (familyFrequency || 'monthly') : amountPeriod
@@ -237,7 +237,7 @@ export default function FamilyFriendsStep({
                 </div>
             )}
 
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+            <div style={{ flex: 1, overflowY: 'visible', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
                 {(() => {
                     const showDual = amountPeriod !== 'yearly' && familyVariesByTerm && (freq === 'weekly' || freq === 'monthly')
@@ -476,6 +476,7 @@ export default function FamilyFriendsStep({
 
                 {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
+            {children}
         </div>
     )
 }

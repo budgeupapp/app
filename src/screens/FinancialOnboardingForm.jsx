@@ -2162,6 +2162,56 @@ export default function FinancialOnboardingForm({ onComplete }) {
         const panelOnNext = activePanel === 0 ? handleTermDatesNext : handlePanelNext
         const panelOnBack = handlePanelBack
 
+        const renderButtons = (panelIdx) => {
+            const pid = PANEL_STEPS[panelIdx]
+            const showSkip = PANEL_TO_SOURCE[pid] || pid === 'oneOffItems'
+            return (<>
+                <div style={{ flex: 1 }} />
+                <div style={{
+                    padding: '16px 24px calc(14px + env(safe-area-inset-bottom, 0px))',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                }}>
+                    <div style={{
+                        width: panelIdx > 0 ? 48 : 0, height: 48,
+                        opacity: panelIdx > 0 ? 1 : 0,
+                        overflow: 'hidden', flexShrink: 0,
+                        marginRight: panelIdx > 0 ? 0 : -12,
+                        transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-right 0.3s ease',
+                    }}>
+                        <button onClick={panelOnBack} style={{
+                            width: 48, height: 48, borderRadius: 50,
+                            border: 'none', background: '#e8e8e8',
+                            cursor: 'pointer', padding: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                                <path d="M12 15L7 10L12 5" stroke="#4b4a4a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
+                    </div>
+                    <button onClick={panelOnNext} style={{
+                        flex: 1, height: 48, background: '#147b75', color: '#fff',
+                        border: 'none', borderRadius: 50, fontSize: 16, fontWeight: 700,
+                        fontFamily: 'Nunito, sans-serif', cursor: 'pointer', letterSpacing: 0.3,
+                    }}>
+                        {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[panelIdx]}
+                    </button>
+                    <div style={{
+                        overflow: 'hidden', flexShrink: 0,
+                        width: showSkip ? 36 : 0, opacity: showSkip ? 1 : 0,
+                        transition: 'width 0.3s ease, opacity 0.2s ease, margin-left 0.3s ease',
+                        marginLeft: showSkip ? 0 : -12,
+                    }}>
+                        <button onClick={handlePanelSkip} style={{
+                            background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px',
+                            fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                            color: '#888', whiteSpace: 'nowrap',
+                        }}>Skip</button>
+                    </div>
+                </div>
+            </>)
+        }
+
         const toastEl = toast && (
             <>
                 <div onClick={dismissToast} style={{ position: 'fixed', inset: 0, zIndex: 9998 }} />
@@ -2440,7 +2490,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} style={{
                                 position: 'absolute', inset: 0,
                                 display: 'flex', flexDirection: 'column',
-                                overflow: 'hidden',
+                                overflowY: 'auto', overflowX: 'hidden',
+                                WebkitOverflowScrolling: 'touch',
                                 opacity: i === activePanel ? 1 : 0,
                                 pointerEvents: i === activePanel ? 'auto' : 'none',
                                 background: '#f5f7f7',
@@ -2451,26 +2502,25 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateTermDates={(data) => updateField('termDates', data)}
                                         expandedTerm={activeExpanded}
                                         onExpandedTermChange={setExpandedTerm}
-                                    />
+                                    >{i === activePanel && renderButtons(i)}</TermDatesStep>
                                 )}
                                 {panelId === 'balance' && (
                                     <BankBalanceStep
                                         balance={formData.balance}
                                         updateBalance={(val) => updateField('balance', val)}
-
-                                    />
+                                    >{i === activePanel && renderButtons(i)}</BankBalanceStep>
                                 )}
                                 {panelId === 'overdraft' && (
                                     <OverdraftStep
                                         overdraft={formData.overdraft}
                                         updateOverdraft={(val) => updateField('overdraft', val)}
-                                    />
+                                    >{i === activePanel && renderButtons(i)}</OverdraftStep>
                                 )}
                                 {panelId === 'regularIncome' && (
                                     <RegularIncomeStep
                                         incomeSources={formData.incomeSources || []}
                                         updateIncomeSources={(val) => updateField('incomeSources', val)}
-                                    />
+                                    >{i === activePanel && renderButtons(i)}</RegularIncomeStep>
                                 )}
                                 {!['termDates', 'balance', 'overdraft', 'regularIncome', 'regularExpenses', 'savingsInvestments', 'otherExpense', 'summary'].includes(panelId) && new Set(buildGraphEvents(formData).filter(e => !e.removed).map(e => e.editType)).size >= 2 && (() => {
                                     const incPanels = ['maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
@@ -2669,6 +2719,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                         + Add another income
                                                     </button>
                                                 </div>
+                                                {i === activePanel && renderButtons(i)}
                                             </div>
                                         </div>
                                     )
@@ -2700,7 +2751,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     <RegularExpensesStep
                                         expenseSources={formData.expenseSources || []}
                                         updateExpenseSources={(val) => updateField('expenseSources', val)}
-                                    />
+                                    >{i === activePanel && renderButtons(i)}</RegularExpensesStep>
                                 )}
                                 {panelId === 'bills' && (
                                     <BillsStep
@@ -2854,6 +2905,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                         + Add another expense
                                                     </button>
                                                 </div>
+                                                {i === activePanel && renderButtons(i)}
                                             </div>
                                         </div>
                                     )
@@ -2862,7 +2914,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     <OneOffItemsStep
                                         items={formData.oneOffItems || [{ name: '', amount: '', date: '', direction: 'out' }]}
                                         updateItems={(val) => updateField('oneOffItems', val)}
-                                    />
+                                    >{i === activePanel && renderButtons(i)}</OneOffItemsStep>
                                 )}
                                 {panelId === 'weeklySpend' && (
                                     <WeeklySpendStep
@@ -3102,75 +3154,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
 
 
-                    {/* Bottom buttons with white fade */}
-                    <div style={{
-                        flexShrink: 0,
-                        background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.85) 30%, #fff 100%)',
-                        padding: '20px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                    }}>
-                        <div style={{
-                            width: activePanel > 0 ? 48 : 0,
-                            height: 48,
-                            opacity: activePanel > 0 ? 1 : 0,
-                            overflow: 'hidden',
-                            flexShrink: 0,
-                            marginRight: activePanel > 0 ? 0 : -12,
-                            transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-right 0.3s ease',
-                        }}>
-                            <button
-                                onClick={panelOnBack}
-                                style={{
-                                    width: 48, height: 48, borderRadius: 50,
-                                    border: 'none', background: '#f0f0f0',
-                                    cursor: 'pointer', padding: 0,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                }}
-                            >
-                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                    <path d="M12 15L7 10L12 5" stroke="#4b4a4a"
-                                        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                            </button>
-                        </div>
-                        <button
-                            onClick={panelOnNext}
-                            style={{
-                                flex: 1, height: 48,
-                                background: '#147b75',
-                                color: '#fff',
-                                border: 'none', borderRadius: 50,
-                                fontSize: 16, fontWeight: 700,
-                                fontFamily: 'Nunito, sans-serif',
-                                cursor: 'pointer', letterSpacing: 0.3,
-                                
-                            }}
-                        >
-                            {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[activePanel]}
-                        </button>
-                        <div style={{
-                            overflow: 'hidden', flexShrink: 0,
-                            width: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 36 : 0,
-                            opacity: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 1 : 0,
-                            transition: 'width 0.3s ease, opacity 0.2s ease, margin-left 0.3s ease',
-                            marginLeft: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 0 : -12,
-                        }}>
-                            <button
-                                onClick={handlePanelSkip}
-                                style={{
-                                    background: 'none', border: 'none',
-                                    cursor: 'pointer', padding: '0 4px',
-                                    fontSize: 13, fontWeight: 600,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#888', whiteSpace: 'nowrap',
-                                }}
-                            >
-                                Skip
-                            </button>
-                        </div>
-                    </div>
+                    {/* (Buttons now rendered inline inside each panel) */}
                 </div>
 
 

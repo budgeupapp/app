@@ -83,7 +83,7 @@ function EyeOffIcon() {
     )
 }
 
-export default function OneOffItemsStep({ items, updateItems, compact = false, minDate = null }) {
+export default function OneOffItemsStep({ items, updateItems, compact = false, minDate = null, children, }) {
     const scrollRef = useRef(null)
     const [focusedField, setFocusedField] = useState(null)
     const [dateError, setDateError] = useState(null)
@@ -331,7 +331,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
             )}
 
             <div style={{
-                flex: 1, overflowY: 'auto', overflowX: 'hidden',
+                flex: 1, overflowY: 'visible', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: compact ? '0 0 24px' : '0 24px 24px',
                 minHeight: 0,
@@ -534,6 +534,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
             </div>
 
             {/* Date error toast */}
+            {children}
             {dateError && (
                 <div style={{
                     position: 'fixed', bottom: 100, left: '50%', transform: 'translateX(-50%)',

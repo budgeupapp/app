@@ -16,7 +16,7 @@ function CheckIcon() {
     )
 }
 
-export default function RegularExpensesStep({ expenseSources = [], updateExpenseSources, heading = 'Expenses', subtitle = 'Include your main regular expenses.' }) {
+export default function RegularExpensesStep({ expenseSources, children = [], updateExpenseSources, heading = 'Expenses', subtitle = 'Include your main regular expenses.' }) {
     const toggle = (id) => {
         const next = expenseSources.includes(id)
             ? expenseSources.filter(s => s !== id)
@@ -43,7 +43,7 @@ export default function RegularExpensesStep({ expenseSources = [], updateExpense
             </div>
 
             <div style={{
-                flex: 1, overflowY: 'auto',
+                flex: 1, overflowY: 'visible',
                 padding: '12px 19px 16px',
                 display: 'flex', flexDirection: 'column', gap: 6,
             }}>
@@ -99,6 +99,7 @@ export default function RegularExpensesStep({ expenseSources = [], updateExpense
                     )
                 })}
             </div>
+            {children}
         </div>
     )
 }

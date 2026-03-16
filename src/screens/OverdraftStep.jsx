@@ -13,7 +13,7 @@ export default function OverdraftStep({
     updateOverdraft,
     heading = 'Overdraft Limit',
     subtitle = "Leave blank if you don't have one.",
-}) {
+children, }) {
     const [rawAmount, setRawAmount] = useState(() => {
         const n = parseFloat(String(overdraft || '').replace(/,/g, ''))
         return n ? String(n) : ''
@@ -34,7 +34,7 @@ export default function OverdraftStep({
     }
 
     return (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px 16px' }}>
+        <div style={{ flex: 1, overflowY: 'visible', padding: '18px 24px 16px' }}>
             <h2 style={{
                 fontSize: 25, fontWeight: 700,
                 fontFamily: 'Nunito, sans-serif',
@@ -77,6 +77,7 @@ export default function OverdraftStep({
                     }}
                 />
             </div>
+            {children}
         </div>
     )
 }

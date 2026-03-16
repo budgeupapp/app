@@ -106,7 +106,7 @@ export default function WorkIncomeStep({
     compact = false,
     heading = 'Work',
     subtitle = 'Part-time jobs, freelancing, or casual work.',
-}) {
+children, }) {
     // Backwards compat: derive amountPeriod from old entryMode if not set
     const amountPeriod = workAmountPeriod || workFrequency || 'monthly'
     // When amountPeriod is not yearly, frequency always matches amountPeriod
@@ -240,7 +240,7 @@ export default function WorkIncomeStep({
                 </div>
             )}
 
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+            <div style={{ flex: 1, overflowY: 'visible', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
                 {(() => {
                     const showDual = amountPeriod !== 'yearly' && workVariesByTerm && (freq === 'weekly' || freq === 'monthly')
@@ -479,6 +479,7 @@ export default function WorkIncomeStep({
 
                 {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
+            {children}
         </div>
     )
 }

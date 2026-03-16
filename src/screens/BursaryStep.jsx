@@ -88,7 +88,7 @@ export default function BursaryStep({
     compact = false,
     heading = 'Bursary',
     subtitle = "Scholarships, grants, or uni bursaries you've been awarded.",
-}) {
+children, }) {
     const [tab, setTab] = useState('yearly')
     const [rawAmount, setRawAmount] = useState(() => {
         const n = parseFloat(String(bursaryAmount || '').replace(/,/g, ''))
@@ -165,17 +165,6 @@ export default function BursaryStep({
     const scrollInputToTop = (e) => {
         if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
         setInputFocused(true)
-        setTimeout(() => {
-            const card = document.querySelector('[data-instalment-card]')
-            if (!card) return
-            const container = scrollRef.current
-            if (!container) return
-            const containerRect = container.getBoundingClientRect()
-            const cardRect = card.getBoundingClientRect()
-            if (cardRect.top < containerRect.top || cardRect.top > containerRect.top + 60) {
-                card.previousElementSibling?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }
-        }, 350)
     }
 
     const handleInputBlur = () => {
@@ -278,7 +267,7 @@ export default function BursaryStep({
             )}
 
             <div style={{
-                flex: 1, overflowY: 'auto', overflowX: 'hidden',
+                flex: 1, overflowY: 'visible', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: compact ? '0 24px 0' : '0 24px 24px',
                 marginBottom: -5,
@@ -403,10 +392,10 @@ export default function BursaryStep({
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 10px',
                 }}>
-                    {tab === 'instalment' ? 'Instalment months' : 'Which months do you receive instalments?'}
+                    {tab === 'instalment' ? 'Instalment months & amounts' : 'Which months do you receive instalments?'}
                 </p>
 
-                <div style={{
+                <div data-instalment-card style={{
                     border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
                     overflow: 'hidden',
                     marginBottom: 16,
@@ -440,6 +429,51 @@ export default function BursaryStep({
                         })}
                     </div>
 
+                    {/* Per-instalment amount rows */}
+                    {tab === 'instalment' && months.length > 0 && (
+                        <div style={{ borderTop: '1px solid #eee' }}>
+                            {months.map((m, i) => (
+                                <div key={m} style={{
+                                    display: 'flex', alignItems: 'center',
+                                    padding: '0 14px', height: 44,
+                                    gap: 8,
+                                    borderTop: i > 0 ? '1px solid #f0f0f0' : 'none',
+                                }}>
+                                    <span style={{
+                                        fontSize: 13, fontWeight: 700,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        color: '#147b75', minWidth: 32,
+                                    }}>
+                                        {SHORT_MONTH[m]}
+                                    </span>
+                                    <div style={{ width: 1, height: 20, background: '#e8e8e8' }} />
+                                    <span style={{
+                                        fontSize: 15, fontWeight: 600,
+                                        color: '#888', fontFamily: 'Nunito, sans-serif',
+                                    }}>{getCurrencySymbol()}</span>
+                                    <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        value={formatDisplay(rawInstalments[m] || '')}
+                                        onChange={(e) => handleInstalmentChange(m, e)}
+                                        onTouchStart={handleInputTouchStart}
+                                        onFocus={scrollInputToTop}
+                                        onBlur={handleInputBlur}
+                                        style={{
+                                            flex: 1, border: 'none',
+                                            background: 'transparent',
+                                            fontSize: 15, fontWeight: 500,
+                                            fontFamily: 'Nunito, sans-serif',
+                                            color: '#000', outline: 'none',
+                                            padding: 0,
+                                        }}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {/* Payment dates accordion */}
                     <div
                         ref={datesBoxRef}
@@ -461,7 +495,6 @@ export default function BursaryStep({
                         style={{
                             padding: '10px 12px 12px',
                             cursor: 'pointer',
-                            marginTop: 4,
                             borderTop: '1px solid #eee',
                         }}
                     >
@@ -524,7 +557,6 @@ export default function BursaryStep({
                                                 padding: '3px 10px',
                                                 borderRadius: 8,
                                                 display: 'inline-block',
-                                                pointerEvents: 'none',
                                             }}>
                                                 {(bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m]) ? fmt(bursaryDates?.[m] || DEFAULT_BURSARY_DATES[m]) : 'Select date'}
                                             </span>
@@ -557,62 +589,9 @@ export default function BursaryStep({
                     </div>
                 </div>
 
-                {/* Per-instalment amount inputs — separate container */}
-                {tab === 'instalment' && months.length > 0 && (<>
-                    <p style={{
-                        fontSize: 14, fontWeight: 700,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#000', margin: '0 0 10px',
-                    }}>Instalment amounts</p>
-                    <div data-instalment-card style={{
-                        border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
-                        overflow: 'hidden',
-                        marginBottom: 16,
-                    }}>
-                        {months.map((m, i) => (
-                            <div key={m} style={{
-                                display: 'flex', alignItems: 'center',
-                                padding: '0 14px', height: 44,
-                                gap: 8,
-                                borderTop: i > 0 ? '1px solid #f0f0f0' : 'none',
-                            }}>
-                                <span style={{
-                                    fontSize: 13, fontWeight: 700,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#147b75', minWidth: 32,
-                                }}>
-                                    {SHORT_MONTH[m]}
-                                </span>
-                                <div style={{ width: 1, height: 20, background: '#e8e8e8' }} />
-                                <span style={{
-                                    fontSize: 15, fontWeight: 600,
-                                    color: '#888', fontFamily: 'Nunito, sans-serif',
-                                }}>{getCurrencySymbol()}</span>
-                                <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    placeholder="0.00"
-                                    value={formatDisplay(rawInstalments[m] || '')}
-                                    onChange={(e) => handleInstalmentChange(m, e)}
-                                    onTouchStart={handleInputTouchStart}
-                                    onFocus={scrollInputToTop}
-                                    onBlur={handleInputBlur}
-                                    style={{
-                                        flex: 1, border: 'none',
-                                        background: 'transparent',
-                                        fontSize: 15, fontWeight: 500,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#000', outline: 'none',
-                                        padding: 0,
-                                    }}
-                                />
-                            </div>
-                        ))}
-                    </div>
-                </>)}
-
                 {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
+            {children}
         </div>
     )
 }

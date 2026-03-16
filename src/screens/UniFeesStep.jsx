@@ -50,7 +50,7 @@ export default function UniFeesStep({
     compact = false,
     heading = 'University Fees',
     subtitle = 'Tuition or course fees you pay yourself.',
-}) {
+children, }) {
     const amountPeriod = uniFeesAmountPeriod || uniFeesFrequency || 'yearly'
     const freq = amountPeriod === 'yearly' ? (uniFeesFrequency || 'monthly') : amountPeriod
 
@@ -156,7 +156,7 @@ export default function UniFeesStep({
                     <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>{subtitle}</p>
                 </div>
             )}
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+            <div style={{ flex: 1, overflowY: 'visible', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
                 {(() => {
                     const showDual = amountPeriod !== 'yearly' && uniFeesVariesByTerm && (freq === 'weekly' || freq === 'monthly')
@@ -385,6 +385,7 @@ export default function UniFeesStep({
 
                 {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
+            {children}
         </div>
     )
 }

@@ -105,7 +105,7 @@ export default function OtherExpenseStep({
     otherExpenseNonTermAmount, updateOtherExpenseNonTermAmount,
     compact = false,
     onboarding = false,
-}) {
+children, }) {
     const amountPeriod = otherExpenseAmountPeriod || otherExpenseFrequency || 'monthly'
     const freq = amountPeriod === 'yearly' ? (otherExpenseFrequency || 'monthly') : amountPeriod
 
@@ -333,7 +333,7 @@ export default function OtherExpenseStep({
                 </div>
             )}
 
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
+            <div style={{ flex: 1, overflowY: 'visible', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: compact ? '0 24px 8px' : '0 24px 16px', display: 'flex', flexDirection: 'column' }} ref={scrollRef}>
 
                 <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Give it a name</p>
                 <input type="text" placeholder="e.g. Any regular expense" value={otherExpenseLabel || ''} onChange={(e) => updateOtherExpenseLabel(e.target.value)}
@@ -585,6 +585,7 @@ export default function OtherExpenseStep({
 
                 {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
             </div>
+            {children}
         </div>
     )
 }
