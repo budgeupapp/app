@@ -34,20 +34,23 @@ export default function OverdraftStep({
     }
 
     return (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px 8px' }}>
-            <h2 style={{
-                fontSize: 25, fontWeight: 700,
-                fontFamily: 'Nunito, sans-serif',
-                color: '#000', margin: '0 0 8px', lineHeight: 1.3,
-            }}>
-                {heading}
-            </h2>
-            <p style={{
-                fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                color: '#444', margin: '0 0 24px', lineHeight: 1.5,
-            }}>
-                {subtitle}
-            </p>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
+                <h2 style={{
+                    fontSize: 25, fontWeight: 700,
+                    fontFamily: 'Nunito, sans-serif',
+                    color: '#000', margin: '0 0 8px', lineHeight: 1.3,
+                }}>
+                    {heading}
+                </h2>
+                <p style={{
+                    fontSize: 15, fontFamily: 'Nunito, sans-serif',
+                    color: '#444', margin: '0 0 16px', lineHeight: 1.5,
+                }}>
+                    {subtitle}
+                </p>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 8px' }}>
 
             <div style={{
                 display: 'flex', alignItems: 'center',
@@ -76,6 +79,7 @@ export default function OverdraftStep({
                         outline: 'none', padding: 0,
                     }}
                 />
+            </div>
             </div>
         </div>
     )

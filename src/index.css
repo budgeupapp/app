@@ -246,6 +246,13 @@ button:focus {
   flex: 0 0 auto !important;
   overflow: visible !important;
 }
+/* Sticky title in onboarding step cards */
+.onboarding-panel > div:first-child > div:first-child {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 5 !important;
+  background: #f5f7f7 !important;
+}
 
 @keyframes authFadeIn {
   from { opacity: 0; transform: translateY(8px); }
