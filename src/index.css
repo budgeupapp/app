@@ -236,10 +236,26 @@ button:focus {
   }
 }
 
+/* Onboarding panels: disable internal flex/scroll so panel-level scroll works */
+.onboarding-panel > div:first-child {
+  flex: 0 0 auto !important;
+  min-height: auto !important;
+}
+.onboarding-panel > div:first-child > div {
+  flex: 0 0 auto !important;
+}
 /* Disable scroll anchoring in onboarding panels */
 .onboarding-panel {
   overflow-anchor: none;
   scroll-padding-top: 35px;
+}
+/* Hide h2 inside onboarding steps — title rendered in fixed header instead */
+.onboarding-panel > div:first-child > div:first-child > h2 {
+  display: none !important;
+}
+/* Reduce top padding since title is in fixed header */
+.onboarding-panel > div:first-child > div:first-child {
+  padding-top: 0 !important;
 }
 
 @keyframes authFadeIn {
