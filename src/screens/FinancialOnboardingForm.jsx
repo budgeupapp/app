@@ -2468,43 +2468,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 handleSheetDragEnd()
                             }
                         }}
-                        style={{ touchAction: 'none', cursor: 'grab', flexShrink: 0, background: '#f5f7f7', borderBottom: `1px solid ${titleBorderVisible ? '#e0e0e0' : 'transparent'}`, transition: 'border-color 0.2s ease' }}
+                        style={{ touchAction: 'none', cursor: 'grab', flexShrink: 0, background: '#f5f7f7' }}
                     >
-                        <div style={{ display: 'flex', alignItems: 'center', padding: '10px 24px 8px' }}>
-                            <h2 style={{
-                                fontSize: 22, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                                color: '#000', margin: 0, flex: 1,
-                            }}>
-                                {PANEL_HEADING_MAP[PANEL_STEPS[activePanel]] || ''}
-                            </h2>
-                            {PANEL_STEPS[activePanel] === 'termDates' && defaultTermDatesRef.current &&
-                                JSON.stringify(formData.termDates) !== JSON.stringify(defaultTermDatesRef.current) && (
-                                <button
-                                    onTouchStart={(e) => e.stopPropagation()}
-                                    onTouchEnd={(e) => e.stopPropagation()}
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        updateField('termDates', JSON.parse(JSON.stringify(defaultTermDatesRef.current)))
-                                        setExpandedTerms(new Set())
-                                    }}
-                                    style={{
-                                        background: 'none', border: '1.5px solid #ddd',
-                                        borderRadius: 20, cursor: 'pointer',
-                                        padding: '4px 12px',
-                                        fontSize: 12, fontWeight: 700,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#888', whiteSpace: 'nowrap',
-                                        display: 'flex', alignItems: 'center', gap: 4,
-                                    }}
-                                >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                        <path d="M1 4v6h6" />
-                                        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                                    </svg>
-                                    Reset
-                                </button>
-                            )}
-                        </div>
                     </div>
                     {/* Income/expense indicator strip — draggable + tap to toggle */}
                     <div

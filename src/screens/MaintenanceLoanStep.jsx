@@ -267,11 +267,11 @@ function LoanEntry({
 
     return (
         <div>
-            {/* Amount input + frequency dropdown (joined) */}
+            {/* Amount + mode dropdown (joined) */}
             <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>
-                How much is your maintenance loan?
+                How much is your loan?
             </p>
-            <div style={{ display: 'flex', marginBottom: 10 }}>
+            <div style={{ display: 'flex', marginBottom: 12 }}>
                 <div style={{
                     display: 'flex', alignItems: 'center',
                     border: '1px solid #e8e8e8', borderRight: 'none',
@@ -293,16 +293,18 @@ function LoanEntry({
                                 updateLoanAmount(val)
                                 if (num > 0 && monthCount > 0) {
                                     const amounts = splitEvenly(num, monthCount)
-                                    const ni = {}; const nr = {}
-                                    months.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
-                                    updateInstalmentAmounts(ni); setRawInstalments(nr)
+                                    const newInstalments = {}; const newRaw = {}
+                                    months.forEach((m, i) => { newInstalments[m] = String(amounts[i]); newRaw[m] = String(amounts[i]) })
+                                    updateInstalmentAmounts(newInstalments)
+                                    setRawInstalments(newRaw)
                                 }
                             } else {
                                 const yearly = num * monthCount
                                 updateLoanAmount(String(Math.round(yearly * 100) / 100))
-                                const ni = {}; const nr = {}
-                                months.forEach(m => { ni[m] = val; nr[m] = val })
-                                updateInstalmentAmounts(ni); setRawInstalments(nr)
+                                const newInstalments = {}; const newRaw = {}
+                                months.forEach(m => { newInstalments[m] = val; newRaw[m] = val })
+                                updateInstalmentAmounts(newInstalments)
+                                setRawInstalments(newRaw)
                             }
                         }}
                         style={{
@@ -319,11 +321,13 @@ function LoanEntry({
                             const id = e.target.value
                             if (id === 'per_instalment' && entryMode !== 'per_instalment') {
                                 if (totalNum > 0 && monthCount > 0) {
-                                    const perAmt = Math.round(totalNum / monthCount * 100) / 100
-                                    setRawAmount(String(perAmt))
-                                    const ni = {}; const nr = {}
-                                    months.forEach(m => { ni[m] = String(perAmt); nr[m] = String(perAmt) })
-                                    updateInstalmentAmounts(ni); setRawInstalments(nr)
+                                    const per = Math.round(totalNum / monthCount * 100) / 100
+                                    setRawAmount(String(per))
+                                    const amounts = splitEvenly(totalNum, monthCount)
+                                    const newInstalments = {}; const newRaw = {}
+                                    months.forEach((m, i) => { newInstalments[m] = String(amounts[i]); newRaw[m] = String(amounts[i]) })
+                                    updateInstalmentAmounts(newInstalments)
+                                    setRawInstalments(newRaw)
                                 }
                             }
                             if (id === 'yearly' && entryMode !== 'yearly') {
@@ -334,7 +338,8 @@ function LoanEntry({
                         }}
                         style={{
                             height: 44, border: '1px solid #e8e8e8',
-                            borderRadius: '0 10px 10px 0', padding: '0 28px 0 12px',
+                            borderRadius: '0 10px 10px 0',
+                            padding: '0 28px 0 10px',
                             fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
                             color: '#147b75', background: 'rgba(20,123,117,0.06)',
                             WebkitAppearance: 'none', appearance: 'none',
