@@ -71,9 +71,115 @@ function Chevron({ open }) {
     )
 }
 
-/* ---------- MAIN ---------- */
+/* ---------- MAIN (multi-loan wrapper) ---------- */
 
 export default function MaintenanceLoanStep({
+    loans = [],
+    updateLoans,
+    compact = false,
+    heading = 'Maintenance Loan',
+    subtitle = "Enter the loan you're given for rent and living costs.",
+}) {
+    const addLoan = () => {
+        updateLoans([...loans, {
+            id: `loan_${Date.now()}`,
+            amount: '',
+            months: [...DEFAULT_LOAN_MONTHS],
+            knowDates: false,
+            dates: {},
+            instalmentAmounts: {},
+        }])
+    }
+
+    const removeLoan = (idx) => {
+        if (loans.length <= 1) return
+        updateLoans(loans.filter((_, i) => i !== idx))
+    }
+
+    const updateLoan = (idx, field, value) => {
+        const updated = loans.map((loan, i) => i === idx ? { ...loan, [field]: value } : loan)
+        updateLoans(updated)
+    }
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            {!compact && (
+                <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
+                    <h2 style={{
+                        fontSize: 25, fontWeight: 700,
+                        fontFamily: 'Nunito, sans-serif',
+                        color: '#000', margin: '0 0 4px', lineHeight: 1.3,
+                    }}>
+                        {heading}
+                    </h2>
+                    <p style={{
+                        fontSize: 15, fontFamily: 'Nunito, sans-serif',
+                        color: '#444', margin: '0 0 16px', lineHeight: 1.5,
+                    }}>
+                        {subtitle}
+                    </p>
+                </div>
+            )}
+            <div style={{
+                flex: 1, overflowY: 'auto', overflowX: 'hidden',
+                WebkitOverflowScrolling: 'touch',
+                padding: compact ? '0 24px 0' : '0 24px 24px',
+                minHeight: 0,
+            }}>
+                {loans.map((loan, idx) => (
+                    <div key={loan.id || idx}>
+                        {idx > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '16px 0 8px' }}>
+                                <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Loan {idx + 1}</span>
+                                <button onClick={() => removeLoan(idx)} style={{
+                                    background: 'none', border: 'none', cursor: 'pointer',
+                                    fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#d4566a',
+                                }}>Remove</button>
+                            </div>
+                        )}
+                        <LoanEntry
+                            loanAmount={loan.amount}
+                            updateLoanAmount={(val) => updateLoan(idx, 'amount', val)}
+                            loanMonths={loan.months}
+                            updateLoanMonths={(val) => updateLoan(idx, 'months', val)}
+                            loanKnowDates={loan.knowDates}
+                            updateLoanKnowDates={(val) => updateLoan(idx, 'knowDates', val)}
+                            loanDates={loan.dates}
+                            updateLoanDates={(val) => updateLoan(idx, 'dates', val)}
+                            instalmentAmounts={loan.instalmentAmounts}
+                            updateInstalmentAmounts={(val) => updateLoan(idx, 'instalmentAmounts', val)}
+                            compact
+                        />
+                    </div>
+                ))}
+                <button
+                    onClick={addLoan}
+                    style={{
+                        width: '100%', height: 40,
+                        background: 'transparent',
+                        border: '1.5px dashed #ddd',
+                        borderRadius: 14,
+                        fontSize: 14, fontWeight: 700,
+                        fontFamily: 'Nunito, sans-serif',
+                        color: '#147b75', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', gap: 6,
+                        marginTop: 16,
+                    }}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    Add another loan
+                </button>
+            </div>
+        </div>
+    )
+}
+
+/* ---------- SINGLE LOAN ENTRY ---------- */
+
+function LoanEntry({
     loanAmount,
     updateLoanAmount,
     loanMonths,
@@ -85,8 +191,6 @@ export default function MaintenanceLoanStep({
     instalmentAmounts,
     updateInstalmentAmounts,
     compact = false,
-    heading = 'Maintenance Loan',
-    subtitle = "Enter the loan you're given for rent and living costs.",
 }) {
     const [tab, setTab] = useState('yearly') // 'yearly' | 'instalment'
     const [rawAmount, setRawAmount] = useState(() => {
@@ -250,42 +354,7 @@ export default function MaintenanceLoanStep({
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            {/* Title */}
-            {!compact && (
-                <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                    <h2 style={{
-                        fontSize: 25, fontWeight: 700,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#000', margin: '0 0 8px', lineHeight: 1.3,
-                    }}>
-                        {heading}
-                    </h2>
-                    <p style={{
-                        fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                        color: '#444', margin: '0 0 16px', lineHeight: 1.5,
-                    }}>
-                        {subtitle}{' '}
-                        <span
-                            onClick={() => window.open('https://www.gov.uk/student-finance/new-fulltime-students', '_blank')}
-                            style={{
-                                color: '#147b75', fontWeight: 500,
-                                textDecoration: 'underline',
-                                cursor: 'pointer',
-                            }}
-                        >Click here for more info.</span>
-                    </p>
-                </div>
-            )}
-
-            {/* Scrollable content */}
-            <div style={{
-                flex: 1, overflowY: 'auto', overflowX: 'hidden',
-                WebkitOverflowScrolling: 'touch',
-                padding: compact ? '0 24px 0' : '0 24px 24px',
-                marginBottom: -5,
-                minHeight: 0,
-            }} ref={scrollRef}>
+        <div>
                 {/* Tab switcher */}
                 {(() => {
                     const tabs = [
@@ -443,14 +512,14 @@ export default function MaintenanceLoanStep({
                         })}
                     </div>
 
-                    {/* Per-instalment amount rows — appear when in instalment tab */}
+                    {/* Per-instalment rows: month | amount | date */}
                     {tab === 'instalment' && months.length > 0 && (
                         <div style={{ borderTop: '1px solid #eee' }}>
                             {months.map((m, i) => (
                                 <div key={m} style={{
                                     display: 'flex', alignItems: 'center',
                                     padding: '0 14px', height: 44,
-                                    gap: 8,
+                                    gap: 6,
                                     borderTop: i > 0 ? '1px solid #f0f0f0' : 'none',
                                 }}>
                                     <span style={{
@@ -462,7 +531,7 @@ export default function MaintenanceLoanStep({
                                     </span>
                                     <div style={{ width: 1, height: 20, background: '#e8e8e8' }} />
                                     <span style={{
-                                        fontSize: 15, fontWeight: 600,
+                                        fontSize: 14, fontWeight: 600,
                                         color: '#888', fontFamily: 'Nunito, sans-serif',
                                     }}>{getCurrencySymbol()}</span>
                                     <input
@@ -477,136 +546,49 @@ export default function MaintenanceLoanStep({
                                         style={{
                                             flex: 1, border: 'none',
                                             background: 'transparent',
-                                            fontSize: 15, fontWeight: 500,
+                                            fontSize: 14, fontWeight: 500,
                                             fontFamily: 'Nunito, sans-serif',
                                             color: '#000', outline: 'none',
-                                            padding: 0,
+                                            padding: 0, minWidth: 50,
                                         }}
                                     />
+                                    <div style={{ width: 1, height: 20, background: '#e8e8e8' }} />
+                                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                                        <span style={{
+                                            fontSize: 12, fontWeight: 600,
+                                            color: '#147b75',
+                                            fontFamily: 'Nunito, sans-serif',
+                                            pointerEvents: 'none',
+                                            background: 'rgba(20,123,117,0.08)',
+                                            padding: '3px 8px',
+                                            borderRadius: 6,
+                                            display: 'inline-block',
+                                            whiteSpace: 'nowrap',
+                                        }}>
+                                            {loanDates?.[m] ? fmt(loanDates[m]) : 'Date'}
+                                        </span>
+                                        <input
+                                            type="date"
+                                            value={loanDates?.[m] || getMonthRange(m).min}
+                                            min={getMonthRange(m).min}
+                                            max={getMonthRange(m).max}
+                                            onFocus={() => { dateActiveRef.current = true }}
+                                            onBlur={() => { dateActiveRef.current = false }}
+                                            onChange={(e) => e.target.value && handleDateChange(m, e.target.value)}
+                                            style={{
+                                                position: 'absolute', inset: 0,
+                                                opacity: 0, width: '100%', height: '100%',
+                                                cursor: 'pointer', fontSize: 16,
+                                            }}
+                                        />
+                                    </div>
                                 </div>
                             ))}
                         </div>
                     )}
 
-                    {/* Payment dates accordion */}
-                    <div
-                        ref={datesBoxRef}
-                        onClick={() => {
-                            const next = !datesExpanded
-                            setDatesExpanded(next)
-                            if (next) {
-                                updateLoanKnowDates(true)
-                                setTimeout(() => {
-                                    const container = scrollRef.current
-                                    const box = datesBoxRef.current
-                                    if (!container || !box) return
-                                    const containerRect = container.getBoundingClientRect()
-                                    const boxRect = box.getBoundingClientRect()
-                                    const scrollOffset = boxRect.top - containerRect.top + container.scrollTop
-                                    container.scrollTo({ top: Math.max(0, scrollOffset - 2), behavior: 'smooth' })
-                                }, 320)
-                            }
-                        }}
-                        style={{
-                            padding: '10px 12px 12px',
-                            cursor: 'pointer',
-                            borderTop: '1px solid #eee',
-                        }}
-                    >
-                        <div style={{
-                            display: 'flex', alignItems: 'center',
-                            justifyContent: 'space-between',
-                        }}>
-                            <div>
-                                <p style={{
-                                    fontSize: 14, fontWeight: 600,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#000', margin: 0,
-                                }}>
-                                    I know the exact payment dates
-                                </p>
-                                <p style={{
-                                    fontSize: 10, fontWeight: 500,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#444', margin: '2px 0 0',
-                                }}>
-                                    Optional – improves accuracy
-                                </p>
-                            </div>
-                            <Chevron open={datesExpanded} />
-                        </div>
-
-                        <div
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                                maxHeight: datesExpanded ? 500 : 0,
-                                opacity: datesExpanded ? 1 : 0,
-                                overflow: 'hidden',
-                                transition: 'max-height 0.3s ease, opacity 0.2s ease',
-                            }}
-                        >
-                            <div style={{
-                                marginTop: 10,
-                                display: 'flex', flexDirection: 'column', gap: 8,
-                            }}>
-                                {months.map(m => (
-                                    <div key={m} style={{
-                                        display: 'flex', alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        padding: '6px 0',
-                                    }}>
-                                        <span style={{
-                                            fontSize: 13, color: '#888',
-                                            fontWeight: 600,
-                                            fontFamily: 'Nunito, sans-serif',
-                                        }}>
-                                            {MONTH_LABELS[m]}
-                                        </span>
-                                        <div style={{ position: 'relative' }}>
-                                            <span style={{
-                                                fontSize: 13, fontWeight: 700,
-                                                color: '#147b75',
-                                                fontFamily: 'Nunito, sans-serif',
-                                                pointerEvents: 'none',
-                                                background: 'rgba(20,123,117,0.08)',
-                                                padding: '3px 10px',
-                                                borderRadius: 8,
-                                                display: 'inline-block',
-                                            }}>
-                                                {loanDates?.[m] ? fmt(loanDates[m]) : 'Select date'}
-                                            </span>
-                                            <input
-                                                type="date"
-                                                value={loanDates?.[m] || getMonthRange(m).min}
-                                                min={getMonthRange(m).min}
-                                                max={getMonthRange(m).max}
-                                                onFocus={() => {
-                                                    dateActiveRef.current = true
-                                                    const container = scrollRef.current
-                                                    if (container) {
-                                                        const pos = container.scrollTop
-                                                        requestAnimationFrame(() => { container.scrollTop = pos })
-                                                    }
-                                                }}
-                                                onBlur={() => { dateActiveRef.current = false }}
-                                                onChange={(e) => e.target.value && handleDateChange(m, e.target.value)}
-                                                style={{
-                                                    position: 'absolute', inset: 0,
-                                                    opacity: 0, width: '100%', height: '100%',
-                                                    cursor: 'pointer', fontSize: 16,
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
-                {/* Extra space so last input can scroll to top — only when focused */}
-                {inputFocused && !compact && <div style={{ height: '60vh', flexShrink: 0 }} />}
-            </div>
         </div>
     )
 }

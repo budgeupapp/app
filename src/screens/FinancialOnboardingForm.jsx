@@ -170,32 +170,40 @@ function buildGraphEvents(formData) {
     const terms = formData.termDates?.terms || []
     const removedSet = new Set(formData.removedEvents || [])
 
-    // Maintenance loan income events
+    // Maintenance loan income events (supports multiple loans)
     if (formData.incomeSources?.includes('maintenance_loan')) {
-        const months = formData.loanMonths || DEFAULT_LOAN_MONTHS
-        const totalAmount = parseFloat(String(formData.loanAmount || '0').replace(/,/g, ''))
+        const loans = formData.maintenanceLoans || [{
+            amount: formData.loanAmount || '',
+            months: formData.loanMonths || DEFAULT_LOAN_MONTHS,
+            dates: formData.loanDates || {},
+            instalmentAmounts: formData.instalmentAmounts || {},
+        }]
+        for (const loan of loans) {
+            const months = loan.months || DEFAULT_LOAN_MONTHS
+            const totalAmount = parseFloat(String(loan.amount || '0').replace(/,/g, ''))
 
-        const loanDateObjs = months.map(m => ({ date: formData.loanDates?.[m] || MONTH_KEY_TO_DATE[m] }))
-        const loanAmounts = distributeExcludingRemoved(totalAmount, loanDateObjs, 'loan', removedSet)
-        for (let mi = 0; mi < months.length; mi++) {
-            const month = months[mi]
-            const date = formData.loanDates?.[month] || MONTH_KEY_TO_DATE[month]
-            if (!date) continue
+            const loanDateObjs = months.map(m => ({ date: loan.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
+            const loanAmounts = distributeExcludingRemoved(totalAmount, loanDateObjs, 'loan', removedSet)
+            for (let mi = 0; mi < months.length; mi++) {
+                const month = months[mi]
+                const date = loan.dates?.[month] || MONTH_KEY_TO_DATE[month]
+                if (!date) continue
 
-            const instalmentAmt = parseFloat(String(formData.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
-            const amount = instalmentAmt > 0 ? instalmentAmt : (totalAmount > 0 ? loanAmounts[mi] : 0)
+                const instalmentAmt = parseFloat(String(loan.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
+                const amount = instalmentAmt > 0 ? instalmentAmt : (totalAmount > 0 ? loanAmounts[mi] : 0)
 
-            if (amount <= 0) continue
+                if (amount <= 0) continue
 
-            events.push({
-                date,
-                amount,
-                type: 'income',
-                label: 'Loan Instalment',
-                sublabel: `${MONTH_SHORT[month]} loan payment`,
-                editType: 'loan',
-                editMonth: month,
-            })
+                events.push({
+                    date,
+                    amount,
+                    type: 'income',
+                    label: 'Loan Instalment',
+                    sublabel: `${MONTH_SHORT[month]} loan payment`,
+                    editType: 'loan',
+                    editMonth: month,
+                })
+            }
         }
     }
 
@@ -2680,16 +2688,25 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 })()}
                                 {panelId === 'maintenanceLoan' && (
                                     <MaintenanceLoanStep
-                                        loanAmount={formData.loanAmount}
-                                        updateLoanAmount={(val) => updateField('loanAmount', val)}
-                                        loanMonths={formData.loanMonths}
-                                        updateLoanMonths={(val) => updateField('loanMonths', val)}
-                                        loanKnowDates={formData.loanKnowDates}
-                                        updateLoanKnowDates={(val) => updateField('loanKnowDates', val)}
-                                        loanDates={formData.loanDates}
-                                        updateLoanDates={(val) => updateField('loanDates', val)}
-                                        instalmentAmounts={formData.instalmentAmounts || {}}
-                                        updateInstalmentAmounts={(val) => updateField('instalmentAmounts', val)}
+                                        loans={formData.maintenanceLoans || [{
+                                            id: 'loan_0',
+                                            amount: formData.loanAmount || '',
+                                            months: formData.loanMonths || [...DEFAULT_LOAN_MONTHS],
+                                            knowDates: formData.loanKnowDates || false,
+                                            dates: formData.loanDates || {},
+                                            instalmentAmounts: formData.instalmentAmounts || {},
+                                        }]}
+                                        updateLoans={(loans) => {
+                                            updateField('maintenanceLoans', loans)
+                                            // Sync first loan back to flat fields for backward compat
+                                            if (loans[0]) {
+                                                updateField('loanAmount', loans[0].amount)
+                                                updateField('loanMonths', loans[0].months)
+                                                updateField('loanKnowDates', loans[0].knowDates)
+                                                updateField('loanDates', loans[0].dates)
+                                                updateField('instalmentAmounts', loans[0].instalmentAmounts)
+                                            }
+                                        }}
                                     />
                                 )}
                                 {panelId === 'bursary' && (
