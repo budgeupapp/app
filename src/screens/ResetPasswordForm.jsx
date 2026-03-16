@@ -31,51 +31,62 @@ export default function ResetPasswordForm({ onComplete }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      padding: '24px 28px 0',
+    }}>
+      <h2 style={{
+        fontSize: 24, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+        color: '#1a1a1a', margin: '0 0 8px', textAlign: 'center',
+      }}>
+        Set New Password
+      </h2>
       <p style={{
-        margin: 0, fontSize: 15, fontWeight: 600,
-        fontFamily: 'Nunito, sans-serif', color: '#5e5e5e',
-        lineHeight: 1.5,
+        margin: '0 0 20px', fontSize: 14, fontWeight: 500,
+        fontFamily: 'Nunito, sans-serif', color: '#888',
+        lineHeight: 1.5, textAlign: 'center',
       }}>
         Choose a new password for your account.
       </p>
 
-      <PasswordField
-        label="New password"
-        autoComplete="new-password"
-        placeholder="At least 6 characters"
-        value={password}
-        onChange={(e) => { setPassword(e.target.value); setError(null) }}
-        labelStyle={lbl}
-        fieldStyle={field}
-        inputStyle={inp}
-      />
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <PasswordField
+          label="New password"
+          autoComplete="new-password"
+          placeholder="At least 6 characters"
+          value={password}
+          onChange={(e) => { setPassword(e.target.value); setError(null) }}
+          labelStyle={lbl}
+          fieldStyle={field}
+          inputStyle={inp}
+        />
 
-      <PasswordField
-        label="Confirm password"
-        autoComplete="new-password"
-        placeholder="Re-enter your password"
-        value={confirm}
-        onChange={(e) => { setConfirm(e.target.value); setError(null) }}
-        labelStyle={lbl}
-        fieldStyle={field}
-        inputStyle={inp}
-      />
+        <PasswordField
+          label="Confirm password"
+          autoComplete="new-password"
+          placeholder="Re-enter your password"
+          value={confirm}
+          onChange={(e) => { setConfirm(e.target.value); setError(null) }}
+          labelStyle={lbl}
+          fieldStyle={field}
+          inputStyle={inp}
+        />
 
-      <button type="submit" disabled={loading} style={btn}>
-        {loading ? 'Updating...' : 'Set new password'}
-      </button>
+        <button type="submit" disabled={loading} style={btn}>
+          {loading ? 'Updating...' : 'Set new password'}
+        </button>
 
-      {error && (
-        <p style={{
-          margin: 0, fontSize: 13, fontWeight: 600,
-          fontFamily: 'Nunito, sans-serif', color: '#e06470',
-          textAlign: 'center',
-        }}>
-          {error}
-        </p>
-      )}
-    </form>
+        {error && (
+          <p style={{
+            margin: 0, fontSize: 13, fontWeight: 600,
+            fontFamily: 'Nunito, sans-serif', color: '#e06470',
+            textAlign: 'center',
+          }}>
+            {error}
+          </p>
+        )}
+      </form>
+    </div>
   )
 }
 
@@ -84,12 +95,12 @@ export default function ResetPasswordForm({ onComplete }) {
 const lbl = {
   fontSize: 13, fontWeight: 700,
   fontFamily: 'Nunito, sans-serif',
-  color: '#5e5e5e', display: 'block', marginBottom: 6,
+  color: '#444', display: 'block', marginBottom: 6,
 }
 
 const field = {
-  borderRadius: 14,
-  border: '1px solid #e8e8e8',
+  borderRadius: 12,
+  border: '1.5px solid #e0e0e0',
   padding: '0 14px',
   height: 48,
   background: '#fff',
@@ -106,8 +117,9 @@ const inp = {
 }
 
 const btn = {
-  width: '100%', height: 52, borderRadius: 14,
+  width: '100%', height: 52, borderRadius: 50,
   border: 'none', background: '#147b75',
   color: '#fff', fontSize: 16, fontWeight: 700,
   fontFamily: 'Nunito, sans-serif', marginTop: 4,
+  cursor: 'pointer',
 }

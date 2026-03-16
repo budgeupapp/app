@@ -631,7 +631,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
     /* ---------- SCRUBBER ---------- */
 
     const [scrubData, setScrubData] = useState(null)
-    const scrubRef = useRef({ active: false, longPressTimer: null, startX: 0, startY: 0 })
+    const scrubRef = useRef({ active: false, startX: 0, startY: 0 })
     const scrubLineRef = useRef(null)
     const scrubDotRef = useRef(null)
     const scrubTooltipRef = useRef(null)
@@ -907,8 +907,6 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
     const handleTouchStart = useCallback((e) => {
         const s = scrubRef.current
-        // Cancel any pending long-press timer
-        if (s.longPressTimer) { clearTimeout(s.longPressTimer); s.longPressTimer = null }
         // Dismiss tapped dot tooltip
         setTappedHistDot(null)
         // Ensure scrubber visuals are hidden on new touch
@@ -952,16 +950,10 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             t.lastTime = performance.now()
             t.velocityX = 0
 
-            // Start long-press timer for scrubber (only when balance exists)
+            // Record start position for scrubber activation on move
             if (hasBalance) {
                 s.startX = e.touches[0].clientX
                 s.startY = e.touches[0].clientY
-                s.longPressTimer = setTimeout(() => {
-                    s.active = true
-                    s.longPressTimer = null
-                    if (navigator.vibrate) navigator.vibrate(10)
-                    updateScrubPosition(s.startX)
-                }, 300)
             }
         }
     }, [animateTo, hasBalance, updateScrubPosition])
@@ -977,13 +969,16 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             return
         }
 
-        // Cancel long-press timer if finger moves too far before activation
-        if (s.longPressTimer && e.touches.length === 1) {
-            const dx = e.touches[0].clientX - s.startX
-            const dy = e.touches[0].clientY - s.startY
-            if (Math.hypot(dx, dy) > 8) {
-                clearTimeout(s.longPressTimer)
-                s.longPressTimer = null
+        // Activate scrubber on horizontal slide when balance exists
+        if (!s.active && hasBalance && e.touches.length === 1) {
+            const dx = Math.abs(e.touches[0].clientX - s.startX)
+            const dy = Math.abs(e.touches[0].clientY - s.startY)
+            if (dx > 6 && dx > dy) {
+                s.active = true
+                if (navigator.vibrate) navigator.vibrate(10)
+                e.preventDefault()
+                updateScrubPosition(e.touches[0].clientX)
+                return
             }
         }
 
@@ -1040,8 +1035,6 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         const t = touchRef.current
         const s = scrubRef.current
 
-        // Clear long-press timer
-        if (s.longPressTimer) { clearTimeout(s.longPressTimer); s.longPressTimer = null }
         // Deactivate scrubber
         if (s.active) {
             s.active = false

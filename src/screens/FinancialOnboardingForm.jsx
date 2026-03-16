@@ -18,7 +18,7 @@ import incomeBursary from '../assets/income-family.svg'
 import variableWeeklySpend from '../assets/variable-weekly-spend.svg'
 import variableOneOff from '../assets/variable-one-off.svg'
 import TermDatesStep from './TermDatesStep'
-import TermGraph, { refreshAY } from '../components/TermGraph'
+import TermGraph, { refreshAY, AY_START, AY_END } from '../components/TermGraph'
 import BankBalanceStep from './BankBalanceStep'
 import RegularIncomeStep from './RegularIncomeStep'
 import MaintenanceLoanStep from './MaintenanceLoanStep'
@@ -82,17 +82,25 @@ const formatMoney = raw => {
 
 /* ---------- GRAPH EVENT HELPERS ---------- */
 
+const ayStartStr = () => AY_START.toISOString().slice(0, 10)
+const defaultQuarterlyDates = () => {
+    const d = new Date(AY_START)
+    return [1, 2, 3, 4].map((_, i) => {
+        const q = addMonths(new Date(d.getFullYear(), d.getMonth(), 1), i * 3)
+        return toLocalDate(q)
+    })
+}
 
 function generateRentDates(frequency, nextDate, formData = {}) {
     const dates = []
-    const ayStart = new Date(2025, 8, 1) // Sept 1 2025
-    const ayEnd = new Date(2026, 7, 31)
+    const ayStart = AY_START
+    const ayEnd = AY_END
 
     if (!frequency) return dates
 
     // For weekly: generate actual weekly dates
     if (frequency === 'weekly') {
-        let d = nextDate ? new Date(nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+        let d = nextDate ? new Date(nextDate + 'T00:00:00') : new Date(AY_START)
         // Walk back to find the first weekly date on or after ayStart
         while (d > ayStart) d = new Date(d.getTime() - 7 * 24 * 60 * 60 * 1000)
         while (d < ayStart) d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -121,7 +129,7 @@ function generateRentDates(frequency, nextDate, formData = {}) {
     // Quarterly: use exact dates if provided, otherwise use default quarterly dates
     if (frequency === 'quarterly') {
         const qDates = formData.rentQuarterlyDates || {}
-        const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+        const QD = defaultQuarterlyDates()
         for (let i = 0; i < 4; i++) {
             const date = qDates[i] || QD[i]
             if (!date) continue
@@ -135,7 +143,7 @@ function generateRentDates(frequency, nextDate, formData = {}) {
     }
 
     // Monthly / quarterly — use nextDate only for day-of-month, generate across full academic year
-    let current = nextDate ? new Date(nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+    let current = nextDate ? new Date(nextDate + 'T00:00:00') : new Date(AY_START)
     const dom = current.getDate()
     const step = frequency === 'quarterly' ? 3 : 1
     // Backtrack to before ayStart, preserving day-of-month
@@ -225,18 +233,18 @@ function buildGraphEvents(formData) {
         const isYearlyInput = famAmtPeriod === 'yearly'
         const onlyTermTime = isYearlyInput && formData.familyVariesByTerm
         if (famAmtRaw > 0) {
-            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+            const ayStart = AY_START
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyTotal = famAmtRaw * (YM[famAmtPeriod] || 1)
             if (isYearlyInput) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly support' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
                     while (d > ayStart) d = addMonths(d, -1, dom)
                     while (d < ayStart) d = addMonths(d, 1, dom)
@@ -246,10 +254,10 @@ function buildGraphEvents(formData) {
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} support` }) }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.familyQuarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} support` })
                 } else if (freq === 'yearly') {
-                    allDates.push({ date: formData.familyNextDate || '2025-09-01', sublabel: 'Yearly support' })
+                    allDates.push({ date: formData.familyNextDate || ayStartStr(), sublabel: 'Yearly support' })
                 }
                 const dates = onlyTermTime ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (dates.length > 0) {
@@ -262,12 +270,12 @@ function buildGraphEvents(formData) {
                 const famNonTermAmt = formData.familyVariesByTerm ? parseFloat(String(formData.familyNonTermAmount || '0').replace(/,/g, '')) : famAmtRaw
                 const getFamAmt = (ds) => formData.familyVariesByTerm ? (isInTerm(ds, terms) ? famAmtRaw : famNonTermAmt) : famAmtRaw
                 if (freq === 'weekly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { const ds = toLocalDate(d); const a = getFamAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.familyNextDate ? new Date(formData.familyNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
                     while (d > ayStart) d = addMonths(d, -1, dom)
                     while (d < ayStart) d = addMonths(d, 1, dom)
@@ -277,7 +285,7 @@ function buildGraphEvents(formData) {
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: famAmtRaw, type: 'income', label: 'Family/Friends', sublabel: `${term.name} support`, editType: 'family' }) }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.familyQuarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getFamAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: 'Family/Friends', sublabel: `Q${i + 1} support`, editType: 'family' }) }
                 }
             }
@@ -293,20 +301,20 @@ function buildGraphEvents(formData) {
         const onlyTermTimeWork = isYearlyWork && formData.workVariesByTerm
 
         if (workAmt > 0 && freq) {
-            const ayStart = new Date(2025, 8, 1)
-            const ayEnd = new Date(2026, 7, 31)
+            const ayStart = AY_START
+            const ayEnd = AY_END
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyWork = workAmt * (YM[workAmtPeriod] || 1)
 
             if (isYearlyWork) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly income' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
                     while (d > ayStart) d = addMonths(d, -1, dom)
                     while (d < ayStart) d = addMonths(d, 1, dom)
@@ -316,10 +324,10 @@ function buildGraphEvents(formData) {
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} income` }) }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.workQuarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} income` })
                 } else if (freq === 'yearly') {
-                    allDates.push({ date: formData.workNextDate || '2025-09-01', sublabel: 'Yearly income' })
+                    allDates.push({ date: formData.workNextDate || ayStartStr(), sublabel: 'Yearly income' })
                 }
                 const dates = onlyTermTimeWork ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (dates.length > 0) {
@@ -332,12 +340,12 @@ function buildGraphEvents(formData) {
                 const workNonTermAmt = formData.workVariesByTerm ? parseFloat(String(formData.workNonTermAmount || '0').replace(/,/g, '')) : workAmt
                 const getWorkAmt = (ds) => formData.workVariesByTerm ? (isInTerm(ds, terms) ? workAmt : workNonTermAmt) : workAmt
                 if (freq === 'weekly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { const ds = toLocalDate(d); const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
                     while (d > ayStart) d = addMonths(d, -1, dom)
                     while (d < ayStart) d = addMonths(d, 1, dom)
@@ -347,10 +355,10 @@ function buildGraphEvents(formData) {
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: workAmt, type: 'income', label: 'Work', sublabel: `${term.name} income`, editType: 'work' }) }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.workQuarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getWorkAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: 'Work', sublabel: `Q${i + 1} income`, editType: 'work' }) }
                 } else if (freq === 'yearly') {
-                    if (workAmt > 0) events.push({ date: formData.workNextDate || '2025-09-01', amount: workAmt, type: 'income', label: 'Work', sublabel: 'Yearly income', editType: 'work' })
+                    if (workAmt > 0) events.push({ date: formData.workNextDate || ayStartStr(), amount: workAmt, type: 'income', label: 'Work', sublabel: 'Yearly income', editType: 'work' })
                 }
             }
         }
@@ -368,20 +376,20 @@ function buildGraphEvents(formData) {
         const onlyTermTimeOther = isYearlyOther && inst.variesByTerm
 
         if (otherAmt > 0) {
-            const ayStart = new Date(2025, 8, 1)
-            const ayEnd = new Date(2026, 7, 31)
+            const ayStart = AY_START
+            const ayEnd = AY_END
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyOther = otherAmt * (YM[otherAmtPeriod] || 1)
 
             if (isYearlyOther) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
                     while (d > ayStart) d = addMonths(d, -1, dom)
                     while (d < ayStart) d = addMonths(d, 1, dom)
@@ -391,10 +399,10 @@ function buildGraphEvents(formData) {
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name}` }) }
                 } else if (freq === 'quarterly') {
                     const qDates = inst.quarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1}` })
                 } else if (freq === 'yearly') {
-                    allDates.push({ date: inst.nextDate || '2025-09-01', sublabel: 'Yearly income' })
+                    allDates.push({ date: inst.nextDate || ayStartStr(), sublabel: 'Yearly income' })
                 }
                 const dates = onlyTermTimeOther ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (dates.length > 0) {
@@ -407,12 +415,12 @@ function buildGraphEvents(formData) {
                 const otherNonTermAmt = inst.variesByTerm ? parseFloat(String(inst.nonTermAmount || '0').replace(/,/g, '')) : otherAmt
                 const getOtherAmt = (ds) => inst.variesByTerm ? (isInTerm(ds, terms) ? otherAmt : otherNonTermAmt) : otherAmt
                 if (freq === 'weekly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
                     while (d > ayStart) d = addMonths(d, -1, dom)
                     while (d < ayStart) d = addMonths(d, 1, dom)
@@ -422,10 +430,10 @@ function buildGraphEvents(formData) {
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherAmt, type: 'income', label: lbl, sublabel: `${term.name}`, editType: inst.id }) }
                 } else if (freq === 'quarterly') {
                     const qDates = inst.quarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getOtherAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: lbl, sublabel: `Q${i + 1}`, editType: inst.id }) }
                 } else if (freq === 'yearly') {
-                    if (otherAmt > 0) events.push({ date: inst.nextDate || '2025-09-01', amount: otherAmt, type: 'income', label: lbl, sublabel: 'Yearly income', editType: inst.id })
+                    if (otherAmt > 0) events.push({ date: inst.nextDate || ayStartStr(), amount: otherAmt, type: 'income', label: lbl, sublabel: 'Yearly income', editType: inst.id })
                 }
             }
         }
@@ -479,8 +487,8 @@ function buildGraphEvents(formData) {
         const billsAmtPeriod = formData.billsAmountPeriod || (formData.billsEntryMode === 'yearly' ? 'yearly' : freq)
         const isYearlyBills = billsAmtPeriod === 'yearly'
         const onlyTermTimeBills = isYearlyBills && formData.billsVariesByTerm
-        const ayStart = new Date(2025, 8, 1)
-        const ayEnd = new Date(2026, 7, 31)
+        const ayStart = AY_START
+        const ayEnd = AY_END
         const billsInRange = (ds) => {
             if (formData.billsStartDate && ds < formData.billsStartDate) return false
             if (formData.billsEndDate && ds > formData.billsEndDate) return false
@@ -492,12 +500,12 @@ function buildGraphEvents(formData) {
         if (isYearlyBills) {
             const allDates = []
             if (freq === 'weekly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
                 while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                 while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                 while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly bills' }); d = new Date(d.getTime() + 7 * 86400000) }
             } else if (freq === 'monthly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
                 const dom = d.getDate()
                 while (d > ayStart) d = addMonths(d, -1, dom)
                 while (d < ayStart) d = addMonths(d, 1, dom)
@@ -507,10 +515,10 @@ function buildGraphEvents(formData) {
                 for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} bills` }) }
             } else if (freq === 'quarterly') {
                 const qDates = formData.billsQuarterlyDates || {}
-                const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                const QD = defaultQuarterlyDates()
                 for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} bills` })
             } else if (freq === 'yearly') {
-                allDates.push({ date: formData.billsNextDate || '2025-09-01', sublabel: 'Yearly bills' })
+                allDates.push({ date: formData.billsNextDate || ayStartStr(), sublabel: 'Yearly bills' })
             }
             const filteredDates = (onlyTermTimeBills ? allDates.filter(d => isInTerm(d.date, terms)) : allDates).filter(d => billsInRange(d.date))
             if (filteredDates.length > 0) {
@@ -523,12 +531,12 @@ function buildGraphEvents(formData) {
             const billsNonTermAmt = formData.billsVariesByTerm ? parseFloat(String(formData.billsNonTermAmount || '0').replace(/,/g, '')) : billsAmt
             const getBillsAmt = (ds) => formData.billsVariesByTerm ? (isInTerm(ds, terms) ? billsAmt : billsNonTermAmt) : billsAmt
             if (freq === 'weekly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
                 while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                 while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                 while (d <= ayEnd) { const ds = toLocalDate(d); if (billsInRange(ds)) { const a = getBillsAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'Bills', sublabel: 'Weekly bills', editType: 'bills' }) }; d = new Date(d.getTime() + 7 * 86400000) }
             } else if (freq === 'monthly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
                 const dom = d.getDate()
                 while (d > ayStart) d = addMonths(d, -1, dom)
                 while (d < ayStart) d = addMonths(d, 1, dom)
@@ -538,10 +546,10 @@ function buildGraphEvents(formData) {
                 for (const term of terms) { const date = overrides[term.id] || term.start; if (date && billsInRange(date)) { const a = getBillsAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Bills', sublabel: `${term.name} bills`, editType: 'bills' }) } }
             } else if (freq === 'quarterly') {
                 const qDates = formData.billsQuarterlyDates || {}
-                const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                const QD = defaultQuarterlyDates()
                 for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; if (billsInRange(date)) { const a = getBillsAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Bills', sublabel: `Q${i + 1} bills`, editType: 'bills' }) } }
             } else if (freq === 'yearly') {
-                const dateString = formData.billsNextDate || '2025-09-01'; if (billsInRange(dateString)) { const a = getBillsAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Bills', sublabel: 'Yearly bills', editType: 'bills' }) }
+                const dateString = formData.billsNextDate || ayStartStr(); if (billsInRange(dateString)) { const a = getBillsAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Bills', sublabel: 'Yearly bills', editType: 'bills' }) }
             }
         }
     }
@@ -554,28 +562,28 @@ function buildGraphEvents(formData) {
             const uniFreq = uniAmtPeriod === 'yearly' ? (formData.uniFeesFrequency || 'monthly') : uniAmtPeriod
             const isYearlyUni = uniAmtPeriod === 'yearly'
             const onlyTermTimeUni = isYearlyUni && formData.uniFeesVariesByTerm
-            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+            const ayStart = AY_START
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyUni = uniAmt * (YM[uniAmtPeriod] || 1)
             if (isYearlyUni) {
                 const allDates = []
                 if (uniFreq === 'weekly') {
-                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly fees' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (uniFreq === 'yearly') {
-                    allDates.push({ date: formData.uniFeesNextDate || '2025-09-01', sublabel: 'Yearly tuition' })
+                    allDates.push({ date: formData.uniFeesNextDate || ayStartStr(), sublabel: 'Yearly tuition' })
                 } else if (uniFreq === 'monthly') {
                     const dom = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00').getDate() : 1
-                    let d = new Date(2025, 8, dom)
+                    let d = new Date(AY_START.getFullYear(), AY_START.getMonth(), dom)
                     while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees` }); d = addMonths(d, 1, dom) }
                 } else if (uniFreq === 'termly') {
                     const overrides = formData.uniFeesTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} fees` }) }
                 } else if (uniFreq === 'quarterly') {
                     const qDates = formData.uniFeesQuarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} fees` })
                 }
                 const filteredDates = onlyTermTimeUni ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
@@ -589,22 +597,22 @@ function buildGraphEvents(formData) {
                 const uniNonTermAmt = formData.uniFeesVariesByTerm ? parseFloat(String(formData.uniFeesNonTermAmount || '0').replace(/,/g, '')) : uniAmt
                 const getUniAmt = (ds) => formData.uniFeesVariesByTerm ? (isInTerm(ds, terms) ? uniAmt : uniNonTermAmt) : uniAmt
                 if (uniFreq === 'weekly') {
-                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { const ds = toLocalDate(d); const a = getUniAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'University Fees', sublabel: 'Weekly fees', editType: 'uniFees' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (uniFreq === 'yearly') {
-                    events.push({ date: formData.uniFeesNextDate || '2025-09-01', amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
+                    events.push({ date: formData.uniFeesNextDate || ayStartStr(), amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
                 } else if (uniFreq === 'monthly') {
                     const dom = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00').getDate() : 1
-                    let d = new Date(2025, 8, dom)
+                    let d = new Date(AY_START.getFullYear(), AY_START.getMonth(), dom)
                     while (d <= ayEnd) { const ds = toLocalDate(d); const a = getUniAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' }); d = addMonths(d, 1, dom) }
                 } else if (uniFreq === 'termly') {
                     const overrides = formData.uniFeesTermDates || {}
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' }) }
                 } else if (uniFreq === 'quarterly') {
                     const qDates = formData.uniFeesQuarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getUniAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'University Fees', sublabel: `Q${i + 1} fees`, editType: 'uniFees' }) }
                 }
             }
@@ -619,18 +627,18 @@ function buildGraphEvents(formData) {
             const savAmtPeriod = formData.savingsInvAmountPeriod || (formData.savingsInvEntryMode === 'yearly' ? 'yearly' : freq)
             const isYearlySav = savAmtPeriod === 'yearly'
             const onlyTermTimeSav = isYearlySav && formData.savingsInvVariesByTerm
-            const ayStart = new Date(2025, 8, 1), ayEnd = new Date(2026, 7, 31)
+            const ayStart = AY_START
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlySav = savAmt * (YM[savAmtPeriod] || 1)
             if (isYearlySav) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly savings' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
                     while (d > ayStart) d = addMonths(d, -1, dom)
                     while (d < ayStart) d = addMonths(d, 1, dom)
@@ -640,10 +648,10 @@ function buildGraphEvents(formData) {
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} savings` }) }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.savingsInvQuarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} savings` })
                 } else if (freq === 'yearly') {
-                    allDates.push({ date: formData.savingsInvNextDate || '2025-09-01', sublabel: 'Yearly savings' })
+                    allDates.push({ date: formData.savingsInvNextDate || ayStartStr(), sublabel: 'Yearly savings' })
                 }
                 const filteredDates = onlyTermTimeSav ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (filteredDates.length > 0) {
@@ -656,12 +664,12 @@ function buildGraphEvents(formData) {
                 const savNonTermAmt = formData.savingsInvVariesByTerm ? parseFloat(String(formData.savingsInvNonTermAmount || '0').replace(/,/g, '')) : savAmt
                 const getSavAmt = (ds) => formData.savingsInvVariesByTerm ? (isInTerm(ds, terms) ? savAmt : savNonTermAmt) : savAmt
                 if (freq === 'weekly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { const ds = toLocalDate(d); const a = getSavAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
                     while (d > ayStart) d = addMonths(d, -1, dom)
                     while (d < ayStart) d = addMonths(d, 1, dom)
@@ -671,10 +679,10 @@ function buildGraphEvents(formData) {
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: savAmt, type: 'expense', label: 'Savings', sublabel: `${term.name} savings`, editType: 'savingsInv' }) }
                 } else if (freq === 'quarterly') {
                     const qDates = formData.savingsInvQuarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getSavAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' }) }
                 } else if (freq === 'yearly') {
-                    events.push({ date: formData.savingsInvNextDate || '2025-09-01', amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Yearly savings', editType: 'savingsInv' })
+                    events.push({ date: formData.savingsInvNextDate || ayStartStr(), amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Yearly savings', editType: 'savingsInv' })
                 }
             }
         }
@@ -690,20 +698,20 @@ function buildGraphEvents(formData) {
         const onlyTermTimeOtherExp = isYearlyOtherExp && inst.variesByTerm
 
         if (otherExpAmt > 0) {
-            const ayStart = new Date(2025, 8, 1)
-            const ayEnd = new Date(2026, 7, 31)
+            const ayStart = AY_START
+            const ayEnd = AY_END
             const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
             const yearlyOtherExp = otherExpAmt * (YM[otherExpAmtPeriod] || 1)
 
             if (isYearlyOtherExp) {
                 const allDates = []
                 if (freq === 'weekly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
                     while (d > ayStart) d = addMonths(d, -1, dom)
                     while (d < ayStart) d = addMonths(d, 1, dom)
@@ -713,10 +721,10 @@ function buildGraphEvents(formData) {
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: term.name }) }
                 } else if (freq === 'quarterly') {
                     const qDates = inst.quarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1}` })
                 } else if (freq === 'yearly') {
-                    allDates.push({ date: inst.nextDate || '2025-09-01', sublabel: 'Yearly expense' })
+                    allDates.push({ date: inst.nextDate || ayStartStr(), sublabel: 'Yearly expense' })
                 }
                 const filteredDates = onlyTermTimeOtherExp ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
                 if (filteredDates.length > 0) {
@@ -729,12 +737,12 @@ function buildGraphEvents(formData) {
                 const otherExpNonTermAmt = inst.variesByTerm ? parseFloat(String(inst.nonTermAmount || '0').replace(/,/g, '')) : otherExpAmt
                 const getOtherExpAmt = (ds) => inst.variesByTerm ? (isInTerm(ds, terms) ? otherExpAmt : otherExpNonTermAmt) : otherExpAmt
                 if (freq === 'weekly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
                     while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
                     while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherExpAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + 7 * 86400000) }
                 } else if (freq === 'monthly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(2025, 8, 1)
+                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
                     const dom = d.getDate()
                     while (d > ayStart) d = addMonths(d, -1, dom)
                     while (d < ayStart) d = addMonths(d, 1, dom)
@@ -744,10 +752,10 @@ function buildGraphEvents(formData) {
                     for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherExpAmt, type: 'expense', label: lbl, sublabel: term.name, editType: inst.id }) }
                 } else if (freq === 'quarterly') {
                     const qDates = inst.quarterlyDates || {}
-                    const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
+                    const QD = defaultQuarterlyDates()
                     for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getOtherExpAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: lbl, sublabel: `Q${i + 1}`, editType: inst.id }) }
                 } else if (freq === 'yearly') {
-                    events.push({ date: inst.nextDate || '2025-09-01', amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: inst.id })
+                    events.push({ date: inst.nextDate || ayStartStr(), amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: inst.id })
                 }
             }
         }
@@ -759,8 +767,8 @@ function buildGraphEvents(formData) {
         ? parseFloat(String(formData.weeklySpendNonTerm || '0').replace(/,/g, ''))
         : weeklyAmt
     if (weeklyAmt > 0 || weeklyNonTermAmt > 0) {
-        const ayStart = new Date(2025, 8, 1)
-        const ayEnd = new Date(2026, 7, 31)
+        const ayStart = AY_START
+        const ayEnd = AY_END
         let d = new Date(ayStart)
         // Align to Mondays
         while (d.getDay() !== 1) d = new Date(d.getTime() + 24 * 60 * 60 * 1000)
@@ -1391,6 +1399,12 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 data = { ...INITIAL_FORM_DATA, ...parsed.formData }
             }
         } catch { /* ignore */ }
+        // Set university from signup if available
+        const signupUni = localStorage.getItem('budgeup_signup_university')
+        if (signupUni) {
+            data.university = signupUni
+            localStorage.removeItem('budgeup_signup_university')
+        }
         // Migrate legacy flat other income fields to otherIncomes array
         if ((!data.otherIncomes || data.otherIncomes.length === 0) && data.otherIncomeAmount) {
             data.otherIncomes = [{
@@ -1870,18 +1884,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
             return
         }
 
-        // Fade illustration + shrink button, then slide card down to reveal graph
+        // Shrink button first, then switch step
         setUniConfirming(true)
         transitionRef.current = true
         setTimeout(() => {
-            setUniSlideOut(true)
-            setTimeout(() => {
-                goNext()
-                setGraphAnimated(true)
-                setUniConfirming(false)
-                setUniSlideOut(false)
-                transitionRef.current = null
-            }, 450)
+            goNext()
+            setGraphAnimated(true)
+            setUniConfirming(false)
+            transitionRef.current = null
         }, 100)
     }
 
@@ -2216,25 +2226,25 @@ export default function FinancialOnboardingForm({ onComplete }) {
         )
 
         return (
-            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#f0f4f4' }}>
+            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#fff' }}>
                 {toastEl}
                 {/* Single TermGraph — props change based on panel */}
+                {/* Safe area spacer for notch */}
+                <div style={{ paddingTop: 'env(safe-area-inset-top, 0px)', flexShrink: 0, background: '#fff' }} />
                 <div style={{
-                    height: graphAnimated ? 220 : 0,
+                    height: graphAnimated ? 200 : 0,
                     opacity: graphAnimated ? 1 : 0,
                     transform: graphAnimated ? 'translateY(0)' : 'translateY(-8px)',
                     overflow: 'hidden',
                     flexShrink: 0,
-                    margin: graphAnimated ? '16px 16px 0' : '0',
-                    background: graphAnimated ? '#fff' : 'transparent',
-                    borderRadius: graphAnimated ? 14 : 0,
+                    margin: graphAnimated ? '0 8px' : '0',
                     transition: graphAnimated
-                        ? 'height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.45s ease, transform 0.45s cubic-bezier(.22,1,.36,1), margin 0.6s ease, background 0.45s ease, border-radius 0.45s ease'
-                        : 'height 0.35s ease, opacity 0.25s ease, transform 0.25s ease, margin 0.35s ease, background 0.25s ease, border-radius 0.25s ease',
+                        ? 'height 0.6s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.45s ease, transform 0.45s cubic-bezier(.22,1,.36,1), margin 0.6s ease'
+                        : 'height 0.35s ease, opacity 0.25s ease, transform 0.25s ease, margin 0.35s ease',
                 }}>
                     <TermGraph
-                        graphHeight={160}
-                        marginTop={12}
+                        graphHeight={150}
+                        marginTop={8}
                         terms={terms}
                         expandedTerm={activePanel === 0 ? activeExpanded : undefined}
                         balance={activePanel >= 1 ? balanceNum : undefined}
@@ -2324,11 +2334,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
                 {/* Form card with sliding panels */}
                 <div ref={formCardCallbackRef} style={{
-                    margin: '8px 16px 12px',
                     flex: 1,
-                    background: '#fff',
-                    borderRadius: 14,
-                    boxShadow: 'none',
+                    background: '#f0f4f4',
+                    borderRadius: '16px 16px 0 0',
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
@@ -2352,7 +2360,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             <div style={{
                                 height: stripColor ? 4 : 0,
                                 background: stripColor || 'transparent',
-                                borderRadius: '20px 20px 0 0',
+                                borderRadius: '16px 16px 0 0',
                                 flexShrink: 0,
                                 transition: 'height 0.3s ease, background 0.3s ease',
                                 overflow: 'hidden',
@@ -2361,7 +2369,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     })()}
 
                     {/* Panel content area */}
-                    <div style={{ flex: 1, position: 'relative', overflow: 'clip', minHeight: 0 }}>
+                    <div style={{ flex: 1, position: 'relative', overflow: 'clip', minHeight: 0, margin: '8px 8px 0', borderRadius: '14px 14px 0 0' }}>
                         {PANEL_STEPS.map((panelId, i) => (
                             <div key={panelId} style={{
                                 position: 'absolute', inset: 0,
@@ -2372,6 +2380,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         : 'translateY(0)',
                                 transition: 'transform 0.5s cubic-bezier(.25,.46,.45,.94)',
                                 background: '#fff',
+                                borderRadius: '14px 14px 0 0',
                             }}>
                                 {panelId === 'termDates' && (
                                     <TermDatesStep
@@ -3033,11 +3042,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     {/* Bottom buttons — hidden during uni overlay transition to avoid double-render jitter */}
                     <div style={{
                         flexShrink: 0,
-                        padding: '10px 19px 14px',
+                        padding: '10px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
                         display: 'flex',
                         alignItems: 'center',
                         gap: 12,
-                        borderTop: '1px solid #f3f3f3',
+                        background: '#f0f4f4',
                         visibility: (uniConfirming || uniSlideIn) ? 'hidden' : 'visible',
                     }}>
                         <button
@@ -3092,13 +3101,13 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 </div>
 
                 {/* University overlay — present during university step and reverse slide-in */}
-                {(currentStep.id === 'university' || uniSlideIn || uniSlideOut) && (
+                {(currentStep.id === 'university' || uniSlideIn) && (
                     <>
                         {/* Backdrop — only in steady-state university step, not during reverse slide */}
                         <div style={{
                             position: 'fixed',
                             inset: 0,
-                            background: '#f0f4f4',
+                            background: '#fff',
                             pointerEvents: 'none',
                             zIndex: 5,
                             opacity: uniSlideIn ? 0 : 1,
@@ -3108,13 +3117,13 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         {/* University card — top contracts down into form card position */}
                         <div style={{
                             position: 'fixed',
-                            top: uniSlideOut ? 220 : 10,
-                            left: 16,
-                            right: 16,
-                            bottom: 12,
+                            top: uniSlideOut ? 200 : 10,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
                             zIndex: 6,
                             overflow: 'hidden',
-                            borderRadius: 14,
+                            borderRadius: uniSlideOut ? '16px 16px 0 0' : 14,
                             boxShadow: 'none',
                             background: '#fff',
                             display: 'flex',
@@ -3176,7 +3185,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             height: 'auto',
                                             objectFit: 'contain',
                                             opacity: (uniConfirming || uniSlideOut) ? 0 : 1,
-                                            transition: 'opacity 0.35s ease-in-out',
+                                            transition: 'opacity 0.8s ease-in-out',
                                         }}
                                     />
                                 </div>

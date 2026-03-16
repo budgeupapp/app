@@ -1,5 +1,5 @@
 // DEV: set to 'onboarding', 'dashboard', or 'signup' to bypass login and jump to that view. Set to null for normal behaviour.
-const DEV_VIEW = null
+const DEV_VIEW = 'signup'
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
@@ -39,7 +39,7 @@ import { analytics, AUTH_EVENTS, SESSION_EVENTS, getSessionProperties } from './
 
 import LoginForm from './screens/LoginForm'
 import SignupForm from './screens/SignupForm'
-import ForgotPasswordForm from './screens/ForgotPasswordForm'
+
 import ResetPasswordForm from './screens/ResetPasswordForm'
 import AuthContainer from './components/AuthContainer'
 import FinancialOnboardingForm from './screens/FinancialOnboardingForm'
@@ -199,7 +199,9 @@ export default function App() {
     const isMainApp = session && !passwordRecovery && hasCompletedOnboarding === true && DEV_VIEW !== 'onboarding'
     const isLoading = loading || onboardingLoading || processingSignup || (session?.user?.id && hasCompletedOnboarding === null)
     useLayoutEffect(() => {
-        if (!isMainApp) setThemeColor('#ffffff')
+        if (!isMainApp && isLoading && !DEV_VIEW) {
+            setThemeColor('#ffffff')
+        }
     }, [isMainApp, isLoading])
 
     /* ---------------- LOADING STATE ---------------- */
@@ -231,12 +233,10 @@ export default function App() {
     if (DEV_VIEW === 'signup' || (!DEV_VIEW && (!session || passwordRecovery))) {
         return (
             <BrowserRouter>
-                <ThemeColorSync color="#ffffff" />
                 <Routes>
                     <Route element={<AuthContainer />}>
-                        <Route path="/login" element={<LoginForm />} />
+                        <Route path="/login" element={<SignupForm />} />
                         <Route path="/signup" element={<SignupForm />} />
-                        <Route path="/forgot-password" element={<ForgotPasswordForm />} />
                         <Route path="/reset-password" element={
                             <ResetPasswordForm onComplete={() => setPasswordRecovery(false)} />
                         } />
@@ -322,7 +322,7 @@ export default function App() {
                 <Route path="/login" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/signup" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/reset-password" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/forgot-password" element={<Navigate to="/dashboard" replace />} />
+
 
                 {/* 404 page for invalid routes */}
                 <Route path="*" element={<NotFound />} />

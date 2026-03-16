@@ -2,11 +2,6 @@
 
 export const STEPS = [
     {
-        id: 'university',
-        heading: 'Where do you go to university?',
-        subtitle: 'This helps us match your budget to your term dates and connect you with university support if needed.'
-    },
-    {
         id: 'termDates',
         heading: 'Have we got your term dates right?',
         subtitle: "These currently default to the University of Bristol term dates, but you can edit them if the dates are different for your uni"
