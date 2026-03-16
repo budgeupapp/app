@@ -2134,14 +2134,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
         termDates: 'Confirm Term Dates',
         balance: 'Confirm Bank Balance',
         overdraft: 'Confirm Overdraft',
-        regularIncome: 'Confirm Regular Income',
+        regularIncome: 'Confirm Income',
         maintenanceLoan: 'Confirm Maintenance Loan',
         bursary: 'Confirm Bursary',
         familyFriends: 'Confirm Family & Friends',
         work: 'Confirm Work',
         otherIncome: 'Confirm Other Income',
         rent: 'Confirm Rent',
-        regularExpenses: 'Confirm Regular Expenses',
+        regularExpenses: 'Confirm Expenses',
         bills: 'Confirm Bills',
         uniFees: 'Confirm University Fees',
         savingsInvestments: 'Confirm Savings & Investments',
@@ -2390,7 +2390,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             document.addEventListener('mousemove', onMove)
                             document.addEventListener('mouseup', onUp)
                         }}
-                        style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 12px', cursor: 'grab', touchAction: 'none', flexShrink: 0, background: '#f5f7f7' }}
+                        style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px', cursor: 'grab', touchAction: 'none', flexShrink: 0, background: '#f5f7f7' }}
                     >
                         <div style={{ width: 36, height: 4, borderRadius: 2, background: '#bbb' }} />
                     </div>
@@ -3023,7 +3023,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                     <div style={{ background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 10 }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                                                             <PiTrendUp size={16} color="#333" />
-                                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Regular Income</span>
+                                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Income</span>
                                                         </div>
                                                         {incomeSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getYearly([s.editType])} color="rgba(20,123,117,0.8)" onTap={() => goToPanel(s.panelId)} />)}
                                                         {otherIncSources.map(inst => <SummaryRow key={inst.id} sourceId="other_income" label={inst.label || 'Other Income'} amount={getYearly([inst.id])} color="rgba(20,123,117,0.8)" onTap={() => goToPanel('otherIncome')} />)}
@@ -3035,7 +3035,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                     <div style={{ background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 10 }}>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                                                             <PiTrendDown size={16} color="#333" />
-                                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Regular Expenses</span>
+                                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Expenses</span>
                                                         </div>
                                                         {expenseSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getYearly([s.editType])} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel(s.panelId)} />)}
                                                         {otherExpSources.map(inst => <SummaryRow key={inst.id} sourceId="other_expense" label={inst.label || 'Other Expense'} amount={getYearly([inst.id])} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel('otherExpense')} />)}
@@ -3164,7 +3164,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     cursor: 'pointer', padding: '0 4px',
                                     fontSize: 13, fontWeight: 600,
                                     fontFamily: 'Nunito, sans-serif',
-                                    color: '#aaa', whiteSpace: 'nowrap',
+                                    color: '#888', whiteSpace: 'nowrap',
                                 }}
                             >
                                 Skip

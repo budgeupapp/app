@@ -402,7 +402,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
                                         onBlur={handleBlur}
                                         style={{
                                             width: '100%', boxSizing: 'border-box',
-                                            border: '1px solid #e8e8e8', borderRadius: 10,
+                                            border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
                                             padding: '10px 14px',
                                             fontSize: 15, fontWeight: 500,
                                             fontFamily: 'Nunito, sans-serif',
@@ -418,7 +418,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
                                         <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Amount</p>
                                         <div style={{
                                             display: 'flex', alignItems: 'center',
-                                            border: '1px solid #e8e8e8', borderRadius: 10,
+                                            border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
                                             padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6, background: '#fff',
                                         }}>
                                             <span style={{
@@ -450,7 +450,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
                                         <p style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>Date</p>
                                         <div style={{
                                             display: 'flex', alignItems: 'center',
-                                            border: '1px solid #e8e8e8', borderRadius: 10,
+                                            border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
                                             height: 40, boxSizing: 'border-box', overflow: 'hidden', background: '#fff',
                                         }}>
                                             <input

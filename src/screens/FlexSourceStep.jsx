@@ -123,7 +123,7 @@ export default function FlexSourceStep({ data, onChange, isExpense }) {
             <div style={{ display: 'flex', marginBottom: 16 }}>
                 <div style={{
                     display: 'flex', alignItems: 'center',
-                    border: '1px solid #e8e8e8', borderRight: 'none', borderRadius: '10px 0 0 10px',
+                    border: '1px solid #e8e8e8', borderRight: 'none', borderRadius: '10px 0 0 10px', background: '#fff',
                     padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6,
                     flex: 1, minWidth: 0,
                 }}>

@@ -180,7 +180,7 @@ export default function BillsStep({
 
                 <p ref={questionRef} style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px' }}>How much are your bills?</p>
                 <div style={{ display: 'flex', marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderRadius: '10px 0 0 10px', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6, flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #e8e8e8', borderRight: 'none', borderRadius: '10px 0 0 10px', background: '#fff', padding: '0 14px', height: 40, boxSizing: 'border-box', gap: 6, flex: 1, minWidth: 0 }}>
                         <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                         <input type="text" inputMode="decimal" placeholder="0.00" value={formatDisplay(rawAmount)} onChange={handleAmountChange}
                             onTouchStart={handleInputTouchStart} onTouchEnd={handleInputTouchEnd} onFocus={scrollInputToTop} onBlur={handleInputBlur}

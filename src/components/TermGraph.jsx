@@ -190,8 +190,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             setBalanceVisible(true)
             requestAnimationFrame(() => {
                 setDotAnimated(true)
-                // Delay line expansion so it visibly grows out of the dot
-                setTimeout(() => setBalanceAnimated(true), 300)
+                setBalanceAnimated(true)
             })
         } else if (!hasBalance && prevHasBalance.current) {
             // Exiting: lines shrink into dot first, then dot shrinks
@@ -284,6 +283,20 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             projMin = Math.min(projMin, backRunning)
             projMax = Math.max(projMax, backRunning)
         }
+
+        // Retroactive past balance range: reverse ALL events before markerPct from balNum
+        const allPastEvts = sortedEvents.filter(e => datePct(e.date) < markerPct)
+        let pastBal = balNum
+        for (let i = allPastEvts.length - 1; i >= 0; i--) {
+            const evt = allPastEvts[i]
+            if (evt.editType === 'weeklySpend') {
+                pastBal += evt.amount // reverse weekly (was subtracted)
+            } else {
+                pastBal -= evt.type === 'income' ? evt.amount : -evt.amount
+            }
+            projMin = Math.min(projMin, pastBal)
+            projMax = Math.max(projMax, pastBal)
+        }
     }
     if (hasBalance) {
         projMin = Math.min(projMin, balNum)
@@ -343,20 +356,21 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
     // Animate past stepped line when past event count changes
     const [pastRevealed, setPastRevealed] = useState(false)
+    const pastEventCount = hasBalance ? activeEvents.filter(e => e.amount > 0 && datePct(e.date) < markerPct).length : 0
     const prevPastCountRef = useRef(0)
 
     useEffect(() => {
-        if (pastEvents.length > 0) {
-            if (pastEvents.length !== prevPastCountRef.current) {
+        if (hasBalance) {
+            if (pastEventCount !== prevPastCountRef.current) {
                 setPastRevealed(false)
             }
-            prevPastCountRef.current = pastEvents.length
+            prevPastCountRef.current = pastEventCount
             const t = setTimeout(() => setPastRevealed(true), 30)
             return () => clearTimeout(t)
         }
         setPastRevealed(false)
         prevPastCountRef.current = 0
-    }, [pastEvents.length])
+    }, [pastEventCount, hasBalance])
 
     // Animate balance history dots growing in with line draw
     const [balHistRevealed, setBalHistRevealed] = useState(false)
@@ -603,17 +617,91 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         }
     }, [steppedPath?.zeroDate, steppedPath?.overdraftBreachDate])
 
-    // Build past events path (faded, leading up to orange dot)
+    // Build past events path — retroactive balance from orange dot backwards
+    const pastPathRef = useRef(null)
     const pastPath = (() => {
-        if (!hasBalance) return null
+        if (!hasBalance) return pastPathRef.current // keep last path during exit animation
 
-        const y = steppedPath?.points?.[0]?.y ?? toTopPct(balNum)
-        const endX = steppedPath ? steppedPath.points[0].x : markerPct
-        const points = [{ x: 0, y }, { x: endX, y }]
-        const linePath = `M 0 ${y} L ${endX} ${y}`
-        const fillPath = linePath + ` L ${endX} 100 L 0 100 Z`
-        return { linePath, fillPath, dots: [], points }
+        // Get all non-weekly-spend events before markerPct
+        const pastDiscrete = activeEvents
+            .filter(e => e.amount > 0 && e.editType !== 'weeklySpend' && datePct(e.date) < markerPct)
+            .sort((a, b) => datePct(a.date) - datePct(b.date))
+        // Get weekly spend events before markerPct
+        const pastWeekly = activeEvents
+            .filter(e => e.amount > 0 && e.editType === 'weeklySpend' && datePct(e.date) < markerPct)
+            .sort((a, b) => datePct(a.date) - datePct(b.date))
+
+        if (pastDiscrete.length === 0 && pastWeekly.length === 0) {
+            // No past events — flat line at balance
+            const y = toTopPct(balNum)
+            const points = [{ x: 0, y }, { x: markerPct, y }]
+            const linePath = `M 0 ${y} L ${markerPct} ${y}`
+            const fillPath = linePath + ` L ${markerPct} 100 L 0 100 Z`
+            return { linePath, fillPath, dots: [], points }
+        }
+
+        // Weekly spend between two x positions
+        const weeklyBetween = (x1, x2) => pastWeekly
+            .filter(e => { const ex = datePct(e.date); return ex > x1 && ex <= x2 })
+            .reduce((sum, e) => sum + e.amount, 0)
+
+        // Reverse-walk from balNum at markerPct to find balance at each past event
+        const entries = []
+        let bal = balNum
+        // Walk backwards to build (event, balBefore, balAfter) pairs
+        for (let i = pastDiscrete.length - 1; i >= 0; i--) {
+            const evt = pastDiscrete[i]
+            const x = datePct(evt.date)
+            const nextX = i < pastDiscrete.length - 1 ? datePct(pastDiscrete[i + 1].date) : markerPct
+            // Add back weekly spend between this event and the next
+            const ws = weeklyBetween(x, nextX)
+            bal += ws // reverse weekly (was subtracted, add back)
+            const balAfter = bal
+            // Reverse the discrete event
+            bal -= evt.type === 'income' ? evt.amount : -evt.amount
+            entries.unshift({ evt, balBefore: bal, balAfter, x })
+        }
+        // Add back weekly spend before first event
+        if (entries.length > 0) {
+            const ws = weeklyBetween(0, entries[0].x)
+            bal += ws
+        }
+        const balAtGraphStart = bal
+
+        // Now walk forward from graph start to build stepped path
+        const points = []
+        const dots = []
+        let running = balAtGraphStart
+        let prevX = 0
+        points.push({ x: 0, y: toTopPct(running) })
+
+        for (const entry of entries) {
+            // Apply weekly spend between prevX and this event
+            const ws = weeklyBetween(prevX, entry.x)
+            if (ws > 0) {
+                running -= ws
+                points.push({ x: entry.x, y: toTopPct(running) })
+            }
+            // Horizontal to event x
+            points.push({ x: entry.x, y: toTopPct(running) })
+            const yBefore = toTopPct(running)
+            running += entry.evt.type === 'income' ? entry.evt.amount : -entry.evt.amount
+            const yAfter = toTopPct(running)
+            points.push({ x: entry.x, y: yAfter })
+            dots.push({ x: entry.x, yBefore, yAfter, event: entry.evt, balanceAfter: running })
+            prevX = entry.x
+        }
+        // Apply remaining weekly spend to markerPct
+        const ws = weeklyBetween(prevX, markerPct)
+        if (ws > 0) running -= ws
+        points.push({ x: markerPct, y: toTopPct(running) })
+
+        const startX = points[0].x
+        const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
+        const fillPath = linePath + ` L ${markerPct} 100 L ${startX} 100 Z`
+        return { linePath, fillPath, dots, points }
     })()
+    if (pastPath && hasBalance) pastPathRef.current = pastPath
 
     // No cross-fade on graph line — instant update
 
@@ -1352,37 +1440,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             )
                         })}
 
-                        {/* Balance line extending left from orange dot to start (only when no past events) */}
-                        {balanceVisible && showToday && !pastPath && (
-                            <>
-                                <div style={{
-                                    position: 'absolute',
-                                    left: 0, right: `${100 - markerPct}%`,
-                                    top: `${greenTopPct}%`, bottom: 0,
-                                    background: 'linear-gradient(to bottom, rgba(20,123,117,0.05), rgba(20,123,117,0))',
-                                    pointerEvents: 'none',
-                                    transformOrigin: 'right',
-                                    transform: balanceAnimated ? 'scaleX(1)' : 'scaleX(0)',
-                                    opacity: balanceAnimated ? 1 : 0,
-                                    transition: balanceAnimated
-                                        ? 'transform 0.6s cubic-bezier(.22,1,.36,1) 0.15s, opacity 0.3s ease 0.15s, top 0.5s ease'
-                                        : 'transform 0.45s cubic-bezier(.22,1,.36,1), opacity 0.3s ease',
-                                }} />
-                                <div style={{
-                                    position: 'absolute',
-                                    left: 0, right: `${100 - markerPct}%`,
-                                    top: `${greenTopPct}%`,
-                                    height: 0,
-                                    borderTop: `1.5px solid rgba(20,123,117,0.25)`,
-                                    pointerEvents: 'none',
-                                    transformOrigin: 'right',
-                                    transform: balanceAnimated ? 'scaleX(1)' : 'scaleX(0)',
-                                    transition: balanceAnimated
-                                        ? 'transform 0.6s cubic-bezier(.22,1,.36,1) 0.15s, top 0.5s ease'
-                                        : 'transform 0.45s cubic-bezier(.22,1,.36,1)',
-                                }} />
-                            </>
-                        )}
+                        {/* (Past line now rendered via pastPath SVG below) */}
 
                         {/* Past events: dots */}
                         {balanceVisible && !hideDots && pastPath && (
@@ -1723,33 +1781,80 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                         })}
 
                         {/* Past events: stepped line + fill (inside zoom div — no CSS scale so strokes stay clean) */}
-                        {balanceVisible && pastPath && (
+                        {/* Past balance: flat line (no past events) — uses divs with top transition */}
+                        {balanceVisible && pastPath && pastPath.dots.length === 0 && (
+                            <>
+                                <div style={{
+                                    position: 'absolute',
+                                    left: 0, right: `${100 - markerPct}%`,
+                                    top: `${greenTopPct}%`, bottom: 0,
+                                    background: 'linear-gradient(to bottom, rgba(20,123,117,0.05), rgba(20,123,117,0))',
+                                    pointerEvents: 'none',
+                                    zIndex: 1,
+                                    transformOrigin: 'right',
+                                    transform: balanceAnimated ? 'scaleX(1)' : 'scaleX(0)',
+                                    opacity: balanceAnimated ? 1 : 0,
+                                    transition: balanceAnimated
+                                        ? 'transform 0.6s cubic-bezier(.22,1,.36,1) 0.15s, opacity 0.3s ease 0.15s, top 0.5s ease'
+                                        : 'transform 0.45s cubic-bezier(.22,1,.36,1), opacity 0.3s ease',
+                                }} />
+                                <div style={{
+                                    position: 'absolute',
+                                    left: 0, right: `${100 - markerPct}%`,
+                                    top: `${greenTopPct}%`,
+                                    height: 0,
+                                    borderTop: '1.5px solid rgba(20,123,117,0.25)',
+                                    pointerEvents: 'none',
+                                    zIndex: 1,
+                                    transformOrigin: 'right',
+                                    transform: balanceAnimated ? 'scaleX(1)' : 'scaleX(0)',
+                                    transition: balanceAnimated
+                                        ? 'transform 0.6s cubic-bezier(.22,1,.36,1) 0.15s, top 0.5s ease'
+                                        : 'transform 0.45s cubic-bezier(.22,1,.36,1)',
+                                }} />
+                            </>
+                        )}
+                        {/* Past balance: stepped line (has past events) — uses SVG */}
+                        {balanceVisible && pastPath && pastPath.dots.length > 0 && (
                             <div style={{
-                                position: 'absolute', top: 0, bottom: 0,
-                                left: 0, right: `${100 - markerPct}%`,
+                                position: 'absolute', inset: 0,
                                 pointerEvents: 'none',
                                 zIndex: 1,
-                                transformOrigin: 'right center',
+                                transformOrigin: `${markerPct}% center`,
                                 transform: balanceAnimated ? 'scaleX(1)' : 'scaleX(0)',
                                 transition: balanceAnimated
                                     ? 'transform 0.6s cubic-bezier(.22,1,.36,1) 0.15s'
                                     : 'transform 0.45s cubic-bezier(.22,1,.36,1)',
                             }}>
-                                {/* Past gradient fill */}
-                                <div style={{
-                                    position: 'absolute',
-                                    left: 0, right: 0,
-                                    top: `${greenTopPct}%`, bottom: 0,
-                                    background: 'linear-gradient(to bottom, rgba(20,123,117,0.05), rgba(20,123,117,0))',
-                                }} />
-                                {/* Past line */}
-                                <div style={{
-                                    position: 'absolute',
-                                    left: 0, right: 0,
-                                    top: `${greenTopPct}%`,
-                                    height: 0,
-                                    borderTop: '1.5px solid rgba(20,123,117,0.25)',
-                                }} />
+                                <svg
+                                    viewBox="0 0 100 100"
+                                    preserveAspectRatio="none"
+                                    style={{
+                                        position: 'absolute', inset: 0,
+                                        width: '100%', height: '100%',
+                                        overflow: 'visible',
+                                    }}
+                                >
+                                    <defs>
+                                        <linearGradient id="pastRetroGrad" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor="rgba(20,123,117,0.05)" />
+                                            <stop offset="100%" stopColor="rgba(20,123,117,0)" />
+                                        </linearGradient>
+                                    </defs>
+                                    <path
+                                        d={pastPath.fillPath}
+                                        fill="url(#pastRetroGrad)"
+                                    />
+                                    <path
+                                        d={pastPath.linePath}
+                                        fill="none"
+                                        stroke="rgba(20,123,117,0.25)"
+                                        strokeWidth="1.5"
+                                        strokeLinejoin="bevel"
+                                        vectorEffect="non-scaling-stroke"
+                                        shapeRendering="crispEdges"
+                                    />
+                                </svg>
                             </div>
                         )}
 

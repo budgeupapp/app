@@ -364,7 +364,7 @@ export default function BursaryStep({
                         </p>
                         <div style={{
                             display: 'inline-flex', alignItems: 'center',
-                            border: '1px solid #e8e8e8', borderRadius: 10,
+                            border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
                             padding: '0 14px', height: 38, gap: 6,
                             marginBottom: 20, width: 160,
                         }}>
@@ -405,7 +405,7 @@ export default function BursaryStep({
                 </p>
 
                 <div style={{
-                    border: '1px solid #e8e8e8', borderRadius: 10,
+                    border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
                     overflow: 'hidden',
                     marginBottom: 16,
                 }}>

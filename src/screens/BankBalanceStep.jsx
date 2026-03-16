@@ -86,7 +86,7 @@ export default function BankBalanceStep({ balance, updateBalance, heading = 'Ban
 
                 <div style={{
                     display: 'flex', alignItems: 'center',
-                    borderRadius: 10, border: '1px solid #e8e8e8',
+                    borderRadius: 10, border: '1px solid #e8e8e8', background: '#fff',
                     padding: '0 14px', height: 50, gap: 6,
                     width: 160, background: '#fff',
                 }}>

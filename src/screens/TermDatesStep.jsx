@@ -3,7 +3,7 @@ import { fmt, weeksBetween, daysBetween } from '../components/TermGraph'
 
 /* ---------- BREAK NAME FIELD ---------- */
 
-function BreakNameField({ value, placeholder, onChange }) {
+function BreakNameField({ value, placeholder, onChange, breakId }) {
     const ref = useRef(null)
     return (
         <input
@@ -12,9 +12,21 @@ function BreakNameField({ value, placeholder, onChange }) {
             value={value}
             placeholder={placeholder}
             onClick={(e) => e.stopPropagation()}
-            onFocus={() => {
-                // Prevent iOS from scrolling to top
-                if (ref.current) ref.current.focus({ preventScroll: true })
+            onFocus={(e) => {
+                // Scroll holiday card to top after keyboard settles
+                if (breakId) {
+                    // Record current scroll position to counteract browser auto-scroll
+                    const scrollParent = e.target.closest('[style*="overflow"]')
+                    const scrollBefore = scrollParent?.scrollTop
+                    requestAnimationFrame(() => {
+                        // Undo browser's auto-scroll
+                        if (scrollParent && scrollBefore != null) scrollParent.scrollTop = scrollBefore
+                        setTimeout(() => {
+                            const el = document.querySelector(`[data-break-id="${breakId}"]`)
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                        }, 300)
+                    })
+                }
             }}
             onChange={(e) => onChange(e.target.value)}
             style={{
@@ -320,6 +332,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                         <BreakNameField
                                             value={brk.name || ''}
                                             placeholder="Holiday"
+                                            breakId={brk.id}
                                             onChange={(v) => {
                                                 const newBreaks = [...term.breaks]
                                                 newBreaks[i] = { ...newBreaks[i], name: v }
@@ -338,7 +351,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                         onClick={() => removeBreak(i)}
                                         style={{
                                             background: 'none', border: 'none',
-                                            cursor: 'pointer', padding: '6px 0 0',
+                                            cursor: 'pointer', padding: '12px 0 0',
                                             fontSize: 12, fontWeight: 600, color: '#aaa',
                                             fontFamily: 'Nunito, sans-serif',
                                             width: '100%', textAlign: 'center',

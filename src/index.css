@@ -116,9 +116,12 @@ input, textarea {
   user-select: text;
 }
 
-/* Give inputs white fill */
-input, select, textarea {
-  background-color: #fff;
+/* Make text inputs white, selects/other transparent */
+input[type="text"], input[type="number"], input[type="email"], input[type="password"], input[type="tel"], input:not([type]), textarea {
+  background-color: transparent;
+}
+select {
+  background-color: transparent;
 }
 
 /* Left align text inside date inputs (iOS Safari) */
