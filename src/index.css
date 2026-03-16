@@ -246,12 +246,17 @@ button:focus {
   flex: 0 0 auto !important;
   overflow: visible !important;
 }
-/* Sticky title in onboarding step cards */
+/* Disable scroll anchoring in onboarding panels */
+.onboarding-panel {
+  overflow-anchor: none;
+}
+/* Hide h2 inside onboarding steps — title rendered in fixed header instead */
+.onboarding-panel > div:first-child > div:first-child > h2 {
+  display: none !important;
+}
+/* Reduce top padding since title is in fixed header */
 .onboarding-panel > div:first-child > div:first-child {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 5 !important;
-  background: #f5f7f7 !important;
+  padding-top: 0 !important;
 }
 
 @keyframes authFadeIn {

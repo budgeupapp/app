@@ -1314,6 +1314,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const graphWrapRef = useRef(null)
     const sheetDragRef = useRef({ dragging: false, startY: 0, startTop: 0 })
     const [sheetExpanded, setSheetExpanded] = useState(false)
+    const [titleBorderVisible, setTitleBorderVisible] = useState(false)
     const [graphAnimated, setGraphAnimated] = useState(() => {
         return true
     })
@@ -1383,7 +1384,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             return idx >= 0 ? idx : 0
         } catch { return 0 }
     })
-    const [expandedTerm, setExpandedTerm] = useState('_init')
+    const [expandedTerms, setExpandedTerms] = useState(new Set())
     const [showAllEvents, setShowAllEvents] = useState(false)
     const returnToSummaryRef = useRef(false)
 
@@ -2151,12 +2152,21 @@ export default function FinancialOnboardingForm({ onComplete }) {
         summary: 'Build my budget',
     }
     const PANEL_LABELS = PANEL_STEPS.map(id => PANEL_LABEL_MAP[id])
+    const PANEL_HEADING_MAP = {
+        termDates: 'University Term Dates', balance: 'Bank Balance', overdraft: 'Overdraft Limit',
+        regularIncome: 'Income', maintenanceLoan: 'Maintenance Loan', bursary: 'Bursary',
+        familyFriends: 'Family & Friends', work: 'Work', otherIncome: 'Other Income',
+        rent: 'Rent', regularExpenses: 'Expenses', bills: 'Bills',
+        uniFees: 'University Fees', savingsInvestments: 'Savings & Investments',
+        otherExpense: 'Other Expenses', oneOffItems: 'One-off Items',
+        weeklySpend: 'Weekly Spend', summary: 'Your Budget',
+    }
     const inPanelGroup = PANEL_STEPS.includes(currentStep.id) || activePanel > 0
 
     if (inPanelGroup) {
         const terms = formData.termDates?.terms || []
         const balanceNum = parseFloat(String(formData.balance || '0').replace(/,/g, '')) || 0
-        const activeExpanded = expandedTerm === '_init' ? null : expandedTerm
+        const activeExpanded = expandedTerms
 
         // Determine which handler to use based on active panel
         const panelOnNext = activePanel === 0 ? handleTermDatesNext : handlePanelNext
@@ -2251,7 +2261,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         graphHeight={150}
                         marginTop={8}
                         terms={terms}
-                        expandedTerm={activePanel === 0 ? activeExpanded : undefined}
+                        expandedTerm={activePanel === 0 && activeExpanded.size === 1 ? [...activeExpanded][0] : undefined}
                         balance={activePanel >= 1 ? balanceNum : undefined}
                         overdraft={formData.overdraft ? parseFloat(String(formData.overdraft || '0').replace(/,/g, '')) : undefined}
                         events={activePanel >= 3 ? buildGraphEvents(formData).filter(e => { const wsIdx = PANEL_STEPS.indexOf('weeklySpend'); return e.editType !== 'weeklySpend' || activePanel >= wsIdx }) : []}
@@ -2328,7 +2338,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         hideDots={PANEL_STEPS[activePanel] === 'summary'}
                         forceGreenDots={PANEL_STEPS[activePanel] === 'regularIncome'}
                         forceDotColor={PANEL_STEPS[activePanel] === 'regularIncome' ? 'green' : PANEL_STEPS[activePanel] === 'regularExpenses' ? 'red' : null}
-                        onTermClick={activePanel === 0 ? (termId) => setExpandedTerm(termId) : undefined}
+                        onTermClick={activePanel === 0 ? (termId) => setExpandedTerms(prev => {
+                            const next = new Set(prev)
+                            if (next.has(termId)) next.delete(termId); else next.add(termId)
+                            return next
+                        }) : undefined}
                         onBalanceClick={activePanel >= 1 ? (e) => {
                             const rect = e.currentTarget.getBoundingClientRect()
                             setEditBalanceAmount(String(formData.balance || ''))
@@ -2395,6 +2409,48 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px', cursor: 'grab', touchAction: 'none', flexShrink: 0, background: '#f5f7f7' }}
                     >
                         <div style={{ width: 36, height: 4, borderRadius: 2, background: '#bbb' }} />
+                    </div>
+                    {/* Fixed title — draggable + tap to toggle */}
+                    <div
+                        onTouchStart={(e) => {
+                            sheetDragRef.current._titleTapY = e.touches[0].clientY
+                            sheetDragRef.current._titleMoved = false
+                            handleSheetDragStart(e.touches[0].clientY)
+                        }}
+                        onTouchMove={(e) => {
+                            const dy = Math.abs(e.touches[0].clientY - sheetDragRef.current._titleTapY)
+                            if (dy > 5) sheetDragRef.current._titleMoved = true
+                            e.preventDefault()
+                            handleSheetDragMove(e.touches[0].clientY)
+                        }}
+                        onTouchEnd={() => {
+                            if (!sheetDragRef.current._titleMoved) {
+                                sheetDragRef.current.dragging = false
+                                if (sheetRef.current) {
+                                    sheetRef.current.style.transition = 'top 0.35s cubic-bezier(.25,1,.5,1)'
+                                    if (graphWrapRef.current) graphWrapRef.current.style.transition = 'opacity 0.35s ease, transform 0.35s ease'
+                                    if (sheetExpanded) {
+                                        sheetRef.current.style.top = COLLAPSED_TOP
+                                        if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '1'; graphWrapRef.current.style.transform = 'scale(1)' }
+                                        setSheetExpanded(false)
+                                    } else {
+                                        sheetRef.current.style.top = EXPANDED_TOP
+                                        if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '0.3'; graphWrapRef.current.style.transform = 'scale(0.95)' }
+                                        setSheetExpanded(true)
+                                    }
+                                }
+                            } else {
+                                handleSheetDragEnd()
+                            }
+                        }}
+                        style={{ touchAction: 'none', cursor: 'grab', flexShrink: 0, background: '#f5f7f7', borderBottom: `1px solid ${titleBorderVisible ? '#e0e0e0' : 'transparent'}`, transition: 'border-color 0.2s ease' }}
+                    >
+                        <h2 style={{
+                            fontSize: 22, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                            color: '#000', margin: 0, padding: '10px 24px 8px',
+                        }}>
+                            {PANEL_HEADING_MAP[PANEL_STEPS[activePanel]] || ''}
+                        </h2>
                     </div>
                     {/* Income/expense indicator strip — draggable + tap to toggle */}
                     <div
@@ -2463,11 +2519,37 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     })()}
                     </div>
 
-                    {/* Panel content area — only drag sheet from handle, not from scrolling */}
+                    {/* Panel content area */}
                     <div
                         style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#f5f7f7' }}>
                         {PANEL_STEPS.map((panelId, i) => (
-                            <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} className="onboarding-panel" style={{
+                            <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} className="onboarding-panel"
+                                onScroll={i === activePanel ? (e) => setTitleBorderVisible(e.target.scrollTop > 2) : undefined}
+                                onTouchStart={i === activePanel ? (e) => {
+                                    const el = e.currentTarget
+                                    sheetDragRef.current._panelStartY = e.touches[0].clientY
+                                    sheetDragRef.current._panelScrollTop = el.scrollTop
+                                    sheetDragRef.current._panelDragging = false
+                                } : undefined}
+                                onTouchMove={i === activePanel ? (e) => {
+                                    const dy = e.touches[0].clientY - sheetDragRef.current._panelStartY
+                                    // Only start sheet drag if at top and pulling down
+                                    if (!sheetDragRef.current._panelDragging && sheetDragRef.current._panelScrollTop <= 0 && dy > 8) {
+                                        sheetDragRef.current._panelDragging = true
+                                        handleSheetDragStart(sheetDragRef.current._panelStartY)
+                                    }
+                                    if (sheetDragRef.current._panelDragging) {
+                                        e.preventDefault()
+                                        handleSheetDragMove(e.touches[0].clientY)
+                                    }
+                                } : undefined}
+                                onTouchEnd={i === activePanel ? () => {
+                                    if (sheetDragRef.current._panelDragging) {
+                                        sheetDragRef.current._panelDragging = false
+                                        handleSheetDragEnd()
+                                    }
+                                } : undefined}
+                                style={{
                                 position: 'absolute', inset: 0,
                                 display: 'flex', flexDirection: 'column',
                                 overflowY: i === activePanel ? 'auto' : 'hidden',
@@ -2481,8 +2563,12 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     <TermDatesStep
                                         termData={formData.termDates}
                                         updateTermDates={(data) => updateField('termDates', data)}
-                                        expandedTerm={activeExpanded}
-                                        onExpandedTermChange={setExpandedTerm}
+                                        expandedTerms={activeExpanded}
+                                        onExpandedTermChange={(termId) => setExpandedTerms(prev => {
+                                            const next = new Set(prev)
+                                            if (next.has(termId)) next.delete(termId); else next.add(termId)
+                                            return next
+                                        })}
                                         subtitle={formData.university === 'University of Bristol'
                                             ? "These are the correct dates for Bristol."
                                             : "Enter your term dates and any holidays or breaks you'd like to add."}
@@ -3178,6 +3264,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                 fontSize: 16, fontWeight: 700,
                                                 fontFamily: 'Nunito, sans-serif',
                                                 cursor: 'pointer', letterSpacing: 0.3,
+                                                transition: 'flex 0.3s cubic-bezier(.25,1,.5,1)',
                                             }}
                                         >
                                             {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[activePanel]}

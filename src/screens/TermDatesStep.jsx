@@ -139,13 +139,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
             measure()
             requestAnimationFrame(measure)
 
-            if (!noAutoScroll && !prevExpanded.current && headerRef.current) {
-                setTimeout(() => {
-                    if (headerRef.current) {
-                        headerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                    }
-                }, 350)
-            }
+            // No auto-scroll — panel handles scrolling
         }
     }, [expanded, term.breaks.length, removingBreak])
 
@@ -213,12 +207,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
             onUpdate({ ...term, breaks: [...existingBreaks, { id: newId, start: s, end: e }] })
         }
 
-        if (!noAutoScroll) {
-            setTimeout(() => {
-                const el = document.querySelector(`[data-break-id="${newId}"]`)
-                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }, 150)
-        }
+        // No auto-scroll — panel handles scrolling
     }
 
     const removeBreak = (i) => {
@@ -413,7 +402,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
 
 export default function TermDatesStep({
     termData, updateTermDates,
-    expandedTerm, onExpandedTermChange,
+    expandedTerms = new Set(), onExpandedTermChange,
     compact = false,
     noAutoScroll = false,
     heading = 'University Term Dates',
@@ -502,7 +491,7 @@ export default function TermDatesStep({
     const deleteTerm = (id) => {
         const el = document.querySelector(`[data-term-id="${id}"]`)
         if (el) termHeights.current[id] = el.offsetHeight
-        if (expandedTerm === id) onExpandedTermChange?.(null)
+        if (expandedTerms.has(id)) onExpandedTermChange?.(id)
         setRemovingTermId(id)
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -559,10 +548,8 @@ export default function TermDatesStep({
                     }}>
                         <TermAccordion
                             term={term}
-                            expanded={expandedTerm === term.id}
-                            onToggle={() => onExpandedTermChange?.(
-                                expandedTerm === term.id ? null : term.id
-                            )}
+                            expanded={expandedTerms.has(term.id)}
+                            onToggle={() => onExpandedTermChange?.(term.id)}
                             onUpdate={updateTerm}
                             onDelete={() => deleteTerm(term.id)}
                             canDelete={terms.length > 1}
@@ -626,7 +613,7 @@ export default function TermDatesStep({
                 overflowY: 'auto',
                 overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
-                padding: '0 16px 4px',
+                padding: '0 16px 8px',
                 display: 'flex',
                 flexDirection: 'column',
             }}>

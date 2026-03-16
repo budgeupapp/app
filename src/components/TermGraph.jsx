@@ -2122,7 +2122,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
             {/* X-axis date labels — adapt to zoom level */}
             <div style={{
-                position: 'relative', height: 14, marginTop: 6, marginBottom: 10, marginLeft: Y_AXIS_W,
+                position: 'relative', height: 14, marginTop: 6, marginBottom: 18, marginLeft: Y_AXIS_W,
                 overflow: 'hidden',
             }}>
                 {/* During zoom-out animation, render month labels in a fixed (non-zoomed) container

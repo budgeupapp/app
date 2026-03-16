@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import { flushSync } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { ChevronUp, ChevronDown, ChevronRight, Check, Clock, Plus, Trash, Eye, EyeOff, AlertTriangle } from 'react-feather'
-import { PiCalendarBlank, PiCalendarBlankFill, PiLightbulb, PiLightbulbFill, PiChartLineUp, PiTrendUp, PiTrendUpBold, PiShuffle, PiShuffleBold } from 'react-icons/pi'
+import { PiCalendarBlank, PiCalendarBlankFill, PiLightbulb, PiLightbulbFill, PiChartLineUp, PiTrendUp, PiTrendUpBold, PiTrendDown, PiTrendDownBold, PiShuffle, PiShuffleBold } from 'react-icons/pi'
 import { useSurveySequence } from '../lib/useSurveySequence'
 import TermGraph, { refreshAY, AY_START, AY_END, datePct, daysBetween, fmt } from '../components/TermGraph'
 import { supabase } from '../lib/supabaseClient'
@@ -1854,8 +1854,8 @@ export default function Dashboard() {
     const tabExpandedRef = useRef({})
     const tabGraphCoveredRef = useRef({
         goals: sessionStorage.getItem('budgeup_graph_covered_goals') === 'true',
-        fixed: sessionStorage.getItem('budgeup_graph_covered_fixed') === 'true',
-        variable: sessionStorage.getItem('budgeup_graph_covered_variable') === 'true',
+        income: sessionStorage.getItem('budgeup_graph_covered_income') === 'true',
+        expenses: sessionStorage.getItem('budgeup_graph_covered_expenses') === 'true',
     })
     const handleTabChange = (tab, targetScrollOverride) => {
         if (tab !== activeTab) {
@@ -1897,14 +1897,13 @@ export default function Dashboard() {
         sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTab, String(el.scrollTop))
 
         // Check if tab is empty
-        const isFixedEmpty = tab === 'fixed' &&
+        const isIncomeEmpty = tab === 'income' &&
             INCOME_SOURCES.filter(s => isSourceVisible(s.id, formData.incomeSources)).length === 0 &&
-            EXPENSE_SOURCES.filter(s => isSourceVisible(s.id, formData.expenseSources)).length === 0
-        const isFlexEmpty = tab === 'variable' &&
-            (formData.flexIncomeSources || []).length === 0 &&
-            (formData.flexExpenseSources || []).length === 0 &&
-            (formData.oneOffItems || []).filter(i => i.amount && i.name).length === 0
-        const isTabEmpty = isFixedEmpty || isFlexEmpty
+            (formData.flexIncomeSources || []).length === 0
+        const isExpensesEmpty = tab === 'expenses' &&
+            EXPENSE_SOURCES.filter(s => isSourceVisible(s.id, formData.expenseSources)).length === 0 &&
+            (formData.flexExpenseSources || []).length === 0
+        const isTabEmpty = isIncomeEmpty || isExpensesEmpty
 
         // Restore saved scroll position for the target tab
         const savedScroll = parseInt(sessionStorage.getItem('budgeup_scroll_dashboard_' + tab) || '0', 10)
@@ -2697,7 +2696,8 @@ export default function Dashboard() {
         }
 
         const openAddPicker = (type) => {
-            if (activeTab !== 'fixed') handleTabChange('fixed')
+            const targetTab = type === 'expense' ? 'expenses' : 'income'
+            if (activeTab !== targetTab) handleTabChange(targetTab)
             addPickerScrollPos.current = scrollRef.current?.scrollTop ?? null
             setAddingSourceType(type)
         }
@@ -2717,7 +2717,8 @@ export default function Dashboard() {
                 const el = scrollRef.current
                 const savedScroll = el ? el.scrollTop : 0
                 // Step 1: switch to regular tab if needed, collapse graph
-                if (activeTab !== 'fixed') setActiveTab('fixed')
+                const targetTab = isExp ? 'expenses' : 'income'
+                if (activeTab !== targetTab) setActiveTab(targetTab)
                 collapseGraph()
                 // Lock scroll during reflow
                 if (el) {
@@ -2760,7 +2761,8 @@ export default function Dashboard() {
             if (action.startsWith('add-flex:')) {
                 const [, sourceId, type] = action.split(':')
                 const isExp = type === 'expense'
-                if (activeTab !== 'variable') setActiveTab('variable')
+                const targetTab = isExp ? 'expenses' : 'income'
+                if (activeTab !== targetTab) setActiveTab(targetTab)
                 collapseGraph()
                 const flexSrc = isExp ? FLEX_EXPENSE_SOURCES : FLEX_INCOME_SOURCES
                 const srcDef = flexSrc.find(s => s.id === sourceId)
@@ -2793,9 +2795,11 @@ export default function Dashboard() {
             if (action === 'add-regular-income') return
             if (action === 'add-regular-expense') return
 
-            if (action === 'add-oneoff-income' || action === 'add-income' ||
-                action === 'add-oneoff-expense' || action === 'add-expense') {
-                handleTabChange('variable')
+            if (action === 'add-oneoff-income' || action === 'add-income') {
+                handleTabChange('income')
+            }
+            if (action === 'add-oneoff-expense' || action === 'add-expense') {
+                handleTabChange('expenses')
             }
         }
 
@@ -3528,7 +3532,8 @@ export default function Dashboard() {
                                     }),
                                 ].filter(t => {
                                     if (t === currentEventType) return false
-                                    if (activeTab === 'variable' && (t === 'oneOffIncome' || t === 'oneOffExpense')) return false
+                                    if (activeTab === 'income' && t === 'oneOffIncome') return false
+                                    if (activeTab === 'expenses' && t === 'oneOffExpense') return false
                                     if (goalsVisibleEditTypes.has(t)) return false
                                     return true
                                 })}
@@ -3573,9 +3578,9 @@ export default function Dashboard() {
                         }}>
                             {(() => {
                                 const tabs = [
-                                    { key: 'fixed', label: 'Regular', Icon: PiCalendarBlank, ActiveIcon: PiCalendarBlankFill },
+                                    { key: 'income', label: 'Income', Icon: PiTrendUp, ActiveIcon: PiTrendUpBold },
                                     { key: 'goals', label: 'Insights', Icon: PiLightbulb, ActiveIcon: PiLightbulbFill },
-                                    { key: 'variable', label: 'Flexible', Icon: PiShuffle, ActiveIcon: PiShuffleBold },
+                                    { key: 'expenses', label: 'Expenses', Icon: PiTrendDown, ActiveIcon: PiTrendDownBold },
                                 ]
                                 const activeIndex = tabs.findIndex(t => t.key === activeTab)
                                 return (
@@ -3633,58 +3638,36 @@ export default function Dashboard() {
                         minHeight: '50vh',
                     }}>
 
-                        {activeTab === 'fixed' && (<div style={{ paddingBottom: 40 }}>
-                            {/* Income vs Spend summary card */}
+                        {activeTab === 'income' && (<div style={{ paddingBottom: 40 }}>
+                            {/* Income Overview summary card */}
                             {(() => {
                                 const inc = Math.round(yearlyIncome * freqMultiplier[freqView])
-                                const exp = Math.round(yearlyExpense * freqMultiplier[freqView])
-                                const total = inc + exp
-                                const spendPct = total > 0 ? Math.round((exp / total) * 100) : 50
                                 return (
                                     <div style={{ padding: '16px 16px', background: '#fff', borderRadius: 14, marginBottom: 10 }}>
-                                        {/* Title row */}
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                             <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: 0 }}>
-                                                Regular Spending Overview
+                                                Income Overview
                                             </p>
                                             <span style={{
                                                 fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
-                                                color: (inc - exp) >= 0 ? '#147b75' : '#e06470',
+                                                color: '#147b75',
                                             }}>
-                                                {(inc - exp) >= 0 ? '+' : '\u2212'}{getCurrencySymbol()}{Math.abs(inc - exp).toLocaleString()}{freqSuffix[freqView]}
-                                            </span>
-                                        </div>
-                                        {/* Progress bar — red (spend) to green (income) */}
-                                        <div style={{ height: 16, borderRadius: 8, overflow: 'hidden', background: '#e06470', marginBottom: 10 }}>
-                                            <div style={{
-                                                height: '100%',
-                                                width: `${100 - spendPct}%`,
-                                                background: '#147b75',
-                                                transition: 'width 0.4s ease',
-                                            }} />
-                                        </div>
-                                        {/* Labels row */}
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>
-                                                Income {getCurrencySymbol()}{inc.toLocaleString()}{freqSuffix[freqView]}
-                                            </span>
-                                            <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                Spend {getCurrencySymbol()}{exp.toLocaleString()}{freqSuffix[freqView]}
+                                                {getCurrencySymbol()}{inc.toLocaleString()}{freqSuffix[freqView]}
                                             </span>
                                         </div>
                                     </div>
                                 )
                             })()}
 
-                            {/* Empty state when no regular sources */}
+                            {/* Empty state when no income sources */}
                             {INCOME_SOURCES.filter(s => isSourceVisible(s.id, formData.incomeSources)).length === 0 &&
-                                EXPENSE_SOURCES.filter(s => isSourceVisible(s.id, formData.expenseSources)).length === 0 && (
+                                (formData.flexIncomeSources || []).length === 0 && (
                                     <div style={{
                                         textAlign: 'center',
                                         padding: '24px 40px',
                                     }}>
                                         <p style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
-                                            No regular income or expenses yet
+                                            No income sources yet
                                         </p>
                                         <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>
                                             Tap + to add
@@ -3692,7 +3675,7 @@ export default function Dashboard() {
                                     </div>
                                 )}
 
-                            {/* Regular Income Section */}
+                            {/* Income Section */}
                             {(INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).length > 0 || addingSourceType === 'income' || collapsingSections.has('income')) && (
                                 <div data-section="income" style={{
                                     margin: collapsingSections.has('income') ? '0' : '0 0 10px',
@@ -3708,7 +3691,7 @@ export default function Dashboard() {
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
                                         <span style={{
                                             fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a',
-                                        }}>Regular Income</span>
+                                        }}>Income</span>
                                         {INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).length > 4 && (
                                             <span
                                                 onClick={() => setShowAllIncome(p => !p)}
