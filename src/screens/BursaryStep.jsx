@@ -416,7 +416,7 @@ function BursaryEntry({
                             }}
                         >
                             <option value="yearly">Yearly</option>
-                            <option value="instalment">Irregular</option>
+                            <option value="instalment">Per instalment</option>
                         </select>
                         <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
                             <path d="M1 1L5 5L9 1" stroke="#147b75" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -465,27 +465,25 @@ function BursaryEntry({
                             )
                         })}
                     </div>
-                </div>
 
-                {/* Customise amounts & dates — collapsible card */}
+                {/* Customise amounts & dates — inside month card */}
                 {months.length > 0 && (
-                    <div style={{
-                        border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
-                        overflow: 'hidden', marginBottom: 16,
-                    }}>
+                    <>
                         <div
                             onClick={() => {
                                 const next = !customAmounts
                                 setCustomAmounts(next)
-                                if (next && tab !== 'instalment') {
-                                    const perVal = parseFloat(String(amount || '').replace(/,/g, ''))
-                                    if (perVal > 0 && months.length > 0) {
+                                if (next) {
+                                    const yearlyVal = parseFloat(String(amount || '').replace(/,/g, ''))
+                                    if (yearlyVal > 0 && months.length > 0 && !Object.values(instalmentAmounts || {}).some(v => parseFloat(String(v || '0').replace(/,/g, '')) > 0)) {
+                                        const amounts = tab === 'instalment'
+                                            ? months.map(() => yearlyVal)
+                                            : splitEvenly(yearlyVal, months.length)
                                         const ni = {}, nr = {}
-                                        months.forEach(m => { ni[m] = String(perVal); nr[m] = String(perVal) })
+                                        months.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
                                         updateInstalmentAmounts(ni)
                                         setRawInstalments(nr)
                                     }
-                                    setTab('instalment')
                                 }
                             }}
                             style={{
@@ -600,8 +598,9 @@ function BursaryEntry({
                                 </div>
                             ))}
                         </div>
-                    </div>
+                    </>
                 )}
+                </div>
 
         </div>
     )
