@@ -50,7 +50,7 @@ export default function BankBalanceStep({ balance, updateBalance, heading = 'Ban
     }
 
     return (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px 16px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px 8px' }}>
             <h2 style={{
                 fontSize: 25, fontWeight: 700,
                 fontFamily: 'Nunito, sans-serif',

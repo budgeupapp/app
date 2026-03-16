@@ -176,7 +176,7 @@ export default function WeeklySpendStep({
             <div style={{
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
-                padding: compact ? '0' : '0 24px 24px',
+                padding: compact ? '0' : '0 24px 8px',
                 minHeight: 0,
             }}>
                 <SpendRulerCard

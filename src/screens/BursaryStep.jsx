@@ -269,7 +269,7 @@ export default function BursaryStep({
             <div style={{
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
-                padding: compact ? '0 24px 0' : '0 24px 24px',
+                padding: compact ? '0 24px 0' : '0 24px 8px',
                 marginBottom: -5,
                 minHeight: 0,
             }} ref={scrollRef}>

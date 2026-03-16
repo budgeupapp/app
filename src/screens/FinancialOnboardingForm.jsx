@@ -2156,7 +2156,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
     if (inPanelGroup) {
         const terms = formData.termDates?.terms || []
         const balanceNum = parseFloat(String(formData.balance || '0').replace(/,/g, '')) || 0
-        const activeExpanded = expandedTerm === '_init' ? (terms[0]?.id ?? null) : expandedTerm
+        const activeExpanded = expandedTerm === '_init' ? null : expandedTerm
 
         // Determine which handler to use based on active panel
         const panelOnNext = activePanel === 0 ? handleTermDatesNext : handlePanelNext
@@ -2347,7 +2347,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     display: 'flex',
                     flexDirection: 'column',
                     overflow: 'hidden',
-                    boxShadow: 'none',
+                    boxShadow: '0 -2px 8px rgba(0,0,0,0.15)',
                     transition: 'top 0.35s cubic-bezier(.25,1,.5,1), border-radius 0.35s ease',
                     zIndex: 2,
                 }}>
@@ -2396,11 +2396,39 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     >
                         <div style={{ width: 36, height: 4, borderRadius: 2, background: '#bbb' }} />
                     </div>
-                    {/* Income/expense indicator strip — also draggable */}
+                    {/* Income/expense indicator strip — draggable + tap to toggle */}
                     <div
-                        onTouchStart={(e) => handleSheetDragStart(e.touches[0].clientY)}
-                        onTouchMove={(e) => { e.preventDefault(); handleSheetDragMove(e.touches[0].clientY) }}
-                        onTouchEnd={handleSheetDragEnd}
+                        onTouchStart={(e) => {
+                            sheetDragRef.current._tapStartY2 = e.touches[0].clientY
+                            sheetDragRef.current._tapMoved2 = false
+                            handleSheetDragStart(e.touches[0].clientY)
+                        }}
+                        onTouchMove={(e) => {
+                            const dy = Math.abs(e.touches[0].clientY - sheetDragRef.current._tapStartY2)
+                            if (dy > 5) sheetDragRef.current._tapMoved2 = true
+                            e.preventDefault()
+                            handleSheetDragMove(e.touches[0].clientY)
+                        }}
+                        onTouchEnd={() => {
+                            if (!sheetDragRef.current._tapMoved2) {
+                                sheetDragRef.current.dragging = false
+                                if (sheetRef.current) {
+                                    sheetRef.current.style.transition = 'top 0.35s cubic-bezier(.25,1,.5,1)'
+                                    if (graphWrapRef.current) graphWrapRef.current.style.transition = 'opacity 0.35s ease, transform 0.35s ease'
+                                    if (sheetExpanded) {
+                                        sheetRef.current.style.top = COLLAPSED_TOP
+                                        if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '1'; graphWrapRef.current.style.transform = 'scale(1)' }
+                                        setSheetExpanded(false)
+                                    } else {
+                                        sheetRef.current.style.top = EXPANDED_TOP
+                                        if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '0.3'; graphWrapRef.current.style.transform = 'scale(0.95)' }
+                                        setSheetExpanded(true)
+                                    }
+                                }
+                            } else {
+                                handleSheetDragEnd()
+                            }
+                        }}
                         onMouseDown={(e) => {
                             handleSheetDragStart(e.clientY)
                             const onMove = (ev) => handleSheetDragMove(ev.clientY)
@@ -2455,6 +2483,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateTermDates={(data) => updateField('termDates', data)}
                                         expandedTerm={activeExpanded}
                                         onExpandedTermChange={setExpandedTerm}
+                                        subtitle={formData.university === 'University of Bristol'
+                                            ? "These are the correct dates for Bristol."
+                                            : "Enter your term dates and any holidays or breaks you'd like to add."}
                                     />
                                 )}
                                 {panelId === 'balance' && (
@@ -3107,7 +3138,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 {i === activePanel && (
                                     <div style={{
                                         flexShrink: 0,
-                                        background: 'linear-gradient(to bottom, rgba(245,247,247,0) 0%, #f5f7f7 30%)',
+                                        background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, #fff 30%)',
                                         padding: '24px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
                                         display: 'flex',
                                         alignItems: 'center',

@@ -3244,7 +3244,7 @@ export default function Dashboard() {
                 }}
             >
                 {/* Graph + tabs — sticky, shrinks on scroll */}
-                <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 0 }}>
+                <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
 
                     {/* Graph area — clips when covered, blocks scroll */}
                     <div ref={graphCardRef} onTouchMove={e => e.preventDefault()} style={{

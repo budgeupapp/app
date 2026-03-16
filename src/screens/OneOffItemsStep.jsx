@@ -333,7 +333,7 @@ export default function OneOffItemsStep({ items, updateItems, compact = false, m
             <div style={{
                 flex: 1, overflowY: 'visible', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
-                padding: compact ? '0 0 24px' : '0 24px 24px',
+                padding: compact ? '0 0 24px' : '0 24px 8px',
                 minHeight: 0,
             }} ref={scrollRef}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
