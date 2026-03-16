@@ -81,7 +81,7 @@ export default function MaintenanceLoanStep({
     subtitle = "Enter the loan you're given for rent and living costs.",
 }) {
     const addLoan = () => {
-        updateLoans([...loans, {
+        updateLoans(prev => [...prev, {
             id: `loan_${Date.now()}`,
             amount: '',
             months: [...DEFAULT_LOAN_MONTHS],
@@ -93,12 +93,11 @@ export default function MaintenanceLoanStep({
 
     const removeLoan = (idx) => {
         if (loans.length <= 1) return
-        updateLoans(loans.filter((_, i) => i !== idx))
+        updateLoans(prev => prev.filter((_, i) => i !== idx))
     }
 
     const updateLoan = (idx, field, value) => {
-        const updated = loans.map((loan, i) => i === idx ? { ...loan, [field]: value } : loan)
-        updateLoans(updated)
+        updateLoans(prev => prev.map((loan, i) => i === idx ? { ...loan, [field]: value } : loan))
     }
 
     return (
@@ -269,12 +268,7 @@ function LoanEntry({
 
     const handleInputBlur = () => {
         blurTimerRef.current = setTimeout(() => {
-            if (dateActiveRef.current) {
-                setInputFocused(false)
-                return
-            }
-            scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
-            setTimeout(() => { if (!dateActiveRef.current) setInputFocused(false) }, 500)
+            if (!dateActiveRef.current) setInputFocused(false)
         }, 50)
     }
 
@@ -474,7 +468,7 @@ function LoanEntry({
                     fontFamily: 'Nunito, sans-serif',
                     color: '#000', margin: '0 0 10px',
                 }}>
-                    {tab === 'instalment' ? 'Instalment months & amounts' : 'Which months do you receive instalments?'}
+                    {tab === 'instalment' ? 'Which months do you receive instalments and how much?' : 'Which months do you receive instalments?'}
                 </p>
 
                 <div data-instalment-card style={{
@@ -514,58 +508,58 @@ function LoanEntry({
 
                     {/* Per-instalment rows: month | amount | date */}
                     {tab === 'instalment' && months.length > 0 && (
-                        <div style={{ borderTop: '1px solid #eee' }}>
+                        <div style={{ borderTop: '1px solid #eee', padding: '10px 12px' }}>
                             {months.map((m, i) => (
                                 <div key={m} style={{
-                                    display: 'flex', alignItems: 'center',
-                                    padding: '0 14px', height: 44,
-                                    gap: 6,
-                                    borderTop: i > 0 ? '1px solid #f0f0f0' : 'none',
+                                    display: 'grid',
+                                    gridTemplateColumns: '1fr 1fr 1fr',
+                                    alignItems: 'center',
+                                    padding: '10px 0',
                                 }}>
                                     <span style={{
-                                        fontSize: 13, fontWeight: 700,
+                                        fontSize: 13, fontWeight: 600,
                                         fontFamily: 'Nunito, sans-serif',
-                                        color: '#147b75', minWidth: 32,
+                                        color: '#888',
                                     }}>
-                                        {SHORT_MONTH[m]}
+                                        {MONTH_LABELS[m]}
                                     </span>
-                                    <div style={{ width: 1, height: 20, background: '#e8e8e8' }} />
-                                    <span style={{
-                                        fontSize: 14, fontWeight: 600,
-                                        color: '#888', fontFamily: 'Nunito, sans-serif',
-                                    }}>{getCurrencySymbol()}</span>
-                                    <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        placeholder="0.00"
-                                        value={formatDisplay(rawInstalments[m] || '')}
-                                        onChange={(e) => handleInstalmentChange(m, e)}
-                                        onTouchStart={handleInputTouchStart}
-                                        onFocus={scrollInputToTop}
-                                        onBlur={handleInputBlur}
-                                        style={{
-                                            flex: 1, border: 'none',
-                                            background: 'transparent',
-                                            fontSize: 14, fontWeight: 500,
-                                            fontFamily: 'Nunito, sans-serif',
-                                            color: '#000', outline: 'none',
-                                            padding: 0, minWidth: 50,
-                                        }}
-                                    />
-                                    <div style={{ width: 1, height: 20, background: '#e8e8e8' }} />
-                                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
                                         <span style={{
-                                            fontSize: 12, fontWeight: 600,
+                                            fontSize: 14, fontWeight: 600,
+                                            color: '#888', fontFamily: 'Nunito, sans-serif',
+                                        }}>{getCurrencySymbol()}</span>
+                                        <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            placeholder="0.00"
+                                            value={formatDisplay(rawInstalments[m] || '')}
+                                            onChange={(e) => handleInstalmentChange(m, e)}
+                                            onTouchStart={handleInputTouchStart}
+                                            onFocus={scrollInputToTop}
+                                            onBlur={handleInputBlur}
+                                            style={{
+                                                width: 60, border: 'none',
+                                                background: 'transparent',
+                                                fontSize: 14, fontWeight: 500,
+                                                fontFamily: 'Nunito, sans-serif',
+                                                color: '#000', outline: 'none',
+                                                padding: 0,
+                                            }}
+                                        />
+                                    </div>
+                                    <div style={{ position: 'relative', display: 'flex', justifyContent: 'flex-end' }}>
+                                        <span style={{
+                                            fontSize: 13, fontWeight: 700,
                                             color: '#147b75',
                                             fontFamily: 'Nunito, sans-serif',
                                             pointerEvents: 'none',
                                             background: 'rgba(20,123,117,0.08)',
-                                            padding: '3px 8px',
-                                            borderRadius: 6,
+                                            padding: '3px 10px',
+                                            borderRadius: 8,
                                             display: 'inline-block',
                                             whiteSpace: 'nowrap',
                                         }}>
-                                            {loanDates?.[m] ? fmt(loanDates[m]) : 'Date'}
+                                            {loanDates?.[m] ? fmt(loanDates[m]) : 'Select date'}
                                         </span>
                                         <input
                                             type="date"
@@ -584,6 +578,105 @@ function LoanEntry({
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    )}
+
+                    {/* Payment dates accordion — year total tab only */}
+                    {tab === 'yearly' && (
+                        <div
+                            ref={datesBoxRef}
+                            onClick={() => {
+                                const next = !datesExpanded
+                                setDatesExpanded(next)
+                                if (next) updateLoanKnowDates(true)
+                            }}
+                            style={{
+                                padding: '10px 12px 12px',
+                                cursor: 'pointer',
+                                borderTop: '1px solid #eee',
+                            }}
+                        >
+                            <div style={{
+                                display: 'flex', alignItems: 'center',
+                                justifyContent: 'space-between',
+                            }}>
+                                <div>
+                                    <p style={{
+                                        fontSize: 14, fontWeight: 600,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        color: '#000', margin: 0,
+                                    }}>
+                                        I know the exact payment dates
+                                    </p>
+                                    <p style={{
+                                        fontSize: 10, fontWeight: 500,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        color: '#444', margin: '2px 0 0',
+                                    }}>
+                                        Optional – improves accuracy
+                                    </p>
+                                </div>
+                                <Chevron open={datesExpanded} />
+                            </div>
+
+                            <div
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                    maxHeight: datesExpanded ? 500 : 0,
+                                    opacity: datesExpanded ? 1 : 0,
+                                    overflow: 'hidden',
+                                    transition: 'max-height 0.3s ease, opacity 0.2s ease',
+                                }}
+                            >
+                                <div style={{
+                                    marginTop: 10,
+                                    display: 'flex', flexDirection: 'column', gap: 8,
+                                }}>
+                                    {months.map(m => (
+                                        <div key={m} style={{
+                                            display: 'flex', alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            padding: '6px 0',
+                                        }}>
+                                            <span style={{
+                                                fontSize: 13, color: '#888',
+                                                fontWeight: 600,
+                                                fontFamily: 'Nunito, sans-serif',
+                                            }}>
+                                                {MONTH_LABELS[m]}
+                                            </span>
+                                            <div style={{ position: 'relative' }}>
+                                                <span style={{
+                                                    fontSize: 13, fontWeight: 700,
+                                                    color: '#147b75',
+                                                    fontFamily: 'Nunito, sans-serif',
+                                                    pointerEvents: 'none',
+                                                    background: 'rgba(20,123,117,0.08)',
+                                                    padding: '3px 10px',
+                                                    borderRadius: 8,
+                                                    display: 'inline-block',
+                                                }}>
+                                                    {loanDates?.[m] ? fmt(loanDates[m]) : 'Select date'}
+                                                </span>
+                                                <input
+                                                    type="date"
+                                                    value={loanDates?.[m] || getMonthRange(m).min}
+                                                    min={getMonthRange(m).min}
+                                                    max={getMonthRange(m).max}
+                                                    onFocus={() => { dateActiveRef.current = true }}
+                                                    onBlur={() => { dateActiveRef.current = false }}
+                                                    onChange={(e) => e.target.value && handleDateChange(m, e.target.value)}
+                                                    style={{
+                                                        position: 'absolute', inset: 0,
+                                                        opacity: 0, width: '100%', height: '100%',
+                                                        cursor: 'pointer', fontSize: 16,
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     )}
 

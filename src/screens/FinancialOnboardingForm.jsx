@@ -2195,7 +2195,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 <div
                     onClick={dismissToast}
                     style={{
-                        position: 'fixed', bottom: 'calc(60px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)',
+                        position: 'fixed', bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))', left: '50%', transform: 'translateX(-50%)',
                         background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
                         color: '#fff', padding: '10px 20px', borderRadius: 20,
                         fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
@@ -2587,18 +2587,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         {PANEL_STEPS.map((panelId, i) => (
                             <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} className="onboarding-panel"
                                 onScroll={i === activePanel ? (e) => setTitleBorderVisible(e.target.scrollTop > 2) : undefined}
-                                onFocusCapture={i === activePanel && !sheetExpanded ? (e) => {
-                                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-                                        const panel = e.currentTarget
-                                        const input = e.target
-                                        setTimeout(() => {
-                                            const panelRect = panel.getBoundingClientRect()
-                                            const inputRect = input.getBoundingClientRect()
-                                            const offset = inputRect.top - panelRect.top + panel.scrollTop - 35
-                                            panel.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
-                                        }, 350)
-                                    }
-                                } : undefined}
                                 style={{
                                 position: 'absolute', inset: 0,
                                 display: 'flex', flexDirection: 'column',
@@ -2696,16 +2684,29 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             dates: formData.loanDates || {},
                                             instalmentAmounts: formData.instalmentAmounts || {},
                                         }]}
-                                        updateLoans={(loans) => {
-                                            updateField('maintenanceLoans', loans)
-                                            // Sync first loan back to flat fields for backward compat
-                                            if (loans[0]) {
-                                                updateField('loanAmount', loans[0].amount)
-                                                updateField('loanMonths', loans[0].months)
-                                                updateField('loanKnowDates', loans[0].knowDates)
-                                                updateField('loanDates', loans[0].dates)
-                                                updateField('instalmentAmounts', loans[0].instalmentAmounts)
-                                            }
+                                        updateLoans={(loansOrFn) => {
+                                            setFormData(prev => {
+                                                const prevLoans = prev.maintenanceLoans || [{
+                                                    id: 'loan_0',
+                                                    amount: prev.loanAmount || '',
+                                                    months: prev.loanMonths || [...DEFAULT_LOAN_MONTHS],
+                                                    knowDates: prev.loanKnowDates || false,
+                                                    dates: prev.loanDates || {},
+                                                    instalmentAmounts: prev.instalmentAmounts || {},
+                                                }]
+                                                const newLoans = typeof loansOrFn === 'function' ? loansOrFn(prevLoans) : loansOrFn
+                                                return {
+                                                    ...prev,
+                                                    maintenanceLoans: newLoans,
+                                                    ...(newLoans[0] ? {
+                                                        loanAmount: newLoans[0].amount,
+                                                        loanMonths: newLoans[0].months,
+                                                        loanKnowDates: newLoans[0].knowDates,
+                                                        loanDates: newLoans[0].dates,
+                                                        instalmentAmounts: newLoans[0].instalmentAmounts,
+                                                    } : {}),
+                                                }
+                                            })
                                         }}
                                     />
                                 )}

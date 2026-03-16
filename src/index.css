@@ -240,11 +240,9 @@ button:focus {
 .onboarding-panel > div:first-child {
   flex: 0 0 auto !important;
   min-height: auto !important;
-  overflow: visible !important;
 }
 .onboarding-panel > div:first-child > div {
   flex: 0 0 auto !important;
-  overflow: visible !important;
 }
 /* Disable scroll anchoring in onboarding panels */
 .onboarding-panel {
