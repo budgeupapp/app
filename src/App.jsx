@@ -1,5 +1,5 @@
 // DEV: set to 'onboarding', 'dashboard', or 'signup' to bypass login and jump to that view. Set to null for normal behaviour.
-const DEV_VIEW = 'signup'
+const DEV_VIEW = null
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
