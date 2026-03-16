@@ -2335,6 +2335,16 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     />
                 </div>
 
+                {/* Background fill behind sheet to cover rounded corner gaps when expanded */}
+                <div style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    background: '#f5f7f7',
+                    opacity: sheetExpanded ? 1 : 0,
+                    transition: 'opacity 0.35s ease',
+                    zIndex: 1,
+                    pointerEvents: 'none',
+                }} />
                 {/* Form card — draggable bottom sheet */}
                 <div ref={(el) => { sheetRef.current = el; formCardCallbackRef(el) }} style={{
                     position: 'absolute',
@@ -2435,7 +2445,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
                     {/* Panel content area — only drag sheet from handle, not from scrolling */}
                     <div
-                        style={{ flex: 1, position: 'relative', overflow: 'clip', minHeight: 0 }}>
+                        style={{ flex: 1, position: 'relative', overflow: 'clip', minHeight: 0, background: '#f5f7f7' }}>
                         {PANEL_STEPS.map((panelId, i) => (
                             <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} className="onboarding-panel" style={{
                                 position: 'absolute', inset: 0,
@@ -3105,8 +3115,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 {i === activePanel && (
                                     <div style={{
                                         flexShrink: 0,
-                                        background: '#f5f7f7',
-                                        padding: '12px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
+                                        background: 'linear-gradient(to bottom, rgba(245,247,247,0) 0%, #f5f7f7 30%)',
+                                        padding: '24px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
                                         display: 'flex',
                                         alignItems: 'center',
                                         gap: 12,

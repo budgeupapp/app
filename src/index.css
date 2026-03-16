@@ -237,12 +237,12 @@ button:focus {
 }
 
 /* Onboarding panels: disable internal flex/scroll so panel-level scroll works */
-.onboarding-panel > div {
+.onboarding-panel > div:first-child {
   flex: 0 0 auto !important;
   min-height: auto !important;
   overflow: visible !important;
 }
-.onboarding-panel > div > div {
+.onboarding-panel > div:first-child > div {
   flex: 0 0 auto !important;
   overflow: visible !important;
 }
