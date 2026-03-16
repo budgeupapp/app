@@ -163,7 +163,7 @@ export default function MaintenanceLoanStep({
                         color: '#147b75', cursor: 'pointer',
                         display: 'flex', alignItems: 'center',
                         justifyContent: 'center', gap: 6,
-                        marginTop: 16,
+                        marginTop: 16
                     }}
                 >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -228,41 +228,6 @@ function LoanEntry({
     const questionRef = useRef(null)
     const touchStartRef = useRef(null)
 
-    const handleInputTouchStart = (e) => {
-        touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-    }
-
-    const handleInputTouchEnd = (e) => {
-        if (!touchStartRef.current) return
-        const dx = e.changedTouches[0].clientX - touchStartRef.current.x
-        const dy = e.changedTouches[0].clientY - touchStartRef.current.y
-        touchStartRef.current = null
-        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) return
-        if (!compact) return
-        const input = e.target
-        input.focus({ preventScroll: true })
-        const label = questionRef.current
-        if (!label) return
-        let scrollParent = label.parentElement
-        while (scrollParent) {
-            const style = window.getComputedStyle(scrollParent)
-            if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && scrollParent.scrollHeight > scrollParent.clientHeight) break
-            scrollParent = scrollParent.parentElement
-        }
-        if (scrollParent) {
-            const parentRect = scrollParent.getBoundingClientRect()
-            const labelRect = label.getBoundingClientRect()
-            const offset = labelRect.top - parentRect.top + scrollParent.scrollTop
-            const stickyHeader = scrollParent.querySelector('[data-sticky-header]')
-            const headerH = stickyHeader ? stickyHeader.getBoundingClientRect().height : 0
-            scrollParent.scrollTo({ top: Math.max(0, offset - headerH - 8), behavior: 'smooth' })
-        }
-    }
-
-    const scrollInputToTop = (e) => {
-        if (blurTimerRef.current) { clearTimeout(blurTimerRef.current); blurTimerRef.current = null }
-        setInputFocused(true)
-    }
 
     const dateActiveRef = useRef(false)
 
@@ -446,10 +411,10 @@ function LoanEntry({
                                 placeholder="0.00"
                                 value={formatDisplay(rawAmount)}
                                 onChange={handleAmountChange}
-                                onTouchStart={handleInputTouchStart}
-                                onTouchEnd={handleInputTouchEnd}
-                                onFocus={scrollInputToTop}
-                                onBlur={handleInputBlur}
+                                
+                                
+                                
+                                
                                 style={{
                                     flex: 1, border: 'none',
                                     background: 'transparent',
@@ -523,7 +488,12 @@ function LoanEntry({
                                     }}>
                                         {MONTH_LABELS[m]}
                                     </span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}>
+                                    <div
+                                        onClick={(e) => {
+                                            const input = e.currentTarget.querySelector('input')
+                                            if (input) input.focus()
+                                        }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'text' }}>
                                         <span style={{
                                             fontSize: 14, fontWeight: 600,
                                             color: '#888', fontFamily: 'Nunito, sans-serif',
@@ -534,9 +504,9 @@ function LoanEntry({
                                             placeholder="0.00"
                                             value={formatDisplay(rawInstalments[m] || '')}
                                             onChange={(e) => handleInstalmentChange(m, e)}
-                                            onTouchStart={handleInputTouchStart}
-                                            onFocus={scrollInputToTop}
-                                            onBlur={handleInputBlur}
+                                            
+                                            
+                                            
                                             style={{
                                                 width: 60, border: 'none',
                                                 background: 'transparent',

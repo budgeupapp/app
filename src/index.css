@@ -247,6 +247,7 @@ button:focus {
 /* Disable scroll anchoring in onboarding panels */
 .onboarding-panel {
   overflow-anchor: none;
+  scroll-padding-top: 35px;
 }
 /* Hide h2 inside onboarding steps — title rendered in fixed header instead */
 .onboarding-panel > div:first-child > div:first-child > h2 {

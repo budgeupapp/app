@@ -2587,6 +2587,21 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         {PANEL_STEPS.map((panelId, i) => (
                             <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} className="onboarding-panel"
                                 onScroll={i === activePanel ? (e) => setTitleBorderVisible(e.target.scrollTop > 2) : undefined}
+                                onTouchEnd={i === activePanel && !sheetExpanded ? (e) => {
+                                    const tag = e.target.tagName
+                                    if (tag === 'INPUT' || tag === 'TEXTAREA') {
+                                        const panel = e.currentTarget
+                                        const el = e.target
+                                        // Only scroll if input is below the top portion of the panel
+                                        const panelRect = panel.getBoundingClientRect()
+                                        const elRect = el.getBoundingClientRect()
+                                        if (elRect.top - panelRect.top > 120) {
+                                            setTimeout(() => {
+                                                el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                            }, 300)
+                                        }
+                                    }
+                                } : undefined}
                                 style={{
                                 position: 'absolute', inset: 0,
                                 display: 'flex', flexDirection: 'column',
@@ -3262,77 +3277,63 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     )
                                 })()}
 
-                                {/* Spacer pushes buttons to bottom when content is short */}
-                                <div style={{ flex: 1, minHeight: 0 }} />
-
-                                {/* Restore deleted bar */}
-                                {i === activePanel && (() => {
-                                    const editTypesMap = {
-                                        maintenanceLoan: 'loan', bursary: 'bursary',
-                                        familyFriends: 'family', work: 'work',
-                                        rent: 'rent', bills: 'bills', uniFees: 'uniFees',
-                                        savingsInvestments: 'savingsInv',
-                                    }
-                                    let editTypes = editTypesMap[panelId]
-                                    if (panelId === 'otherIncome') editTypes = (formData.otherIncomes || []).map(inst => inst.id)
-                                    if (panelId === 'otherExpense') editTypes = (formData.otherExpenses || []).map(inst => inst.id)
-                                    if (!editTypes) return null
-                                    return <RestoreDeletedBar editTypes={editTypes} color="#e07b3c" />
-                                })()}
-
-                                {/* Bottom buttons */}
-                                {i === activePanel && (
-                                    <div style={{
-                                        flexShrink: 0,
-                                        background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, #fff 30%)',
-                                        padding: '24px 16px calc(14px + env(safe-area-inset-bottom, 0px))',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 0,
-                                    }}>
-                                        <button
-                                            onClick={panelOnBack}
-                                            style={{
-                                                width: activePanel > 0 ? 48 : 0,
-                                                height: 48, borderRadius: 50,
-                                                border: 'none', background: '#e8e8e8',
-                                                cursor: 'pointer', padding: 0,
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                flexShrink: 0, overflow: 'hidden',
-                                                marginRight: activePanel > 0 ? 12 : 0,
-                                                opacity: activePanel > 0 ? 1 : 0,
-                                                transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-right 0.3s cubic-bezier(.25,1,.5,1)',
-                                            }}
-                                        >
-                                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
-                                                <path d="M12 15L7 10L12 5" stroke="#4b4a4a"
-                                                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>
-                                        </button>
-                                        <button
-                                            onClick={panelOnNext}
-                                            style={{
-                                                flex: 1, height: 48,
-                                                background: '#147b75',
-                                                color: '#fff',
-                                                border: 'none', borderRadius: 50,
-                                                fontSize: 16, fontWeight: 700,
-                                                fontFamily: 'Nunito, sans-serif',
-                                                cursor: 'pointer', letterSpacing: 0.3,
-                                                overflow: 'hidden', whiteSpace: 'nowrap',
-                                            }}
-                                        >
-                                            {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[activePanel]}
-                                        </button>
-                                    </div>
-                                )}
+                                {/* Bottom spacer so content can scroll past floating buttons */}
+                                <div style={{ height: '50vh', flexShrink: 0 }} />
                             </div>
                         ))}
                     </div>
 
                 </div>
 
-
+                {/* Floating bottom buttons */}
+                <div style={{
+                    position: 'absolute',
+                    bottom: 0, left: 0, right: 0,
+                    background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, #fff 40%)',
+                    padding: '28px 16px calc(8px + env(safe-area-inset-bottom, 0px))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0,
+                    zIndex: 10,
+                    pointerEvents: 'none',
+                }}>
+                    <button
+                        onClick={panelOnBack}
+                        style={{
+                            width: activePanel > 0 ? 48 : 0,
+                            height: 48, borderRadius: 50,
+                            border: 'none', background: '#e8e8e8',
+                            cursor: 'pointer', padding: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            flexShrink: 0, overflow: 'hidden',
+                            marginRight: activePanel > 0 ? 12 : 0,
+                            opacity: activePanel > 0 ? 1 : 0,
+                            transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-right 0.3s cubic-bezier(.25,1,.5,1)',
+                            pointerEvents: 'auto',
+                        }}
+                    >
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0 }}>
+                            <path d="M12 15L7 10L12 5" stroke="#4b4a4a"
+                                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                    </button>
+                    <button
+                        onClick={panelOnNext}
+                        style={{
+                            flex: 1, height: 48,
+                            background: '#147b75',
+                            color: '#fff',
+                            border: 'none', borderRadius: 50,
+                            fontSize: 16, fontWeight: 700,
+                            fontFamily: 'Nunito, sans-serif',
+                            cursor: 'pointer', letterSpacing: 0.3,
+                            overflow: 'hidden', whiteSpace: 'nowrap',
+                            pointerEvents: 'auto',
+                        }}
+                    >
+                        {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[activePanel]}
+                    </button>
+                </div>
 
                 {/* Event edit modal */}
                 {editingEvent && (() => {
