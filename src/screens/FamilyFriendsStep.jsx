@@ -15,7 +15,7 @@ export default function FamilyFriendsStep({
             subtitle={subtitle}
             entryLabel="Payment"
             addLabel="Add another payment"
-            frequencyOptions={['weekly', 'monthly', 'yearly', 'irregular']}
+            frequencyOptions={['weekly', 'fortnightly', 'monthly', 'yearly', 'irregular', 'one-off']}
             defaultFrequency="monthly"
             defaultMonths={[]}
             defaultDates={{}}

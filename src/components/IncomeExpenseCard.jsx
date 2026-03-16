@@ -67,9 +67,11 @@ function Chevron({ open }) {
 
 const FREQ_LABELS = {
     weekly: 'Weekly',
+    fortnightly: 'Fortnightly',
     monthly: 'Monthly',
     yearly: 'Yearly',
     irregular: 'Per instalment',
+    'one-off': 'One-off',
 }
 
 /* ==========================================================================
@@ -367,7 +369,7 @@ function EntryCard({
                             padding: '0 28px 0 12px',
                             fontSize: 13, fontWeight: 600,
                             fontFamily: 'Nunito, sans-serif',
-                            color: accent, background: accentBg,
+                            color: '#444', background: '#f5f7f7',
                             WebkitAppearance: 'none', appearance: 'none',
                             cursor: 'pointer', outline: 'none',
                         }}
@@ -377,7 +379,7 @@ function EntryCard({
                         ))}
                     </select>
                     <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                        <path d="M1 1L5 5L9 1" stroke={accent} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                 </div>
             </div>
@@ -531,66 +533,174 @@ function EntryCard({
                 </>
             )}
 
-            {/* === REGULAR MODE (weekly/monthly/yearly): next date accordion === */}
-            {!isIrregular && (
+            {/* === ONE-OFF MODE: just a date picker === */}
+            {frequency === 'one-off' && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
+                    padding: '12px 14px', marginBottom: 16,
+                }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                        Date
+                    </span>
+                    <div style={{ position: 'relative' }}>
+                        <span style={{
+                            fontSize: 13, fontWeight: 600, color: '#888',
+                            fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
+                            background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
+                            display: 'inline-block', whiteSpace: 'nowrap',
+                            minWidth: 80, textAlign: 'center',
+                        }}>
+                            {nextDate ? fmt(nextDate) : 'Set date'}
+                        </span>
+                        <input
+                            type="date"
+                            value={nextDate || ''}
+                            onFocus={() => { dateActiveRef.current = true }}
+                            onBlur={() => { dateActiveRef.current = false }}
+                            onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
+                            style={{
+                                position: 'absolute', inset: 0,
+                                opacity: 0, width: '100%', height: '100%',
+                                cursor: 'pointer', fontSize: 16,
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* === WEEKLY / FORTNIGHTLY: start date + optional end date === */}
+            {(frequency === 'weekly' || frequency === 'fortnightly') && (
                 <div style={{
                     border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
                     overflow: 'hidden', marginBottom: 16,
                 }}>
-                    <div
-                        onClick={() => setNextDateExpanded(!nextDateExpanded)}
-                        style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            cursor: 'pointer', padding: '12px 14px',
-                        }}
-                    >
-                        <div>
-                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                                I know when I next get paid
+                    <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 14px',
+                    }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                            Start date
+                        </span>
+                        <div style={{ position: 'relative' }}>
+                            <span style={{
+                                fontSize: 13, fontWeight: 600, color: '#888',
+                                fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
+                                background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
+                                display: 'inline-block', whiteSpace: 'nowrap',
+                                minWidth: 80, textAlign: 'center',
+                            }}>
+                                {nextDate ? fmt(nextDate) : 'Set date'}
                             </span>
-                            <p style={{ fontSize: 11, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', margin: '2px 0 0' }}>
-                                Optional — improves accuracy
-                            </p>
+                            <input
+                                type="date"
+                                value={nextDate || ''}
+                                onFocus={() => { dateActiveRef.current = true }}
+                                onBlur={() => { dateActiveRef.current = false }}
+                                onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
+                                style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
+                            />
                         </div>
-                        <Chevron open={nextDateExpanded} />
                     </div>
                     <div style={{
-                        maxHeight: nextDateExpanded ? 100 : 0,
-                        opacity: nextDateExpanded ? 1 : 0,
-                        overflow: 'hidden',
-                        transition: 'max-height 0.35s cubic-bezier(.25,1,.5,1), opacity 0.25s ease',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 14px', borderTop: '1px solid #f3f3f3',
                     }}>
-                        <div style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '10px 14px', borderTop: '1px solid #f3f3f3',
-                        }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                                Next payment date
+                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                            End date <span style={{ fontWeight: 500, color: '#bbb' }}>(optional)</span>
+                        </span>
+                        <div style={{ position: 'relative' }}>
+                            <span style={{
+                                fontSize: 13, fontWeight: 600, color: '#888',
+                                fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
+                                background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
+                                display: 'inline-block', whiteSpace: 'nowrap',
+                                minWidth: 80, textAlign: 'center',
+                            }}>
+                                {entry.endDate ? fmt(entry.endDate) : 'Set date'}
                             </span>
-                            <div style={{ position: 'relative' }}>
-                                <span style={{
-                                    fontSize: 13, fontWeight: 600, color: '#888',
-                                    fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                                    background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
-                                    display: 'inline-block', whiteSpace: 'nowrap',
-                                    minWidth: 80, textAlign: 'center',
-                                }}>
-                                    {nextDate ? fmt(nextDate) : 'Set date'}
-                                </span>
-                                <input
-                                    type="date"
-                                    value={nextDate || ''}
-                                    onFocus={() => { dateActiveRef.current = true }}
-                                    onBlur={() => { dateActiveRef.current = false }}
-                                    onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
-                                    style={{
-                                        position: 'absolute', inset: 0,
-                                        opacity: 0, width: '100%', height: '100%',
-                                        cursor: 'pointer', fontSize: 16,
-                                    }}
-                                />
-                            </div>
+                            <input
+                                type="date"
+                                value={entry.endDate || ''}
+                                onFocus={() => { dateActiveRef.current = true }}
+                                onBlur={() => { dateActiveRef.current = false }}
+                                onChange={(e) => e.target.value && updateField('endDate', e.target.value)}
+                                style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
+                            />
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* === MONTHLY: which day of month === */}
+            {frequency === 'monthly' && (
+                <div style={{
+                    border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
+                    overflow: 'hidden', marginBottom: 16,
+                }}>
+                    <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '12px 14px',
+                    }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                            Day of the month
+                        </span>
+                        <div style={{
+                            display: 'flex', alignItems: 'center', gap: 2,
+                            background: '#f8f8f8', borderRadius: 8,
+                            padding: '4px 8px', width: 50, boxSizing: 'border-box',
+                        }}>
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="1"
+                                value={entry.dayOfMonth || ''}
+                                onChange={(e) => {
+                                    let val = e.target.value.replace(/[^0-9]/g, '')
+                                    const num = parseInt(val)
+                                    if (num > 31) val = '31'
+                                    if (num < 0) val = '1'
+                                    updateField('dayOfMonth', val)
+                                }}
+                                style={{
+                                    width: '100%', border: 'none', background: 'transparent',
+                                    fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                    color: '#000', outline: 'none', padding: 0, textAlign: 'center',
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* === YEARLY: next date === */}
+            {frequency === 'yearly' && (
+                <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
+                    padding: '12px 14px', marginBottom: 16,
+                }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                        Date
+                    </span>
+                    <div style={{ position: 'relative' }}>
+                        <span style={{
+                            fontSize: 13, fontWeight: 600, color: '#888',
+                            fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
+                            background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
+                            display: 'inline-block', whiteSpace: 'nowrap',
+                            minWidth: 80, textAlign: 'center',
+                        }}>
+                            {nextDate ? fmt(nextDate) : 'Set date'}
+                        </span>
+                        <input
+                            type="date"
+                            value={nextDate || ''}
+                            onFocus={() => { dateActiveRef.current = true }}
+                            onBlur={() => { dateActiveRef.current = false }}
+                            onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
+                            style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
+                        />
                     </div>
                 </div>
             )}

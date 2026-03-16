@@ -274,15 +274,23 @@ function buildGraphEvents(formData) {
                 let d = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
                 while (d > AY_START) d = new Date(d.getTime() - 7 * 86400000)
                 while (d < AY_START) d = new Date(d.getTime() + 7 * 86400000)
-                while (d <= ayEnd) { events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
-            } else if (freq === 'monthly') {
+                const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
+                while (d <= endDate) { events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
+            } else if (freq === 'fortnightly') {
                 let d = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
-                const dom = d.getDate()
-                while (d > AY_START) d = addMonths(d, -1, dom)
-                while (d < AY_START) d = addMonths(d, 1, dom)
+                while (d > AY_START) d = new Date(d.getTime() - 14 * 86400000)
+                while (d < AY_START) d = new Date(d.getTime() + 14 * 86400000)
+                const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
+                while (d <= endDate) { events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Fortnightly support', editType: 'family' }); d = new Date(d.getTime() + 14 * 86400000) }
+            } else if (freq === 'monthly') {
+                const dom = entry.dayOfMonth ? parseInt(entry.dayOfMonth) : (entry.nextDate ? new Date(entry.nextDate + 'T00:00:00').getDate() : 1)
+                let d = new Date(AY_START.getFullYear(), AY_START.getMonth(), dom)
+                if (d < AY_START) d = addMonths(d, 1, dom)
                 while (d <= ayEnd) { events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' }); d = addMonths(d, 1, dom) }
             } else if (freq === 'yearly') {
                 events.push({ date: entry.nextDate || ayStartStr(), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Yearly support', editType: 'family' })
+            } else if (freq === 'one-off') {
+                if (entry.nextDate) events.push({ date: entry.nextDate, amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'One-off payment', editType: 'family' })
             }
         }
     }
