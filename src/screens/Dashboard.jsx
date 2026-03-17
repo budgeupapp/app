@@ -3770,7 +3770,7 @@ export default function Dashboard() {
 
                                         // Gauge: pointer shows position on arc
                                         // Left = behind (-), center = on track (0), right = ahead (+)
-                                        const gW = 240
+                                        const gW = 270
                                         const strokeW = 16
                                         const r = (gW - strokeW) / 2
                                         const cx = gW / 2
@@ -3813,8 +3813,8 @@ export default function Dashboard() {
                                                             <p style={{ margin: 0, fontSize: 22, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1 }}>
                                                                 {isClose ? 'On Track!' : isAhead ? 'Ahead!' : isDanger ? 'Needs Attention' : 'Watch Spending'}
                                                             </p>
-                                                            <p style={{ margin: '6px 0 0', fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
-                                                                {isAhead ? '+' : '\u2212'}{sym}{absDiff.toLocaleString()}
+                                                            <p style={{ margin: '10px 0 0', fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
+                                                                {isAhead || absDiff === 0 ? '+' : '\u2212'}{sym}{absDiff.toLocaleString()}
                                                             </p>
                                                             <p style={{ margin: '3px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
                                                                 compared to forecast
