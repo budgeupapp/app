@@ -205,9 +205,9 @@ export default function IncomeExpenseCard({
                 <button
                     onClick={addEntry}
                     style={{
-                        width: '100%', height: 40,
-                        background: 'transparent',
-                        border: '1.5px dashed #ddd',
+                        width: '100%', height: 48,
+                        background: isExpense ? 'rgba(224,100,112,0.08)' : 'rgba(20,123,117,0.08)',
+                        border: 'none',
                         borderRadius: 14,
                         fontSize: 14, fontWeight: 700,
                         fontFamily: 'Nunito, sans-serif',
@@ -340,41 +340,46 @@ function EntryCard({
 
     return (
         <div>
-            {/* Amount + frequency dropdown */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 16, width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
-                <div style={{
-                    display: 'flex', alignItems: 'center',
-                    border: '1px solid #e8e8e8', borderRight: 'none',
-                    borderRadius: '10px 0 0 10px', background: '#fff',
-                    padding: '0 14px', height: 44, gap: 6, flex: 1, minWidth: 0,
-                }}>
-                    <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>
-                        {getCurrencySymbol()}
+            {/* Amount + frequency */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                        Amount
                     </span>
-                    <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="0.00"
-                        value={formatDisplay(rawAmount)}
-                        onChange={handleAmountChange}
-                        onFocus={scrollOnFocus ? (e) => {
-                            const entry = e.target.closest('[data-entry]')
-                            if (entry) setTimeout(() => entry.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
-                        } : undefined}
-                        style={{
-                            flex: 1, border: 'none', background: 'transparent',
-                            fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
-                            color: '#000', outline: 'none', padding: 0,
-                        }}
-                    />
+                    <div style={{
+                        display: 'flex', alignItems: 'center',
+                        border: '1px solid #e8e8e8',
+                        borderRadius: 10, background: '#fff',
+                        padding: '0 14px', height: 44, gap: 6,
+                    }}>
+                        <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>
+                            {getCurrencySymbol()}
+                        </span>
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={formatDisplay(rawAmount)}
+                            onChange={handleAmountChange}
+                            onFocus={scrollOnFocus ? (e) => {
+                                const entry = e.target.closest('[data-entry]')
+                                if (entry) setTimeout(() => entry.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
+                            } : undefined}
+                            style={{
+                                flex: 1, border: 'none', background: 'transparent',
+                                fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
+                                color: '#000', outline: 'none', padding: 0,
+                            }}
+                        />
+                    </div>
                 </div>
-                <div style={{ position: 'relative' }}>
+                <div style={{ flexShrink: 0, position: 'relative' }}>
                     <select
                         value={frequency}
                         onChange={(e) => updateField('frequency', e.target.value)}
                         style={{
                             height: 44, border: '1px solid #e8e8e8',
-                            borderRadius: '0 10px 10px 0',
+                            borderRadius: 10,
                             padding: '0 28px 0 12px',
                             fontSize: 14, fontWeight: 600,
                             fontFamily: 'Nunito, sans-serif',
@@ -499,7 +504,7 @@ function EntryCard({
                                                     <span style={{
                                                         fontSize: 14, fontWeight: 600, color: '#888',
                                                         fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                                                        background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
+                                                        background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
                                                         display: 'inline-block', whiteSpace: 'nowrap',
                                                         minWidth: 120, textAlign: 'center',
                                                     }}>
@@ -556,7 +561,7 @@ function EntryCard({
                         <span style={{
                             fontSize: 14, fontWeight: 600, color: '#888',
                             fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                            background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
+                            background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
                             display: 'inline-block', whiteSpace: 'nowrap',
                             minWidth: 120, textAlign: 'center',
                         }}>
@@ -579,7 +584,10 @@ function EntryCard({
             )}
 
             {/* === WEEKLY/FORTNIGHTLY/MONTHLY: day + start/end in one card === */}
-            {(frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly') && (
+            {(frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly') && (<>
+                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                    Schedule
+                </span>
                 <div style={{
                     border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
                     overflow: 'hidden', marginBottom: 16,
@@ -590,7 +598,7 @@ function EntryCard({
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                             padding: '12px 14px',
                         }}>
-                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
                                 Day of week
                             </span>
                             <div style={{ position: 'relative' }}>
@@ -600,7 +608,7 @@ function EntryCard({
                                     onChange={(e) => updateField('dayOfWeek', e.target.value)}
                                     style={{
                                         background: '#f8f8f8', borderRadius: 8,
-                                        padding: '4px 28px 4px 28px', border: 'none',
+                                        padding: '6px 28px 6px 28px', border: 'none',
                                         fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
                                         color: '#333', outline: 'none',
                                         WebkitAppearance: 'none', appearance: 'none',
@@ -624,7 +632,7 @@ function EntryCard({
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                             padding: '12px 14px',
                         }}>
-                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
                                 Day of month
                             </span>
                             <div style={{ position: 'relative' }}>
@@ -634,7 +642,7 @@ function EntryCard({
                                     onChange={(e) => updateField('dayOfMonth', e.target.value)}
                                     style={{
                                         background: '#f8f8f8', borderRadius: 8,
-                                        padding: '4px 28px 4px 28px', border: 'none',
+                                        padding: '6px 28px 6px 28px', border: 'none',
                                         fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
                                         color: '#333', outline: 'none',
                                         WebkitAppearance: 'none', appearance: 'none',
@@ -660,14 +668,14 @@ function EntryCard({
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '12px 14px', borderTop: '1px solid #f3f3f3',
                     }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
                             Start date <span style={{ fontWeight: 500, color: '#bbb' }}>(optional)</span>
                         </span>
                         <div style={{ position: 'relative' }}>
                             <span style={{
                                 fontSize: 14, fontWeight: 600, color: '#888',
                                 fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                                background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
+                                background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
                                 display: 'inline-block', whiteSpace: 'nowrap',
                                 minWidth: 120, textAlign: 'center',
                             }}>
@@ -689,14 +697,14 @@ function EntryCard({
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '12px 14px', borderTop: '1px solid #f3f3f3',
                     }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
                             End date <span style={{ fontWeight: 500, color: '#bbb' }}>(optional)</span>
                         </span>
                         <div style={{ position: 'relative' }}>
                             <span style={{
                                 fontSize: 14, fontWeight: 600, color: '#888',
                                 fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                                background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
+                                background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
                                 display: 'inline-block', whiteSpace: 'nowrap',
                                 minWidth: 120, textAlign: 'center',
                             }}>
@@ -714,7 +722,7 @@ function EntryCard({
                     </div>
 
                 </div>
-            )}
+            </>)}
 
             {/* === YEARLY: next date === */}
             {frequency === 'yearly' && (
@@ -730,7 +738,7 @@ function EntryCard({
                         <span style={{
                             fontSize: 14, fontWeight: 600, color: '#888',
                             fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                            background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
+                            background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
                             display: 'inline-block', whiteSpace: 'nowrap',
                             minWidth: 120, textAlign: 'center',
                         }}>
