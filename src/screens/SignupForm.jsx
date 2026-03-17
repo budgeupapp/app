@@ -251,7 +251,7 @@ export default function SignupForm() {
           <h1 style={{
             fontSize: 24, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
             color: '#1a1a1a', margin: '40px 0 14px', textAlign: 'center',
-            lineHeight: 1.3, position: 'relative', zIndex: 1, maxWidth: 280
+            lineHeight: 1.3, position: 'relative', zIndex: 1, maxWidth: 340
           }}>
             Is your bank balance more confusing than your lectures?
           </h1>

@@ -256,29 +256,29 @@ export default function App() {
         // Reset to university step in dev mode
         localStorage.removeItem('budgeup_onboarding_state')
     }
-    if (DEV_VIEW === 'onboarding' || hasCompletedOnboarding === false) {
-        if (showLoadingScreen) {
-            return (
-                <LoadingScreen
-                    onComplete={async () => {
-                        // Wait for save to finish before checking onboarding status
-                        if (savePromiseRef.current) {
-                            await savePromiseRef.current
-                            savePromiseRef.current = null
-                        }
-                        // Set completed optimistically so we don't flash onboarding/signup
-                        setHasCompletedOnboarding(true)
-                        setShowLoadingScreen(false)
-                    }}
-                />
-            )
-        }
+    if (DEV_VIEW === 'onboarding' || (hasCompletedOnboarding === false && !showLoadingScreen)) {
         return (
             <FinancialOnboardingForm
                 user={session?.user}
                 onComplete={(savePromise) => {
                     savePromiseRef.current = savePromise
                     setShowLoadingScreen(true)
+                    // Go straight to dashboard — save continues in background
+                    setHasCompletedOnboarding(true)
+                }}
+            />
+        )
+    }
+
+    if (showLoadingScreen) {
+        return (
+            <LoadingScreen
+                onComplete={async () => {
+                    if (savePromiseRef.current) {
+                        try { await savePromiseRef.current } catch (e) { console.error('Save failed:', e) }
+                        savePromiseRef.current = null
+                    }
+                    setShowLoadingScreen(false)
                 }}
             />
         )

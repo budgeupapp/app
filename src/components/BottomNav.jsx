@@ -309,7 +309,7 @@ export default function BottomNav() {
                 <div style={{
                     display: 'flex',
                     alignItems: 'flex-end',
-                    width: '100%', maxWidth: 400, padding: '0 16px',
+                    width: '100%', padding: '0 16px',
                     position: 'relative',
                     opacity: showPicker ? 0 : 1,
                     transform: showPicker ? 'translateY(15px)' : 'translateY(0)',
@@ -394,12 +394,11 @@ export default function BottomNav() {
                 >
                     <div style={{
                         display: 'flex', alignItems: 'flex-end',
-                        gap: 12,
                         ...(sources.length > 4 ? {
+                            gap: 12,
                             transform: `translateX(${pickerOffset}px)`,
                             width: 'max-content',
                         } : {
-                            justifyContent: 'space-evenly',
                             width: '100%',
                         }),
                     }}>
@@ -422,6 +421,7 @@ export default function BottomNav() {
                                 style={{
                                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
                                     flexShrink: 0,
+                                    width: sources.length <= 4 ? `${100 / sources.length}%` : undefined,
                                     cursor: 'pointer',
                                     opacity: 0,
                                     animation: `fabSourceIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.04 + (i % sources.length) * 0.03}s forwards`,

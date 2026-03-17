@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { POLICY_URLS } from '../lib/policyVersions'
 import { analytics, AUTH_EVENTS, SETTINGS_EVENTS, FEEDBACK_EVENTS, getErrorProperties } from '../lib/analytics/index.js'
 import { CURRENCIES, getCurrency, setCurrency, getGraphStart, setGraphStart, getCurrencySymbol } from '../lib/settings'
+import { refreshAY } from '../components/TermGraph'
 import { fetchUserData, saveTermDates, saveUserFinances, saveCashflowForecast } from '../lib/api'
 import { INITIAL_FORM_DATA, UK_UNIVERSITIES, getTermDatesForUniversity, hasCustomTermDates } from '../config/onboardingConfig'
 import TermDatesStep from './TermDatesStep'
@@ -311,34 +312,12 @@ export default function SettingsScreen() {
     return () => window.removeEventListener('nav-tap-again', handler)
   }, [])
 
-  // Scroll focused input into view
-  useEffect(() => {
-    const sc = settingsScrollRef.current
-    if (!sc) return
-    const onFocusIn = (e) => {
-      const el = e.target
-      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return
-      if (el.dataset.scrollHandled) return
-      const pos = sc.scrollTop
-      sc.style.overflowY = 'hidden'
-      sc.scrollTop = pos
-      setTimeout(() => {
-        sc.style.overflowY = 'auto'
-        const scRect = sc.getBoundingClientRect()
-        const elRect = el.getBoundingClientRect()
-        const targetTop = elRect.top - scRect.top + sc.scrollTop - 100
-        sc.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' })
-      }, 400)
-    }
-    sc.addEventListener('focusin', onFocusIn)
-    return () => sc.removeEventListener('focusin', onFocusIn)
-  }, [])
-
   // Persist buffered graph start date on unmount
   useEffect(() => {
     return () => {
       if (graphStartDirtyRef.current) {
         setGraphStart(graphStartRef.current)
+        refreshAY()
       }
     }
   }, [])
@@ -497,6 +476,7 @@ export default function SettingsScreen() {
       const today = new Date()
       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       setGraphStart(todayStr)
+      refreshAY()
       setGraphStartState(todayStr)
       graphStartRef.current = todayStr
       localStorage.setItem('budgeup_graph_start_mode', 'joined')
@@ -792,7 +772,7 @@ export default function SettingsScreen() {
         overflowX: 'hidden',
         WebkitOverflowScrolling: 'touch',
         padding: '20px 16px 0',
-        paddingBottom: 'calc(150px + env(safe-area-inset-bottom))',
+        paddingBottom: 'calc(180px + env(safe-area-inset-bottom, 0px))',
       }}>
 
         {/* ACCOUNT HEADER */}
@@ -1059,6 +1039,7 @@ export default function SettingsScreen() {
                         setGraphStartState(newDate)
                         graphStartRef.current = newDate
                         setGraphStart(newDate)
+                        refreshAY()
                         if (userIdRef.current) {
                           supabase.from('user_profiles').update({ graph_start: newDate, updated_at: new Date().toISOString() }).eq('user_id', userIdRef.current).then()
                         }
@@ -1115,6 +1096,7 @@ export default function SettingsScreen() {
                           setGraphStartState(val)
                           graphStartRef.current = val
                           setGraphStart(val)
+                          refreshAY()
                           if (userIdRef.current) {
                             supabase.from('user_profiles').update({ graph_start: val, updated_at: new Date().toISOString() }).eq('user_id', userIdRef.current).then()
                           }

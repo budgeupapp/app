@@ -316,7 +316,7 @@ export default function IncomeExpenseCard({
                                 <button onClick={() => removeEntry(idx)} style={{
                                     background: 'none', border: 'none', cursor: 'pointer',
                                     fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#d4566a',
-                                }}>Remove</button>
+                                }}>Delete</button>
                             </div>
                         )}
                         {nameEditable && (
@@ -496,6 +496,10 @@ function EntryCard({
 
     const handleInstalmentChange = (month, e) => {
         const val = cleanNum(e.target.value)
+        const parsedVal = parseFloat(val) || 0
+        const totalAmt = parseFloat(String(amount || '0').replace(/,/g, '')) || 0
+        // Don't allow instalment to exceed total
+        if (parsedVal > totalAmt) return
         const newInstalments = { ...instalmentAmounts, [month]: val }
         setRawInstalments(prev => ({ ...prev, [month]: val }))
         updateField('instalmentAmounts', newInstalments)
@@ -1032,7 +1036,7 @@ function EntryCard({
                                                         display: 'inline-block', whiteSpace: 'nowrap',
                                                         minWidth: 120, textAlign: 'center',
                                                     }}>
-                                                        {datesProp?.[m] ? fmt(datesProp[m]) : 'Select date'}
+                                                        {fmt(datesProp?.[m] || getMonthRange(m).min)}
                                                     </span>
                                                     <input
                                                         type="date"

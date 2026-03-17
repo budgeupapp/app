@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { flushSync } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { ChevronUp, ChevronDown, ChevronRight, Check, Clock, Plus, Trash, Eye, EyeOff, AlertTriangle } from 'react-feather'
+import { ChevronUp, ChevronDown, ChevronRight, Check, Clock, Plus, Trash, Eye, EyeOff, AlertTriangle, TrendingUp, TrendingDown } from 'react-feather'
 import { PiCalendarBlank, PiCalendarBlankFill, PiLightbulb, PiLightbulbFill, PiChartLineUp, PiTrendUp, PiTrendUpBold, PiTrendDown, PiTrendDownBold, PiShuffle, PiShuffleBold } from 'react-icons/pi'
 import { useSurveySequence } from '../lib/useSurveySequence'
 import TermGraph, { refreshAY, AY_START, AY_END, datePct, daysBetween, fmt } from '../components/TermGraph'
@@ -920,10 +920,13 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                     <p style={{
                         fontSize: 11, fontWeight: 600,
                         fontFamily: 'Nunito, sans-serif',
-                        color: isInactive ? '#bbb' : '#999',
+                        color: isInactive ? '#bbb' : (yearlyAmount > 0 && source._visibleAmount === 0) ? '#EC8C17' : '#999',
                         margin: 0,
                     }}>
-                        {yearlyAmount === 0 ? `${getCurrencySymbol()}0/yr` : `${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr`}
+                        {!isInactive && yearlyAmount > 0 && source._visibleAmount === 0
+                            ? 'Not visible — change graph start date in Settings'
+                            : yearlyAmount === 0 ? `${getCurrencySymbol()}0/yr` : `${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr`
+                        }
                     </p>
                     {removedCount > 0 && (
                         <button
@@ -1235,6 +1238,7 @@ export default function Dashboard() {
     const [activeTab, setActiveTabRaw] = useState(() => localStorage.getItem('budgeup_active_tab') || 'goals')
     const setActiveTab = (tab) => { localStorage.setItem('budgeup_active_tab', tab); setActiveTabRaw(tab) }
     const [goalsShowMore, setGoalsShowMore] = useState(false)
+    const [trackingShowAll, setTrackingShowAll] = useState(false)
     const [warningMinimised, setWarningMinimisedRaw] = useState(() => localStorage.getItem('budgeup_warning_minimised') === 'true')
     const setWarningMinimised = (fn) => { setWarningMinimisedRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; localStorage.setItem('budgeup_warning_minimised', String(val)); return val }) }
     const [trackMinimised, setTrackMinimised] = useState(false)
@@ -1340,6 +1344,7 @@ export default function Dashboard() {
     }
     const [editingEvent, setEditingEvent] = useState(null)
     const [editAmount, setEditAmount] = useState('')
+    const [editWarning, setEditWarning] = useState('')
     const [nearbyEvents, setNearbyEvents] = useState([])
     const [nearbyIdx, setNearbyIdx] = useState(0)
     const [editingOverdraft, setEditingOverdraft] = useState(null)
@@ -1574,9 +1579,12 @@ export default function Dashboard() {
                         }
                         if (localFD.otherIncomes?.length) merged.otherIncomes = [...new Set([...(merged.otherIncomes || []).map(i => JSON.stringify(i)), ...localFD.otherIncomes.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
                         if (localFD.otherExpenses?.length) merged.otherExpenses = [...new Set([...(merged.otherExpenses || []).map(i => JSON.stringify(i)), ...localFD.otherExpenses.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
-                        // Prefer localStorage overdraft/overrides (Settings saves there immediately, Supabase may lag)
-                        // Balance always comes from DB (user_profiles) to stay consistent across devices
-                        if (localFD.overdraft != null) merged.overdraft = localFD.overdraft
+                        // Prefer localStorage values when DB hasn't synced yet (fresh onboarding)
+                        if (localFD.balance && (!merged.balance || merged.balance === '' || merged.balance === '0')) merged.balance = localFD.balance
+                        if (localFD.overdraft != null && (!merged.overdraft || merged.overdraft === '')) merged.overdraft = localFD.overdraft
+                        if (localFD.weeklySpend && (!merged.weeklySpend || merged.weeklySpend === '')) merged.weeklySpend = localFD.weeklySpend
+                        if (localFD.weeklySpendNonTerm && (!merged.weeklySpendNonTerm || merged.weeklySpendNonTerm === '')) merged.weeklySpendNonTerm = localFD.weeklySpendNonTerm
+                        if (localFD.weeklySpendVariesByTerm != null) merged.weeklySpendVariesByTerm = localFD.weeklySpendVariesByTerm || merged.weeklySpendVariesByTerm
                         if (localFD.amountOverrides) merged.amountOverrides = { ...(merged.amountOverrides || {}), ...localFD.amountOverrides }
                         // Prefer localStorage term dates (Settings saves there immediately, Supabase may lag)
                         try {
@@ -1609,9 +1617,10 @@ export default function Dashboard() {
                         saveUserFinances(userIdRef.current, { ...merged, onboardingCompleted: true }).catch(() => { })
                     }
                     if (result.balanceHistory) setBalanceHistory(result.balanceHistory)
-                    // Mark origin as set if balance already exists
-                    const bal = result.formData?.balance
-                    if (bal && bal !== '' && bal !== '0' && Number(bal) !== 0) {
+                    // Mark origin as set if balance already exists (check DB, localStorage, and balance history)
+                    const bal = result.formData?.balance || merged?.balance || localFD?.balance
+                    const hasHistory = result.balanceHistory?.length > 0
+                    if ((bal && bal !== '' && bal !== '0' && Number(bal) !== 0) || hasHistory) {
                         originSetRef.current = true
                     } else {
                         // No balance set — show mandatory popup
@@ -2665,17 +2674,8 @@ export default function Dashboard() {
         ? sourceToEditType[activeSource][0]
         : null
 
-    // Compute editTypes for upcoming transactions shown in goals "show more"
-    const goalsVisibleEditTypes = (() => {
-        if (!goalsShowMore || activeTab !== 'goals') return new Set()
-        const now = new Date(); now.setHours(0, 0, 0, 0)
-        const todayStr = toLocalDate(now)
-        const lookAhead = new Date(now); lookAhead.setDate(lookAhead.getDate() + 90)
-        const lookAheadStr = toLocalDate(lookAhead)
-        const upcoming = events.filter(e => !e.removed && e.date > todayStr && e.date <= lookAheadStr && e.editType !== 'weeklySpend')
-        const sorted = upcoming.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 10)
-        return new Set(sorted.map(e => e.editType))
-    })()
+    // No longer modify graph visibility when "show all" is toggled
+    const goalsVisibleEditTypes = new Set()
 
     const handleEventClick = useCallback((evt, e) => {
         analytics.track(DASHBOARD_EVENTS.GRAPH_EVENT_CLICKED, {
@@ -2683,6 +2683,7 @@ export default function Dashboard() {
             edit_type: evt.editType,
         })
         const rect = e.currentTarget.getBoundingClientRect()
+        setEditWarning('')
         setEditingEvent({ ...evt, clickX: rect.left + rect.width / 2, clickY: rect.top + rect.height / 2 })
         setEditAmount(String(evt.amount))
         // Find nearby events on same date
@@ -3190,13 +3191,14 @@ export default function Dashboard() {
                                             const active = !hiddenSources.has(source.id)
                                             const editTypes = incomeEditTypeMap[source.id] || []
                                             const yearly = getSourceYearly(editTypes)
+                                            const visibleAmt = events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot).reduce((s, e) => s + e.amount, 0)
                                             const removedCount = getSourceRemovedCount(editTypes)
                                             const isExpanded = expandedSources.has(source.id)
 
                                             return (
                                                 <SourceRow
                                                     key={source.id}
-                                                    source={source}
+                                                    source={{ ...source, _visibleAmount: visibleAmt }}
                                                     active={active}
                                                     yearlyAmount={yearly}
                                                     removedCount={removedCount}
@@ -3381,12 +3383,13 @@ export default function Dashboard() {
                                             const active = !hiddenSources.has(source.id)
                                             const editTypes = expenseEditTypeMap[source.id] || []
                                             const yearly = getSourceYearly(editTypes)
+                                            const visibleAmt = events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot).reduce((s, e) => s + e.amount, 0)
                                             const removedCount = getSourceRemovedCount(editTypes)
 
                                             return (
                                                 <SourceRow
                                                     key={source.id}
-                                                    source={source}
+                                                    source={{ ...source, _visibleAmount: visibleAmt }}
                                                     active={active}
                                                     yearlyAmount={yearly}
                                                     removedCount={removedCount}
@@ -3637,6 +3640,114 @@ export default function Dashboard() {
                             return (
                                 <div style={{ padding: '0 0 40px' }} >
 
+                                    {/* Will I run out? */}
+                                    {(() => {
+                                        const od = overdraftNum || 0
+                                        const limit = od > 0 ? -od + 100 : 100
+                                        const zeroDate = graphZeroDate
+                                        const overdraftDate = graphOverdraftDate
+                                        const willRunOut = zeroDate || overdraftDate || projectionBalance <= limit
+                                        if (!willRunOut) return null
+
+                                        const targetDate = overdraftDate || zeroDate
+                                        const daysUntil = targetDate ? daysBetween(todayStr, targetDate) : 0
+                                        const alreadyOut = projectionBalance <= limit
+
+                                        const targetDateFormatted = targetDate
+                                            ? new Date(targetDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+                                            : ''
+
+                                        const isUoB = (formData.university || '').toLowerCase().includes('bristol')
+
+                                        return (
+                                            <div style={{
+                                                background: 'linear-gradient(135deg, #c9404f, #a8293a)',
+                                                borderRadius: 14, padding: warningMinimised ? '12px 18px' : '20px 18px', marginBottom: 10,
+                                                color: '#fff', position: 'relative', overflow: 'hidden',
+                                                transition: 'padding 0.25s ease',
+                                            }}>
+                                                {/* Decorative circle */}
+                                                <div style={{
+                                                    position: 'absolute', top: -20, right: -20,
+                                                    width: 80, height: 80, borderRadius: '50%',
+                                                    background: 'rgba(255,255,255,0.08)',
+                                                }} />
+                                                <div style={{
+                                                    position: 'absolute', bottom: -30, left: -10,
+                                                    width: 60, height: 60, borderRadius: '50%',
+                                                    background: 'rgba(255,255,255,0.05)',
+                                                }} />
+
+                                                {/* Header with minimise toggle */}
+                                                <div
+                                                    onClick={() => setWarningMinimised(m => !m)}
+                                                    style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: warningMinimised ? 0 : 12, transition: 'margin 0.25s ease' }}
+                                                >
+                                                    <AlertTriangle size={20} color="#fff" strokeWidth={2.5} />
+                                                    <p style={{ margin: 0, fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
+                                                        {alreadyOut ? 'Low balance warning' : 'Running low warning'}
+                                                    </p>
+                                                    {warningMinimised && (
+                                                        <span style={{
+                                                            fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                                            background: 'rgba(255,255,255,0.2)', borderRadius: 8,
+                                                            padding: '3px 8px', whiteSpace: 'nowrap', flexShrink: 0,
+                                                        }}>
+                                                            {alreadyOut ? 'Now' : daysUntil === 0 ? 'Today' : daysUntil === 1 ? '1d' : `${daysUntil}d`}
+                                                        </span>
+                                                    )}
+                                                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{
+                                                        transform: warningMinimised ? 'rotate(-90deg)' : 'rotate(0deg)',
+                                                        transition: 'transform 0.25s ease', flexShrink: 0,
+                                                    }}>
+                                                        <path d="M4.5 7L9 11.5L13.5 7" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                    </svg>
+                                                </div>
+
+                                                {/* Collapsible content */}
+                                                <div style={{
+                                                    maxHeight: warningMinimised ? 0 : 600,
+                                                    opacity: warningMinimised ? 0 : 1,
+                                                    overflow: 'hidden',
+                                                    transition: 'max-height 0.3s ease, opacity 0.2s ease',
+                                                }}>
+                                                    <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92, lineHeight: 1.5 }}>
+                                                        {alreadyOut
+                                                            ? <>Your balance is already within {sym}100 of {od > 0 ? `your ${sym}${od.toLocaleString()} overdraft limit` : `${sym}0`}.</>
+                                                            : <>Your forecast is on track to get within {sym}100 of {od > 0 ? `your ${sym}${od.toLocaleString()} overdraft limit` : `${sym}0`}
+                                                                {targetDate && <> in <strong>{daysUntil === 0 ? 'less than a day' : daysUntil === 1 ? '1 day' : `${daysUntil} days`}</strong> on <strong>{targetDateFormatted}</strong></>}.</>
+                                                        }
+                                                    </p>
+
+                                                    <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', opacity: 1, lineHeight: 1.5 }}>
+                                                        What can you do?
+                                                    </p>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                                                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                                            <span style={{ fontSize: 12, opacity: 0.85 }}>{'\u2022'}</span>
+                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
+                                                                Play around with the graph and your inputs — see what changes make a difference
+                                                            </p>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                                            <span style={{ fontSize: 12, opacity: 0.85 }}>{'\u2022'}</span>
+                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
+                                                                You might already have a backup plan for situations like this
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
+                                                        {isUoB
+                                                            ? <>Your uni is there to help — check out the <strong>Resources</strong> page in the app.</>
+                                                            : <>Your uni is there to help — try searching <strong>'Money Advice'</strong> for your university.</>
+                                                        }
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        )
+                                    })()}
+
                                     {/* Am I on track? */}
                                     {balanceHistory.length > 0 && (() => {
                                         const latestActual = balanceHistory[0]
@@ -3758,114 +3869,6 @@ export default function Dashboard() {
                                                             </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </div>
-                                        )
-                                    })()}
-
-                                    {/* Will I run out? */}
-                                    {(() => {
-                                        const od = overdraftNum || 0
-                                        const limit = od > 0 ? -od + 100 : 100
-                                        const zeroDate = graphZeroDate
-                                        const overdraftDate = graphOverdraftDate
-                                        const willRunOut = zeroDate || overdraftDate || projectionBalance <= limit
-                                        if (!willRunOut) return null
-
-                                        const targetDate = overdraftDate || zeroDate
-                                        const daysUntil = targetDate ? daysBetween(todayStr, targetDate) : 0
-                                        const alreadyOut = projectionBalance <= limit
-
-                                        const targetDateFormatted = targetDate
-                                            ? new Date(targetDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-                                            : ''
-
-                                        const isUoB = (formData.university || '').toLowerCase().includes('bristol')
-
-                                        return (
-                                            <div style={{
-                                                background: 'linear-gradient(135deg, #c9404f, #a8293a)',
-                                                borderRadius: 14, padding: warningMinimised ? '12px 18px' : '20px 18px', marginBottom: 10,
-                                                color: '#fff', position: 'relative', overflow: 'hidden',
-                                                transition: 'padding 0.25s ease',
-                                            }}>
-                                                {/* Decorative circle */}
-                                                <div style={{
-                                                    position: 'absolute', top: -20, right: -20,
-                                                    width: 80, height: 80, borderRadius: '50%',
-                                                    background: 'rgba(255,255,255,0.08)',
-                                                }} />
-                                                <div style={{
-                                                    position: 'absolute', bottom: -30, left: -10,
-                                                    width: 60, height: 60, borderRadius: '50%',
-                                                    background: 'rgba(255,255,255,0.05)',
-                                                }} />
-
-                                                {/* Header with minimise toggle */}
-                                                <div
-                                                    onClick={() => setWarningMinimised(m => !m)}
-                                                    style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: warningMinimised ? 0 : 12, transition: 'margin 0.25s ease' }}
-                                                >
-                                                    <AlertTriangle size={20} color="#fff" strokeWidth={2.5} />
-                                                    <p style={{ margin: 0, fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
-                                                        {alreadyOut ? 'Low balance warning' : 'Running low warning'}
-                                                    </p>
-                                                    {warningMinimised && (
-                                                        <span style={{
-                                                            fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                                                            background: 'rgba(255,255,255,0.2)', borderRadius: 8,
-                                                            padding: '3px 8px', whiteSpace: 'nowrap', flexShrink: 0,
-                                                        }}>
-                                                            {alreadyOut ? 'Now' : daysUntil === 0 ? 'Today' : daysUntil === 1 ? '1d' : `${daysUntil}d`}
-                                                        </span>
-                                                    )}
-                                                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{
-                                                        transform: warningMinimised ? 'rotate(-90deg)' : 'rotate(0deg)',
-                                                        transition: 'transform 0.25s ease', flexShrink: 0,
-                                                    }}>
-                                                        <path d="M4.5 7L9 11.5L13.5 7" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                                    </svg>
-                                                </div>
-
-                                                {/* Collapsible content */}
-                                                <div style={{
-                                                    maxHeight: warningMinimised ? 0 : 600,
-                                                    opacity: warningMinimised ? 0 : 1,
-                                                    overflow: 'hidden',
-                                                    transition: 'max-height 0.3s ease, opacity 0.2s ease',
-                                                }}>
-                                                    <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92, lineHeight: 1.5 }}>
-                                                        {alreadyOut
-                                                            ? <>Your balance is already within {sym}100 of {od > 0 ? `your ${sym}${od.toLocaleString()} overdraft limit` : `${sym}0`}.</>
-                                                            : <>Your forecast is on track to get within {sym}100 of {od > 0 ? `your ${sym}${od.toLocaleString()} overdraft limit` : `${sym}0`}
-                                                                {targetDate && <> in <strong>{daysUntil === 0 ? 'less than a day' : daysUntil === 1 ? '1 day' : `${daysUntil} days`}</strong> on <strong>{targetDateFormatted}</strong></>}.</>
-                                                        }
-                                                    </p>
-
-                                                    <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', opacity: 1, lineHeight: 1.5 }}>
-                                                        What can you do?
-                                                    </p>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-                                                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                                                            <span style={{ fontSize: 12, opacity: 0.85 }}>{'\u2022'}</span>
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
-                                                                Play around with the graph and your inputs — see what changes make a difference
-                                                            </p>
-                                                        </div>
-                                                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                                                            <span style={{ fontSize: 12, opacity: 0.85 }}>{'\u2022'}</span>
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
-                                                                You might already have a backup plan for situations like this
-                                                            </p>
-                                                        </div>
-                                                    </div>
-
-                                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
-                                                        {isUoB
-                                                            ? <>Your uni is there to help — check out the <strong>Resources</strong> page in the app.</>
-                                                            : <>Your uni is there to help — try searching <strong>'Money Advice'</strong> for your university.</>
-                                                        }
-                                                    </p>
                                                 </div>
                                             </div>
                                         )
@@ -4092,14 +4095,88 @@ export default function Dashboard() {
                                         )
                                     })()}
 
+                                    {/* Forecast Accuracy */}
+                                    {balanceHistory.length >= 2 && (() => {
+                                        const sorted = [...balanceHistory]
+                                            .sort((a, b) => a.recorded_date.localeCompare(b.recorded_date))
+                                        const byDate = new Map()
+                                        for (const bh of sorted) byDate.set(bh.recorded_date, bh)
+                                        const unique = [...byDate.values()].filter(bh => bh.recorded_date <= todayStr)
+                                        if (unique.length < 2) return null
+
+                                        const allPastEvts = sortedEvents.filter(e => e.date <= todayStr && e.date >= graphStart)
+                                        const diffs = unique.map(bh => {
+                                            const eventsBetween = allPastEvts.filter(e => e.date > bh.recorded_date)
+                                            let predicted = projBal
+                                            for (const evt of eventsBetween) {
+                                                if (evt.type === 'income') predicted -= evt.amount
+                                                else predicted += evt.amount
+                                            }
+                                            return Number(bh.balance) - predicted
+                                        })
+
+                                        const avgDiff = Math.round(diffs.reduce((s, d) => s + d, 0) / diffs.length)
+                                        const latestDiff = Math.round(diffs[diffs.length - 1])
+                                        const improving = diffs.length >= 3 && Math.abs(diffs[diffs.length - 1]) < Math.abs(diffs[0])
+                                        const isAhead = avgDiff >= 0
+                                        const absAvg = Math.abs(avgDiff)
+                                        const absLatest = Math.abs(latestDiff)
+
+                                        let message
+                                        if (absAvg < 30) {
+                                            message = "Your actual balance has closely matched your forecast — your inputs are spot on!"
+                                        } else if (isAhead) {
+                                            message = `On average, your actual balance has been ${sym}${absAvg} higher than forecast. You're spending less than expected!`
+                                        } else {
+                                            message = `On average, your actual balance has been ${sym}${absAvg} lower than forecast. You might be spending more than planned.`
+                                        }
+
+                                        if (improving && absAvg >= 30) {
+                                            message += " The good news: the gap is getting smaller over time."
+                                        }
+
+                                        return (
+                                            <div style={cardStyle}>
+                                                <p style={cardTitle}>Forecast Accuracy</p>
+                                                <div style={{
+                                                    display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10,
+                                                }}>
+                                                    <div style={{
+                                                        width: 44, height: 44, borderRadius: 12,
+                                                        background: absAvg < 30 ? '#f0faf9' : isAhead ? '#f0faf9' : '#fdf0f1',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        flexShrink: 0,
+                                                    }}>
+                                                        {absAvg < 30
+                                                            ? <Check size={20} color="#147b75" strokeWidth={2.5} />
+                                                            : isAhead
+                                                                ? <TrendingUp size={20} color="#147b75" strokeWidth={2.5} />
+                                                                : <TrendingDown size={20} color="#e06470" strokeWidth={2.5} />
+                                                        }
+                                                    </div>
+                                                    <div>
+                                                        <p style={{ margin: 0, fontSize: 18, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: absAvg < 30 ? '#147b75' : isAhead ? '#147b75' : '#e06470' }}>
+                                                            {absAvg < 30 ? 'On Track' : <>{isAhead ? '+' : '\u2212'}{sym}{absAvg}</>}
+                                                        </p>
+                                                        <p style={{ margin: '2px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                                                            avg difference from forecast
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <p style={{ margin: 0, fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#555', lineHeight: 1.5 }}>
+                                                    {message}
+                                                </p>
+                                            </div>
+                                        )
+                                    })()}
+
                                     {/* Upcoming Transactions */}
                                     {(() => {
                                         const thirtyDays = new Date(today)
                                         thirtyDays.setDate(thirtyDays.getDate() + 30)
                                         const thirtyStr = toLocalDate(thirtyDays)
                                         const allUpcoming = [...upcomingIncomeList, ...upcomingPayments].sort((a, b) => a.date.localeCompare(b.date))
-                                        const next30 = allUpcoming.filter(e => e.date <= thirtyStr)
-                                        const shown = goalsShowMore ? next30 : allUpcoming.slice(0, 5)
+                                        const shown = goalsShowMore ? allUpcoming : allUpcoming.slice(0, 5)
                                         if (allUpcoming.length === 0) return null
                                         return (
                                             <div style={cardStyle}>
@@ -4111,7 +4188,13 @@ export default function Dashboard() {
                                                         </span>
                                                     )}
                                                 </div>
-                                                {shown.map((evt, i) => renderEventRow(evt, i, shown, evt.type === 'income' ? '#147b75' : '#e06470'))}
+                                                <div style={{
+                                                    maxHeight: goalsShowMore ? 300 : undefined,
+                                                    overflowY: goalsShowMore ? 'auto' : undefined,
+                                                    WebkitOverflowScrolling: 'touch',
+                                                }}>
+                                                    {shown.map((evt, i) => renderEventRow(evt, i, shown, evt.type === 'income' ? '#147b75' : '#e06470'))}
+                                                </div>
                                             </div>
                                         )
                                     })()}
@@ -4163,11 +4246,23 @@ export default function Dashboard() {
 
                                         return (
                                             <div style={cardStyle}>
-                                                <p style={cardTitle}>Balance Tracking</p>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                    <p style={{ ...cardTitle, margin: 0 }}>Balance Tracking</p>
+                                                    {trackingData.length > 5 && (
+                                                        <span onClick={() => setTrackingShowAll(p => !p)} style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75', cursor: 'pointer' }}>
+                                                            {trackingShowAll ? 'Show less' : 'Show all'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p style={{ ...subText, margin: '0 0 12px', fontSize: 12 }}>
                                                     Actual balance vs predicted
                                                 </p>
-                                                {recent.map((entry, i) => {
+                                                <div style={{
+                                                    maxHeight: trackingShowAll ? 300 : undefined,
+                                                    overflowY: trackingShowAll ? 'auto' : undefined,
+                                                    WebkitOverflowScrolling: 'touch',
+                                                }}>
+                                                {(trackingShowAll ? trackingData : recent).map((entry, i) => {
                                                     const dateObj = new Date(entry.date + 'T00:00:00')
                                                     const dateLabel = `${dateObj.getDate()} ${dateObj.toLocaleDateString('en-GB', { month: 'short' })}`
                                                     const isAhead = entry.diff >= 0
@@ -4195,6 +4290,7 @@ export default function Dashboard() {
                                                         </div>
                                                     )
                                                 })}
+                                                </div>
                                             </div>
                                         )
                                     })()}
@@ -4324,6 +4420,9 @@ export default function Dashboard() {
                 })()
                 const handleSave = () => {
                     const val = editAmount.replace(/[^0-9.]/g, '')
+                    const parsedAmount = parseFloat(val) || 0
+                    if (parsedAmount <= 0) { setEditWarning('Amount must be greater than zero'); return }
+                    setEditWarning('')
                     if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
                         const newVal = parseFloat(val) || 0
                         const oldVal = editingEvent.amount || 0
@@ -4344,6 +4443,35 @@ export default function Dashboard() {
                             bursaryInstalmentAmounts: { ...(prev.bursaryInstalmentAmounts || {}), [editingEvent.editMonth]: val },
                             bursaryAmount: String(newTotal),
                         }))
+                    } else if (editingEvent.editMonth && eventFreq === 'irregular') {
+                        // Irregular: keep total, set this month's amount, redistribute remainder across others
+                        const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+                        const cat = allCats.find(c => c.id === editingEvent.editType)
+                        if (cat) {
+                            const entries = formData[cat.formKey] || []
+                            const entry = entries[0]
+                            const total = entry ? (parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0) : 0
+                            const parsedVal = parseFloat(val) || 0
+                            if (parsedVal > total) { setEditWarning(`Can't exceed total of ${getCurrencySymbol()}${total.toLocaleString()}`); return }
+                            if (parsedVal <= 0) { setEditWarning('Instalment amount must be greater than zero'); return }
+                            setEditWarning('')
+                            setFormData(prev => {
+                                const entries = prev[cat.formKey] || []
+                                return { ...prev, [cat.formKey]: entries.map(e => {
+                                    const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                    const newVal = parseFloat(val) || 0
+                                    const otherMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
+                                    const remainder = Math.max(0, total - newVal)
+                                    const newInst = { [editingEvent.editMonth]: val }
+                                    if (otherMonths.length > 0) {
+                                        const perMonth = Math.round(remainder * 100 / otherMonths.length) / 100
+                                        const leftover = Math.round((remainder - perMonth * otherMonths.length) * 100)
+                                        otherMonths.forEach((m, i) => { newInst[m] = String(Math.round((perMonth + (i < leftover ? 0.01 : 0)) * 100) / 100) })
+                                    }
+                                    return { ...e, instalmentAmounts: newInst }
+                                })}
+                            })
+                        }
                     } else {
                         const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
                         updateField('amountOverrides', { ...(formData.amountOverrides || {}), [overrideKey]: val })
@@ -4387,6 +4515,27 @@ export default function Dashboard() {
                             const key = isExp ? 'flexExpenseSources' : 'flexIncomeSources'
                             return { ...prev, [key]: (prev[key] || []).filter(s => s !== srcId), flexSourceData: { ...prev.flexSourceData, [srcId]: undefined } }
                         })
+                    } else if (editingEvent.editMonth && eventFreq === 'irregular') {
+                        // Irregular: remove month and redistribute total across remaining months
+                        const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+                        const cat = allCats.find(c => c.id === editingEvent.editType)
+                        if (cat) {
+                            setFormData(prev => {
+                                const entries = prev[cat.formKey] || []
+                                return { ...prev, [cat.formKey]: entries.map(e => {
+                                    const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                    const newMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
+                                    const newDates = { ...(e.dates || {}) }; delete newDates[editingEvent.editMonth]
+                                    const newInst = {}
+                                    if (newMonths.length > 0 && total > 0) {
+                                        const perMonth = Math.round(total * 100 / newMonths.length) / 100
+                                        const leftover = Math.round((total - perMonth * newMonths.length) * 100)
+                                        newMonths.forEach((m, i) => { newInst[m] = String(Math.round((perMonth + (i < leftover ? 0.01 : 0)) * 100) / 100) })
+                                    }
+                                    return { ...e, months: newMonths, dates: newDates, instalmentAmounts: newInst }
+                                })}
+                            })
+                        }
                     } else {
                         const key = `${editingEvent.editType}:${editingEvent.date}`
                         updateField('removedEvents', [...(formData.removedEvents || []), key])
@@ -4528,6 +4677,7 @@ export default function Dashboard() {
                                                 background: '#3b82f6', border: 'none',
                                                 padding: '4px 10px', borderRadius: 6,
                                                 cursor: 'pointer', flexShrink: 0,
+                                                display: 'flex', alignItems: 'center',
                                             }}
                                         >
                                             <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Reset</span>
@@ -4539,17 +4689,20 @@ export default function Dashboard() {
                                     <div style={{
                                         display: 'flex', alignItems: 'center', flex: 1, minWidth: 0,
                                         border: '1px solid #e8e8e8', borderRadius: 8,
-                                        padding: '0 8px', height: 34, gap: 3, background: '#fff', flexShrink: 0,
+                                        padding: '0 8px', height: 34, gap: 3, background: '#fff',
+                                        overflow: 'hidden',
                                     }}>
-                                        <span style={{ fontSize: 14, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>{getCurrencySymbol()}</span>
                                         <input
                                             type="text"
                                             inputMode="decimal"
                                             value={formatDisplay(editAmount)}
                                             onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                                            ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
+                                            readOnly
+                                            onTouchEnd={(e) => { e.target.readOnly = false; e.target.focus({ preventScroll: true }) }}
+                                            onBlur={(e) => { e.target.readOnly = true }}
                                             style={{
-                                                flex: 1, border: 'none', background: 'transparent',
+                                                flex: 1, minWidth: 0, border: 'none', background: 'transparent',
                                                 fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
                                                 color: '#000', outline: 'none', padding: 0,
                                             }}
@@ -4571,11 +4724,16 @@ export default function Dashboard() {
                                             cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
                                         }}>
                                             <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                Skip {skipLabel}
+                                                {eventFreq === 'irregular' ? 'Delete' : `Skip ${skipLabel}`}
                                             </span>
                                         </button>
                                     )}
                                 </div>
+                                {editWarning && (
+                                    <p style={{ margin: '6px 0 0', fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                        {editWarning}
+                                    </p>
+                                )}
                             </>)}
                         </div>
                     </>

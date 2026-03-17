@@ -869,7 +869,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         if (activePanel === 4 && !dotHintShownRef.current) {
             dotHintShownRef.current = true
             setShowDotHint(true)
-        } else if (activePanel !== 4) {
+        } else if (dotHintShownRef.current) {
             setShowDotHint(false)
         }
     }, [activePanel])
@@ -1734,6 +1734,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             setEditAmount(String(evt.amount))
                         }}
                         hideDots={PANEL_STEPS[activePanel] === 'summary'}
+                        activeEventDot={editingEvent}
                         forceGreenDots={PANEL_STEPS[activePanel] === 'regularIncome'}
                         forceDotColor={PANEL_STEPS[activePanel] === 'regularIncome' ? 'green' : PANEL_STEPS[activePanel] === 'regularExpenses' ? 'red' : null}
                         onTermClick={activePanel === 0 ? (termId) => setExpandedTerms(prev => {
@@ -1934,8 +1935,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 const isExpPanel = expPanelIds.includes(pid)
                                 if (!isIncPanel && !isExpPanel) return null
                                 // Show button when 2+ categories selected total (income + expense combined)
-                                const totalSelected = (formData.incomeSources || []).length + (formData.expenseSources || []).length
-                                if (totalSelected < 2) return null
+                                // Count sources that actually have entered data
+                                const allCatsWithData = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES].filter(c => {
+                                    const sources = INCOME_CATEGORIES.includes(c) ? formData.incomeSources : formData.expenseSources
+                                    if (!sources?.includes(c.id)) return false
+                                    const entries = formData[c.formKey] || []
+                                    return entries.some(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0 || (e.months?.length > 0))
+                                })
+                                if (allCatsWithData.length < 2) return null
                                 const otherPanels = ['oneOffItems', 'weeklySpend']
                                 const btnColor = isIncPanel ? '#147b75'
                                     : isExpPanel ? '#e06470'
@@ -1990,7 +1997,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     color: '#999', margin: 0, lineHeight: 1.4,
                                     padding: '0 24px 8px',
                                 }}>
-                                    Tap a dot on the graph to change the amount, adjust the date, or skip it.
+                                    Tap a dot on the graph to change the amount or skip it.
                                 </p>
                             </div>
                         </div>
@@ -2403,16 +2410,86 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     </div>
                 </div>
 
-                {/* Event edit modal */}
+                {/* Event edit popup — matches Dashboard style */}
                 {editingEvent && (() => {
                     const isIncome = editingEvent.type === 'income'
                     const color = isIncome ? '#147b75' : '#e06470'
-                    const lightBg = isIncome ? 'rgba(20,123,117,0.06)' : 'rgba(224,100,112,0.06)'
+                    const cat = CATEGORY_MAP[editingEvent.editType]
+                    const eventFreq = cat ? (formData[cat.formKey]?.[0]?.frequency || cat.defaultFrequency) : 'monthly'
+                    const freqLabel = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly', yearly: 'Yearly', irregular: 'Irregular', 'one-off': 'One-off' }[eventFreq] || ''
+                    const skipLabel = (() => {
+                        if (!editingEvent.date) return ''
+                        if (eventFreq === 'weekly') return 'week'
+                        if (eventFreq === 'fortnightly') return 'fortnight'
+                        return new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' })
+                    })()
+                    const handleSave = () => {
+                        const val = editAmount.replace(/[^0-9.]/g, '')
+                        const parsedAmount = parseFloat(val) || 0
+                        if (parsedAmount <= 0) return
+                        if (cat) {
+                            const formKey = cat.formKey
+                            if (editingEvent.editMonth) {
+                                const entries = formData[formKey] || []
+                                const entry = entries[0]
+                                const total = entry ? (parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0) : 0
+                                const parsedVal = parseFloat(val) || 0
+                                if (parsedVal > total || parsedVal <= 0) return
+                            }
+                            setFormData(prev => {
+                                const entries = prev[formKey] || []
+                                if (editingEvent.editMonth) {
+                                    return { ...prev, [formKey]: entries.map(e => {
+                                        const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                        const newVal = parseFloat(val) || 0
+                                        const otherMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
+                                        const remainder = Math.max(0, total - newVal)
+                                        const newInst = { [editingEvent.editMonth]: val }
+                                        if (otherMonths.length > 0) {
+                                            const perMonth = Math.round(remainder * 100 / otherMonths.length) / 100
+                                            const leftover = Math.round((remainder - perMonth * otherMonths.length) * 100)
+                                            otherMonths.forEach((m, i) => { newInst[m] = String(Math.round((perMonth + (i < leftover ? 0.01 : 0)) * 100) / 100) })
+                                        }
+                                        return { ...e, instalmentAmounts: newInst }
+                                    })}
+                                } else {
+                                    const matchIdx = entries.findIndex(e => e.nextDate === editingEvent.date)
+                                    const idx = matchIdx >= 0 ? matchIdx : 0
+                                    return { ...prev, [formKey]: entries.map((e, i) => i === idx ? { ...e, amount: val } : e) }
+                                }
+                            })
+                        }
+                        setEditingEvent(null)
+                    }
+                    const handleSkip = () => {
+                        if (editingEvent.editMonth && eventFreq === 'irregular' && cat) {
+                            // Irregular: remove month and redistribute total across remaining months
+                            setFormData(prev => {
+                                const entries = prev[cat.formKey] || []
+                                return { ...prev, [cat.formKey]: entries.map(e => {
+                                    const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                    const newMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
+                                    const newDates = { ...(e.dates || {}) }; delete newDates[editingEvent.editMonth]
+                                    const newInst = {}
+                                    if (newMonths.length > 0 && total > 0) {
+                                        const perMonth = Math.round(total * 100 / newMonths.length) / 100
+                                        const leftover = Math.round((total - perMonth * newMonths.length) * 100)
+                                        newMonths.forEach((m, i) => { newInst[m] = String(Math.round((perMonth + (i < leftover ? 0.01 : 0)) * 100) / 100) })
+                                    }
+                                    return { ...e, months: newMonths, dates: newDates, instalmentAmounts: newInst }
+                                })}
+                            })
+                        } else {
+                            const key = `${editingEvent.editType}:${editingEvent.date}`
+                            updateField('removedEvents', [...(formData.removedEvents || []), key])
+                        }
+                        setEditingEvent(null)
+                    }
                     return (
                         <>
                             <div
                                 onClick={() => { setEditingEvent(null); setNearbyEvents([]); setNearbyIdx(0) }}
-                                style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.15)' }}
+                                style={{ position: 'fixed', inset: 0, zIndex: 100 }}
                             />
                             <div style={{
                                 position: 'fixed',
@@ -2425,7 +2502,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
                                 padding: '12px 14px',
                             }}>
-                                {/* Close button — top right */}
+                                {/* Close button */}
                                 <div
                                     onClick={() => { setEditingEvent(null); setNearbyEvents([]); setNearbyIdx(0) }}
                                     style={{
@@ -2470,14 +2547,15 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     </div>
                                 )}
 
-                                {/* Header */}
-                                <div style={{ marginBottom: 12, paddingRight: 36 }}>
-                                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222', display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                                {/* Header: title + date + frequency */}
+                                <div style={{ marginBottom: 8, paddingRight: 36 }}>
+                                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222', display: 'flex', alignItems: 'center', gap: 7 }}>
+                                        <div style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
                                         {editingEvent.label || editingEvent.sublabel}
                                     </div>
-                                    <div style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 2 }}>
+                                    <div style={{ fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 1 }}>
                                         {editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                                        {freqLabel ? <> · {freqLabel}</> : ''}
                                     </div>
                                 </div>
 
@@ -2495,121 +2573,70 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             cursor: 'pointer',
                                         }}
                                     >
-                                        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Restore</span>
+                                        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Restore payment</span>
                                     </button>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                        {/* Balance after — live updated, same width as input */}
-                                        {editingEvent.balanceAfter != null && (() => {
-                                            const origAmt = editingEvent.amount || 0
-                                            const newAmt = parseFloat(editAmount.replace(/[^0-9.]/g, '')) || 0
-                                            const diff = editingEvent.type === 'income' ? (newAmt - origAmt) : (origAmt - newAmt)
-                                            const liveBalance = editingEvent.balanceAfter + diff
-                                            const balColor = liveBalance >= 0 ? '#147b75' : '#e06470'
-                                            const balBg = liveBalance >= 0 ? 'rgba(20,123,117,0.06)' : 'rgba(224,100,112,0.06)'
-                                            return (
-                                                <div style={{
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                                    background: balBg, borderRadius: 10,
-                                                    padding: '6px 12px', marginBottom: 4,
-                                                }}>
-                                                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
-                                                        Balance after
-                                                    </span>
-                                                    <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: balColor }}>
-                                                        {liveBalance < 0 ? '-' : ''}{getCurrencySymbol()}{Math.abs(Math.round(liveBalance)).toLocaleString()}
-                                                    </span>
-                                                </div>
-                                            )
-                                        })()}
-                                        <div style={{ display: 'flex', gap: 8 }}>
-                                            {/* Amount input */}
+                                ) : (<>
+                                    {/* Balance after payment */}
+                                    {editingEvent.balanceAfter != null && (() => {
+                                        const origAmt = editingEvent.amount || 0
+                                        const newAmt = parseFloat(editAmount.replace(/[^0-9.]/g, '')) || 0
+                                        const diff = editingEvent.type === 'income' ? (newAmt - origAmt) : (origAmt - newAmt)
+                                        const liveBalance = editingEvent.balanceAfter + diff
+                                        const balColor = liveBalance >= 0 ? '#147b75' : '#e06470'
+                                        const balBg = liveBalance >= 0 ? 'rgba(20,123,117,0.06)' : 'rgba(224,100,112,0.06)'
+                                        return (
                                             <div style={{
-                                                flex: 1, minWidth: 0, display: 'flex', alignItems: 'center',
-                                                border: '1px solid #e8e8e8', borderRadius: 8,
-                                                padding: '0 8px', height: 34, gap: 3, background: '#fff', minWidth: 0, flexShrink: 0,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                background: balBg, borderRadius: 10, padding: '7px 12px', marginBottom: 8,
                                             }}>
-                                                <span style={{ fontSize: 15, fontWeight: 600, color: '#999', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
-                                                <input
-                                                    type="text"
-                                                    inputMode="decimal"
-                                                    value={formatMoney(editAmount)}
-                                                    onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                                                    ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
-                                                    style={{
-                                                        flex: 1, border: 'none', background: 'transparent',
-                                                        fontSize: 16, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                                        color: '#000', outline: 'none', padding: 0, minWidth: 0,
-                                                    }}
-                                                />
-                                            </div>
-
-                                            {/* Save button */}
-                                            <button
-                                                onClick={() => {
-                                                    const val = editAmount.replace(/[^0-9.]/g, '')
-                                                    const cat = CATEGORY_MAP[editingEvent.editType]
-                                                    if (cat) {
-                                                        const formKey = cat.formKey
-                                                        setFormData(prev => {
-                                                            const entries = prev[formKey] || []
-                                                            if (editingEvent.editMonth) {
-                                                                // Irregular: update instalment amount for this month
-                                                                return { ...prev, [formKey]: entries.map(e => ({
-                                                                    ...e,
-                                                                    instalmentAmounts: { ...(e.instalmentAmounts || {}), [editingEvent.editMonth]: val }
-                                                                }))}
-                                                            } else {
-                                                                // Single-amount entries: update first entry's amount
-                                                                // (for multi-entry, match by date if possible)
-                                                                const matchIdx = entries.findIndex(e => {
-                                                                    if (e.nextDate === editingEvent.date) return true
-                                                                    return false
-                                                                })
-                                                                const idx = matchIdx >= 0 ? matchIdx : 0
-                                                                return { ...prev, [formKey]: entries.map((e, i) => i === idx ? { ...e, amount: val } : e) }
-                                                            }
-                                                        })
-                                                    }
-                                                    setEditingEvent(null)
-                                                }}
-                                                style={{
-                                                    height: 38, borderRadius: 10, border: 'none',
-                                                    background: color, padding: '0 16px',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    cursor: 'pointer', flexShrink: 0,
-                                                }}
-                                            >
-                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
-                                            </button>
-                                            {/* Skip button */}
-                                            <button
-                                                onClick={() => {
-                                                    const key = `${editingEvent.editType}:${editingEvent.date}`
-                                                    updateField('removedEvents', [...(formData.removedEvents || []), key])
-                                                    setEditingEvent(null)
-                                                }}
-                                                style={{
-                                                    height: 38, borderRadius: 10, border: 'none',
-                                                    background: 'rgba(224,100,112,0.08)', padding: '0 12px',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
-                                                }}
-                                            >
-                                                <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                    Skip {(() => {
-                                                        if (!editingEvent.date) return ''
-                                                        const cat = CATEGORY_MAP[editingEvent.editType]
-                                                        const freq = cat ? (formData[cat.formKey]?.[0]?.frequency || cat.defaultFrequency) : 'monthly'
-                                                        if (freq === 'weekly') return 'week'
-                                                        if (freq === 'fortnightly') return 'fortnight'
-                                                        return new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' })
-                                                    })()}
+                                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>Balance after payment</span>
+                                                <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: balColor }}>
+                                                    {liveBalance < 0 ? '-' : ''}{getCurrencySymbol()}{Math.abs(Math.round(liveBalance)).toLocaleString()}
                                                 </span>
-                                            </button>
+                                            </div>
+                                        )
+                                    })()}
+                                    {/* Amount + Save + Skip */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', flex: 1, minWidth: 0,
+                                            border: '1px solid #e8e8e8', borderRadius: 8,
+                                            padding: '0 8px', height: 34, gap: 3, background: '#fff', flexShrink: 0,
+                                        }}>
+                                            <span style={{ fontSize: 14, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={formatMoney(editAmount)}
+                                                onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
+                                                style={{
+                                                    flex: 1, border: 'none', background: 'transparent',
+                                                    fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                                    color: '#000', outline: 'none', padding: 0,
+                                                }}
+                                            />
                                         </div>
+                                        <button onClick={handleSave} style={{
+                                            height: 34, borderRadius: 8, border: 'none',
+                                            background: color, padding: '0 12px',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer', flexShrink: 0,
+                                        }}>
+                                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
+                                        </button>
+                                        <button onClick={handleSkip} style={{
+                                            height: 34, borderRadius: 8, border: 'none',
+                                            background: '#f5f5f5', padding: '0 8px',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
+                                        }}>
+                                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                                {eventFreq === 'irregular' ? 'Delete' : `Skip ${skipLabel}`}
+                                            </span>
+                                        </button>
                                     </div>
-                                )}
+                                </>)}
                             </div>
                         </>
                     )

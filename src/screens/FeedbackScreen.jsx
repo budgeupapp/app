@@ -322,7 +322,7 @@ export default function FeedbackScreen() {
                 overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: '0 16px 0',
-                paddingBottom: 'calc(280px + env(safe-area-inset-bottom, 0px))',
+                paddingBottom: 'calc(220px + env(safe-area-inset-bottom, 0px))',
             }}>
 
                 <p style={{
@@ -465,16 +465,16 @@ export default function FeedbackScreen() {
                 {(() => {
                     const QUICK_SURVEY_ID = '019cf78b-c626-0000-535f-e578d85fbcd5'
                     const quickSurveyQuestions = [
-                        { id: 'ec6c53c0', type: 'open', question: '1/10 How did you feel when you saw your graph (1-2 words)?', optional: true },
-                        { id: 'ddaa270f', type: 'rating', scale: 7, display: 'number', question: '2/10 "I understood what the graph was showing me"', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
-                        { id: '38fa75fa', type: 'rating', scale: 7, display: 'number', question: '3/10 "Seeing this graph made me feel more in control of my finances"', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
-                        { id: '069edb2e', type: 'rating', scale: 7, display: 'number', question: '4/10 "Budge Up made me feel less stressed about money"', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
-                        { id: '2ade3440', type: 'rating', scale: 7, display: 'number', question: '5/10 "Budge Up has made me want to change my behaviour (i.e. spending or earning)"', description: 'Half way there!', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
-                        { id: '247f3fed', type: 'rating', scale: 7, display: 'number', question: '6/10 "Budge Up has made me more likely to reach out for help (i.e. family or uni)"', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
-                        { id: '9c551822', type: 'rating', scale: 7, display: 'number', question: '7/10 How much value do you see in checking Budge Up again next week?', lowerBoundLabel: 'No value at all', upperBoundLabel: 'A lot of value', optional: true },
-                        { id: '29860090', type: 'rating', scale: 7, display: 'number', question: '8/10 "I would only use Budge Up if it connected directly to my bank account (Open Banking)"', lowerBoundLabel: 'Unlikely', upperBoundLabel: 'Very likely', optional: true },
-                        { id: 'd16e38aa', type: 'rating', scale: 7, display: 'number', question: '9/10 In day-to-day life, how stressed do you feel about money?', lowerBoundLabel: 'Very relaxed', upperBoundLabel: 'Very stressed', optional: true },
-                        { id: '69fdbacd', type: 'rating', scale: 10, display: 'number', question: '10/10 How likely are you to recommend Budge Up to a friend?', lowerBoundLabel: 'Very unlikely', upperBoundLabel: 'Very likely', optional: false },
+                        { id: 'ec6c53c0', type: 'open', question: 'How did you feel when you saw your graph (1-2 words)?', optional: true },
+                        { id: 'ddaa270f', type: 'rating', scale: 7, display: 'number', question: 'I understood what the graph was showing me', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
+                        { id: '38fa75fa', type: 'rating', scale: 7, display: 'number', question: 'Seeing this graph made me feel more in control of my finances', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
+                        { id: '069edb2e', type: 'rating', scale: 7, display: 'number', question: 'Budge Up made me feel less stressed about money', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
+                        { id: '2ade3440', type: 'rating', scale: 7, display: 'number', question: 'Budge Up has made me want to change my behaviour (i.e. spending or earning)', description: 'Half way there!', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
+                        { id: '247f3fed', type: 'rating', scale: 7, display: 'number', question: 'Budge Up has made me more likely to reach out for help (i.e. family or uni)', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
+                        { id: '9c551822', type: 'rating', scale: 7, display: 'number', question: 'How much value do you see in checking Budge Up again next week?', lowerBoundLabel: 'No value at all', upperBoundLabel: 'A lot of value', optional: true },
+                        { id: '29860090', type: 'rating', scale: 7, display: 'number', question: 'I would only use Budge Up if it connected directly to my bank account (Open Banking)', lowerBoundLabel: 'Unlikely', upperBoundLabel: 'Very likely', optional: true },
+                        { id: 'd16e38aa', type: 'rating', scale: 7, display: 'number', question: 'In day-to-day life, how stressed do you feel about money?', lowerBoundLabel: 'Very relaxed', upperBoundLabel: 'Very stressed', optional: true },
+                        { id: '69fdbacd', type: 'rating', scale: 10, display: 'number', question: 'How likely are you to recommend Budge Up to a friend?', lowerBoundLabel: 'Very unlikely', upperBoundLabel: 'Very likely', optional: false },
                     ]
                     const storageKey = 'budgeup_quick_survey_submitted'
                     const [quickResponses, setQuickResponses] = useState({})
