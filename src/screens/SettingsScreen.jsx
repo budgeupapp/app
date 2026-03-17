@@ -792,7 +792,7 @@ export default function SettingsScreen() {
         overflowX: 'hidden',
         WebkitOverflowScrolling: 'touch',
         padding: '20px 16px 0',
-        paddingBottom: 'calc(160px + env(safe-area-inset-bottom))',
+        paddingBottom: 'calc(150px + env(safe-area-inset-bottom))',
       }}>
 
         {/* ACCOUNT HEADER */}

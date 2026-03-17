@@ -150,7 +150,7 @@ function fmtMoney(v) {
 
 /* ---------- TERM GRAPH ---------- */
 
-export default function TermGraph({ terms, expandedTerm, balance, actualBalance, balanceStartDate, overdraft, events = [], hiddenEventTypes = [], balanceHiddenTypes = [], currentEventType, onEventClick, onBalanceClick, onOverdraftClick, onTermClick, footer, showDotsToggle, onToggleDots, showIncome, onToggleIncome, showExpenses, onToggleExpenses, graphHeight = 108, marginTop = 16, graphHeightRef, forceGreenDots = false, forceDotColor = null, hideDots = false, balanceHistory = [], showBalanceHistory = true, activeEventDot = null, onZeroDate, onOverdraftBreachDate, showHolidays = true, onZoomChange, zoomOutRef, scrubNearLineOnly = false }) {
+export default function TermGraph({ terms, expandedTerm, balance, actualBalance, balanceStartDate, overdraft, events = [], hiddenEventTypes = [], removedHiddenTypes = [], balanceHiddenTypes = [], currentEventType, onEventClick, onBalanceClick, onOverdraftClick, onTermClick, footer, showDotsToggle, onToggleDots, showIncome, onToggleIncome, showExpenses, onToggleExpenses, graphHeight = 108, marginTop = 16, graphHeightRef, forceGreenDots = false, forceDotColor = null, hideDots = false, balanceHistory = [], showBalanceHistory = true, activeEventDot = null, onZeroDate, onOverdraftBreachDate, showHolidays = true, onZoomChange, zoomOutRef, scrubNearLineOnly = false }) {
     const today = new Date()
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate())
     const todayNoon = new Date(todayMidnight.getTime() + 12 * 60 * 60 * 1000)
@@ -572,7 +572,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         for (let i = 1; i < balPoints.length; i++) {
             const prev = balPoints[i - 1]
             const cur = balPoints[i]
-            if (zeroCrossX === null && cur.bal <= 0 && prev.bal > 0) {
+            if (zeroCrossX === null && cur.bal <= 100 && prev.bal > 100) {
                 // Interpolate x position of zero crossing
                 if (cur.x !== prev.x && cur.bal !== prev.bal) {
                     const ratio = prev.bal / (prev.bal - cur.bal)
@@ -580,18 +580,18 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                 } else {
                     zeroCrossX = cur.x
                 }
-            } else if (zeroCrossX === null && cur.bal <= 0) {
+            } else if (zeroCrossX === null && cur.bal <= 100) {
                 zeroCrossX = cur.x
             }
-            if (od > 0 && odCrossX === null && cur.bal < -od && prev.bal >= -od) {
+            if (od > 0 && odCrossX === null && cur.bal < -od + 100 && prev.bal >= -od + 100) {
                 if (cur.x !== prev.x && cur.bal !== prev.bal) {
-                    const target = -od
+                    const target = -od + 100
                     const ratio = (prev.bal - target) / (prev.bal - cur.bal)
                     odCrossX = prev.x + ratio * (cur.x - prev.x)
                 } else {
                     odCrossX = cur.x
                 }
-            } else if (od > 0 && odCrossX === null && cur.bal < -od) {
+            } else if (od > 0 && odCrossX === null && cur.bal < -od + 100) {
                 odCrossX = cur.x
             }
         }
@@ -829,9 +829,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         // Position tooltip in viewport space (fixed positioning)
         if (scrubTooltipRef.current) {
             scrubTooltipRef.current.style.display = ''
-            // Centre horizontally on the scrub line position, clamped to graph edges
-            const lineScreenX = rect.left + (xPct / 100) * rect.width
-            const tooltipX = Math.max(rect.left + 55, Math.min(rect.right - 55, lineScreenX))
+            // Centre horizontally on the scrub line (use clientX which tracks the finger/scrub position)
+            const tooltipX = Math.max(rect.left + 65, Math.min(rect.right - 65, clientX))
             const tooltipY = rect.top - 10
             scrubTooltipRef.current.style.left = `${tooltipX}px`
             scrubTooltipRef.current.style.top = `${tooltipY}px`
@@ -1052,8 +1051,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                 s.startX = e.touches[0].clientX
                 s.startY = e.touches[0].clientY
                 s.nearLineCheck = true
-                // If scrubNearLineOnly, check if touch Y is near the graph line
-                if (scrubNearLineOnly) {
+                // Always check if touch Y is near the graph line
+                {
                     const container = graphContainerRef.current
                     if (container) {
                         const rect = container.getBoundingClientRect()
@@ -1486,11 +1485,14 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             <>
                                 {pastPath.dots.filter(dot => !dot.event.noDot).map((dot, i) => {
                                     const isIncome = dot.event.type === 'income'
-                                    const isHidden = hiddenEventTypes.includes(dot.event.editType)
-                                    const isCurrent = !currentEventType || dot.event.editType === currentEventType
+                                    const pet = dot.event.editType
+                                    const isHidden = hiddenEventTypes.includes(pet) || hiddenEventTypes.some(h => pet.startsWith(h + ':'))
+                                    const isCurrent = !currentEventType || pet === currentEventType || pet.startsWith(currentEventType + ':')
                                     const isDimmed = currentEventType && !isCurrent
                                     const delay = 0.25 + i * 0.12
-                                    const bg = isIncome ? '#6dbfad' : '#f2c4c8'
+                                    const bg = isCurrent
+                                        ? (isIncome ? '#147b75' : '#e06470')
+                                        : (isIncome ? '#6dbfad' : '#f2c4c8')
                                     const isActive = activeEventDot && activeEventDot.date === dot.event.date && activeEventDot.editType === dot.event.editType
                                     return (
                                         <div
@@ -1515,12 +1517,12 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                             }}
                                         >
                                             <div style={{
-                                                width: isActive ? 14 : (isCurrent ? 10 : 8), height: isActive ? 14 : (isCurrent ? 10 : 8),
+                                                width: isActive ? 14 : 10, height: isActive ? 14 : 10,
                                                 borderRadius: '50%',
                                                 background: dot.event.flex ? 'transparent' : bg,
                                                 border: dot.event.flex
                                                     ? `2px solid ${bg}`
-                                                    : isActive ? '2px solid white' : (isCurrent ? '1px solid white' : '0.75px solid white'),
+                                                    : isActive ? '2px solid white' : '1px solid white',
                                                 boxShadow: isActive
                                                     ? `0 0 8px ${isIncome ? 'rgba(20,123,117,0.7)' : 'rgba(224,100,112,0.7)'}`
                                                     : 'none',
@@ -1569,13 +1571,13 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                         {/* Event dots (clickable) — pop in sequentially after line draws */}
                         {balanceVisible && !hideDots && showToday && steppedPath && steppedPath.dots.filter(dot => !dot.event.noDot).map((dot, i) => {
                             const isIncome = dot.event.type === 'income'
-                            const isHidden = hiddenEventTypes.includes(dot.event.editType)
-                            const isCurrent = !currentEventType || dot.event.editType === currentEventType
+                            const et = dot.event.editType
+                            const isHidden = hiddenEventTypes.includes(et) || hiddenEventTypes.some(h => et.startsWith(h + ':'))
+                            const isCurrent = !currentEventType || et === currentEventType || et.startsWith(currentEventType + ':')
                             const isPast = dot.x < markerPct
-                            const forcedColor2 = forceDotColor === 'green' ? '#147b75' : forceDotColor === 'red' ? '#e06470' : (forceGreenDots ? '#147b75' : null)
-                            const color = isPast || !isCurrent
-                                ? (isIncome ? '#6dbfad' : '#f2c4c8')
-                                : (isIncome ? '#147b75' : '#e06470')
+                            const color = isCurrent
+                                ? (isIncome ? '#147b75' : '#e06470')
+                                : (isIncome ? '#6dbfad' : '#f2c4c8')
                             const delay = 0.25 + i * 0.12
                             const isActive = activeEventDot && activeEventDot.date === dot.event.date && activeEventDot.editType === dot.event.editType
                             return (
@@ -1602,16 +1604,18 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     }}
                                 >
                                     <div style={{
-                                        width: isActive ? 14 : (isCurrent ? 10 : 8), height: isActive ? 14 : (isCurrent ? 10 : 8),
+                                        width: isActive ? 14 : 10, height: isActive ? 14 : 10,
                                         borderRadius: '50%',
-                                        background: dot.event.flex ? 'transparent' : color,
+                                        background: dot.event.flex ? 'transparent'
+                                            : dot.event.hasOverride && currentEventType && dot.event.editType === currentEventType ? '#3b82f6'
+                                            : color,
                                         border: dot.event.flex
-                                            ? `2px solid ${color}`
-                                            : isActive ? '2px solid white' : (isCurrent ? '1px solid white' : '0.75px solid white'),
+                                            ? `2px solid ${dot.event.hasOverride && currentEventType && dot.event.editType === currentEventType ? '#3b82f6' : color}`
+                                            : isActive ? '2px solid white' : '1px solid white',
                                         boxShadow: isActive
                                             ? `0 0 8px ${isIncome ? 'rgba(20,123,117,0.7)' : 'rgba(224,100,112,0.7)'}`
                                             : dot.event.hasOverride && currentEventType && dot.event.editType === currentEventType
-                                                ? `0 0 0 1px #fff, 0 0 0 2.5px #EC8C17`
+                                                ? `0 0 0 1px #fff, 0 0 0 2.5px #3b82f6`
                                                 : 'none',
                                         transition: 'width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease, border 0.15s ease',
                                     }} />
@@ -1636,13 +1640,13 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             }
 
                             return [...removedFutureEvents, ...removedPastEvents]
-                                .filter(evt => evt.editType === currentEventType)
+                                .filter(evt => evt.editType === currentEventType && !removedHiddenTypes.includes(evt.editType))
                                 .map((evt, i) => {
                                     const x = datePct(evt.date)
                                     const lineBal = getLineBal(x)
                                     const yPct = toTopPct(lineBal)
                                     const isIncome = evt.type === 'income'
-                                    const dotColor = '#999'
+                                    const dotColor = '#e06470'
                                     const isActive = activeEventDot && activeEventDot.date === evt.date && activeEventDot.editType === evt.editType
                                     const size = isActive ? 16 : 13
                                     const r = isActive ? 6 : 4.5

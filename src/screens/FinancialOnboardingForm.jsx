@@ -160,17 +160,22 @@ function buildGraphEvents(formData) {
         if (!sourceList?.includes(cat.id)) continue
 
         const entries = formData[cat.formKey] || []
+        const hasMultiple = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
+        let entryNum = 0
         for (const entry of entries) {
             const amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
             if (amt <= 0) continue
+            entryNum++
             const type = isIncome ? 'income' : 'expense'
             const freq = entry.frequency || cat.defaultFrequency
+            const entryLabel = hasMultiple ? `${cat.label} ${entryNum}` : cat.label
+            const entryEditType = hasMultiple ? `${cat.id}:${entry.id || entryNum}` : cat.id
 
             if (freq === 'irregular') {
                 const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
                 if (months.length === 0) continue
                 const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
-                const amounts = distributeExcludingRemoved(amt, dateObjs, cat.id, removedSet)
+                const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet)
                 for (let mi = 0; mi < months.length; mi++) {
                     const month = months[mi]
                     const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
@@ -178,11 +183,11 @@ function buildGraphEvents(formData) {
                     const instAmt = parseFloat(String(entry.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
                     const amount = instAmt > 0 ? instAmt : amounts[mi]
                     if (amount <= 0) continue
-                    events.push({ date, amount, type, label: cat.label, sublabel: `${MONTH_SHORT[month]} ${cat.label.toLowerCase()}`, editType: cat.id, editMonth: month })
+                    events.push({ date, amount, type, label: entryLabel, sublabel: `${MONTH_SHORT[month]} ${entryLabel.toLowerCase()}`, editType: entryEditType, editMonth: month })
                 }
             } else if (freq === 'one-off') {
                 if (entry.nextDate) {
-                    events.push({ date: entry.nextDate, amount: amt, type, label: cat.label, sublabel: 'One-off', editType: cat.id })
+                    events.push({ date: entry.nextDate, amount: amt, type, label: entryLabel, sublabel: 'One-off', editType: entryEditType })
                 }
             } else if (freq === 'weekly' || freq === 'fortnightly') {
                 const interval = freq === 'weekly' ? 7 : 14
@@ -199,7 +204,7 @@ function buildGraphEvents(formData) {
                         const dateStr = toLocalDate(d)
                         const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
                         if (eventAmt > 0) {
-                            events.push({ date: dateStr, amount: eventAmt, type, label: cat.label, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${cat.label.toLowerCase()}`, editType: cat.id })
+                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: entryEditType })
                         }
                     }
                     d = new Date(d.getTime() + interval * 86400000)
@@ -222,14 +227,14 @@ function buildGraphEvents(formData) {
                         const dateStr = toLocalDate(d)
                         const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
                         if (eventAmt > 0) {
-                            events.push({ date: dateStr, amount: eventAmt, type, label: cat.label, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${cat.label.toLowerCase()}`, editType: cat.id })
+                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: entryEditType })
                         }
                     }
                     month++
                     if (month > 11) { month = 0; year++ }
                 }
             } else if (freq === 'yearly') {
-                events.push({ date: entry.nextDate || ayStartStr(), amount: amt, type, label: cat.label, sublabel: `Yearly ${cat.label.toLowerCase()}`, editType: cat.id })
+                events.push({ date: entry.nextDate || ayStartStr(), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: entryEditType })
             }
         }
     }
@@ -2411,18 +2416,20 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             />
                             <div style={{
                                 position: 'fixed',
-                                top: 0, left: 0, right: 0,
+                                left: Math.max(8, Math.min(editingEvent.clickX - 135, window.innerWidth - 278)),
+                                top: editingEvent.clickY + 18,
+                                width: 270,
                                 background: '#fff',
-                                borderRadius: '0 0 16px 16px',
+                                borderRadius: 14,
                                 zIndex: 101,
-                                boxShadow: '0 2px 16px rgba(0,0,0,0.08)',
-                                padding: 'calc(14px + env(safe-area-inset-top, 0px)) 16px 14px',
+                                boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
+                                padding: '12px 14px',
                             }}>
                                 {/* Close button — top right */}
                                 <div
                                     onClick={() => { setEditingEvent(null); setNearbyEvents([]); setNearbyIdx(0) }}
                                     style={{
-                                        position: 'absolute', top: 'calc(10px + env(safe-area-inset-top, 0px))', right: 12,
+                                        position: 'absolute', top: 10, right: 10,
                                         width: 28, height: 28, borderRadius: '50%',
                                         background: '#f0f0f0',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2465,7 +2472,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
                                 {/* Header */}
                                 <div style={{ marginBottom: 12, paddingRight: 36 }}>
-                                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222' }}>
+                                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, flexShrink: 0 }} />
                                         {editingEvent.label || editingEvent.sublabel}
                                     </div>
                                     <div style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 2 }}>
@@ -2517,9 +2525,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         <div style={{ display: 'flex', gap: 8 }}>
                                             {/* Amount input */}
                                             <div style={{
-                                                flex: 1, display: 'flex', alignItems: 'center',
-                                                border: '1px solid #e8e8e8', borderRadius: 10,
-                                                padding: '0 12px', height: 44, gap: 4, background: '#fff', minWidth: 0,
+                                                flex: 1, minWidth: 0, display: 'flex', alignItems: 'center',
+                                                border: '1px solid #e8e8e8', borderRadius: 8,
+                                                padding: '0 8px', height: 34, gap: 3, background: '#fff', minWidth: 0, flexShrink: 0,
                                             }}>
                                                 <span style={{ fontSize: 15, fontWeight: 600, color: '#999', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                                                 <input
@@ -2566,7 +2574,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                     setEditingEvent(null)
                                                 }}
                                                 style={{
-                                                    height: 40, borderRadius: 10, border: 'none',
+                                                    height: 38, borderRadius: 10, border: 'none',
                                                     background: color, padding: '0 16px',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                     cursor: 'pointer', flexShrink: 0,
@@ -2582,14 +2590,21 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                     setEditingEvent(null)
                                                 }}
                                                 style={{
-                                                    height: 40, borderRadius: 10, border: 'none',
+                                                    height: 38, borderRadius: 10, border: 'none',
                                                     background: 'rgba(224,100,112,0.08)', padding: '0 12px',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                     cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
                                                 }}
                                             >
                                                 <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                    Skip {editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' }) : ''}
+                                                    Skip {(() => {
+                                                        if (!editingEvent.date) return ''
+                                                        const cat = CATEGORY_MAP[editingEvent.editType]
+                                                        const freq = cat ? (formData[cat.formKey]?.[0]?.frequency || cat.defaultFrequency) : 'monthly'
+                                                        if (freq === 'weekly') return 'week'
+                                                        if (freq === 'fortnightly') return 'fortnight'
+                                                        return new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' })
+                                                    })()}
                                                 </span>
                                             </button>
                                         </div>

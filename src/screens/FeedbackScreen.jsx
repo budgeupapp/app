@@ -322,7 +322,7 @@ export default function FeedbackScreen() {
                 overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: '0 16px 0',
-                paddingBottom: 'calc(180px + env(safe-area-inset-bottom, 0px))',
+                paddingBottom: 'calc(280px + env(safe-area-inset-bottom, 0px))',
             }}>
 
                 <p style={{
@@ -515,7 +515,7 @@ export default function FeedbackScreen() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                                 {quickSurveyQuestions.map((q, i) => renderQuestion(q, i, quickResponses, (idx, val) => setQuickResponses(prev => ({ ...prev, [idx]: val }))))}
                             </div>
-                            <div style={{ maxHeight: hasAny ? 70 : 0, opacity: hasAny ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.25s ease' }}>
+                            <div style={{ marginTop: 4 }}>
                                 <button onClick={handleQuickSubmit} disabled={quickSubmitting} style={{
                                     width: '100%', marginTop: 18, padding: '13px', borderRadius: 12, border: 'none',
                                     background: '#147B75', color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',

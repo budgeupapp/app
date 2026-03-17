@@ -740,13 +740,13 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
                             onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
                             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2, display: 'block' }}
                         >
-                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#c4c4c4' }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
                                 {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted
                             </span>
                         </button>
                     )}
                     {overrideCount > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#EC8C17', marginTop: 2, display: 'block' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6', marginTop: 2, display: 'block' }}>
                             {overrideCount} payment{overrideCount !== 1 ? 's' : ''} edited
                         </span>
                     )}
@@ -927,13 +927,13 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                             onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
                             style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2 }}
                         >
-                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#c4c4c4' }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
                                 {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted
                             </span>
                         </button>
                     )}
                     {overrideCount > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#EC8C17', marginTop: 2, display: 'block' }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6', marginTop: 2, display: 'block' }}>
                             {overrideCount} payment{overrideCount !== 1 ? 's' : ''} edited
                         </span>
                     )}
@@ -1326,6 +1326,8 @@ export default function Dashboard() {
     }
     const [editingEvent, setEditingEvent] = useState(null)
     const [editAmount, setEditAmount] = useState('')
+    const [nearbyEvents, setNearbyEvents] = useState([])
+    const [nearbyIdx, setNearbyIdx] = useState(0)
     const [editingOverdraft, setEditingOverdraft] = useState(null)
     const [editOverdraftAmount, setEditOverdraftAmount] = useState('')
     const [fabBalanceOpen, setFabBalanceOpen] = useState(false)
@@ -2419,12 +2421,11 @@ export default function Dashboard() {
     const heroMetric = (() => {
         const { diff, isAhead, isOnTrack } = goalsData
         const sym = getCurrencySymbol()
-        const pct = projBal !== 0 ? Math.round(Math.abs(diff) / Math.abs(projBal) * 100) : 0
-        if (isOnTrack) return { color: '#147b75', value: 'On track', pct: 0, label: 'vs projection' }
+        if (isOnTrack) return { color: '#147b75', value: 'On track', label: 'vs projection' }
         const absDiff = Math.abs(diff)
         const formatted = `${sym}${absDiff.toLocaleString()}`
-        if (isAhead) return { color: '#147b75', value: `+${formatted}`, pct: `+${pct}%`, label: 'above projection' }
-        return { color: '#e06470', value: `\u2212${formatted}`, pct: `\u2212${pct}%`, label: 'below projection' }
+        if (isAhead) return { color: '#147b75', value: `+${formatted}`, label: 'above projection' }
+        return { color: '#e06470', value: `\u2212${formatted}`, label: 'below projection' }
     })()
 
     // Calculate per-source yearly amounts
@@ -2662,7 +2663,12 @@ export default function Dashboard() {
         const rect = e.currentTarget.getBoundingClientRect()
         setEditingEvent({ ...evt, clickX: rect.left + rect.width / 2, clickY: rect.top + rect.height / 2 })
         setEditAmount(String(evt.amount))
-    }, [])
+        // Find nearby events on same date
+        const allEvts = buildGraphEvents(formData)
+        const sameDate = allEvts.filter(ev => ev.date === evt.date && !ev.noDot && ev.amount > 0)
+        setNearbyEvents(sameDate.length > 1 ? sameDate : [])
+        setNearbyIdx(sameDate.length > 1 ? Math.max(0, sameDate.findIndex(ev => ev.editType === evt.editType && ev.amount === evt.amount)) : 0)
+    }, [formData])
 
 
     const handleOverdraftClick = useCallback(({ clickX, clickY }) => {
@@ -2987,6 +2993,15 @@ export default function Dashboard() {
                                     if (goalsVisibleEditTypes.has(t)) return false
                                     return true
                                 })}
+                                removedHiddenTypes={[
+                                    ...(!showIncome ? [...INCOME_CATEGORIES.map(c => c.id), 'oneOffIncome', ...(formData.flexIncomeSources || [])] : []),
+                                    ...(!showExpenses ? [...EXPENSE_CATEGORIES.map(c => c.id), 'weeklySpend', 'oneOffExpense', ...(formData.flexExpenseSources || [])] : []),
+                                    ...[...hiddenSources].flatMap(id => {
+                                        const allMaps = { ...incomeEditTypeMap, ...expenseEditTypeMap }
+                                        if (id.startsWith('flex_')) return [id]
+                                        return allMaps[id] || []
+                                    }),
+                                ]}
                                 balanceHiddenTypes={[...hiddenSources].flatMap(id => {
                                     if (id.startsWith('flex_')) return [id]
                                     const allMaps = { ...incomeEditTypeMap, ...expenseEditTypeMap }
@@ -3662,70 +3677,165 @@ export default function Dashboard() {
                                                             position: 'absolute', bottom: 36, left: '50%', transform: 'translateX(-50%)',
                                                             textAlign: 'center', whiteSpace: 'nowrap',
                                                         }}>
-                                                            <p style={{ margin: 0, fontSize: 30, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
-                                                                {clampedPct >= 0 ? '+' : ''}{clampedPct}%
+                                                            <p style={{ margin: 0, fontSize: 22, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1 }}>
+                                                                {isClose ? 'On Track!' : isAhead ? 'Ahead!' : isDanger ? 'Needs Attention' : 'Watch Spending'}
                                                             </p>
-                                                            <p style={{ margin: '4px 0 0', fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: healthColor }}>
-                                                                {isClose || clampedPct === 0 ? 'On Track!' : isAhead ? 'Ahead!' : statusText === 'WATCH SPENDING' ? 'Watch Spending' : 'Needs Attention'}
+                                                            <p style={{ margin: '6px 0 0', fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
+                                                                {isAhead ? '+' : '\u2212'}{sym}{absDiff.toLocaleString()}
+                                                            </p>
+                                                            <p style={{ margin: '3px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                                                                compared to forecast
                                                             </p>
                                                         </div>
                                                     </div>
-                                                    {/* Subtitle */}
-                                                    <p style={{ margin: '-30px 0 8px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999', textAlign: 'center' }}>
-                                                        {isClose || clampedPct === 0 ? '' : isAhead
-                                                            ? <>{sym}{absDiff.toLocaleString()} above forecast</>
-                                                            : <>{sym}{absDiff.toLocaleString()} below forecast</>
-                                                        }
-                                                    </p>
                                                 </div>
-                                                {!isAhead && absDiff > 50 && (
+                                                <div style={{
+                                                    marginTop: 10, borderRadius: 14, padding: trackMinimised ? '12px 18px' : '16px 18px',
+                                                    background: 'linear-gradient(135deg, #147b75, #1a9e97)',
+                                                    color: '#fff', position: 'relative', overflow: 'hidden',
+                                                }}>
+                                                    <div style={{ position: 'absolute', top: -15, right: -15, width: 70, height: 70, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
+                                                    <div style={{ position: 'absolute', bottom: -20, left: -10, width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
+                                                    <div
+                                                        onClick={() => setTrackMinimised(m => !m)}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: trackMinimised ? 0 : 10, cursor: 'pointer', position: 'relative', zIndex: 2, transition: 'margin 0.25s ease' }}
+                                                    >
+                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
+                                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
+                                                            What does this mean?
+                                                        </p>
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: trackMinimised ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease' }}><path d="M6 9l6 6 6-6" /></svg>
+                                                    </div>
                                                     <div style={{
-                                                        marginTop: 16, borderRadius: 14, padding: trackMinimised ? '12px 18px' : '16px 18px',
-                                                        background: 'linear-gradient(135deg, #147b75, #1a9e97)',
-                                                        color: '#fff', position: 'relative', overflow: 'hidden',
-                                                        transition: 'padding 0.25s ease',
+                                                        maxHeight: trackMinimised ? 0 : 500,
+                                                        opacity: trackMinimised ? 0 : 1,
+                                                        overflow: 'hidden',
+                                                        transition: 'max-height 0.35s ease, opacity 0.2s ease',
                                                     }}>
-                                                        <div style={{ position: 'absolute', top: -15, right: -15, width: 70, height: 70, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
-                                                        <div style={{ position: 'absolute', bottom: -20, left: -10, width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
-                                                        <div
-                                                            onClick={() => setTrackMinimised(m => !m)}
-                                                            style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: trackMinimised ? 0 : 10, cursor: 'pointer', position: 'relative', zIndex: 2, transition: 'margin 0.25s ease' }}
-                                                        >
-                                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg>
-                                                            <p style={{ margin: 0, fontSize: 14, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
-                                                                Getting Back on Track
-                                                            </p>
-                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: trackMinimised ? 'rotate(0deg)' : 'rotate(180deg)', transition: 'transform 0.3s ease' }}><path d="M6 9l6 6 6-6" /></svg>
-                                                        </div>
-                                                        <div style={{
-                                                            maxHeight: trackMinimised ? 0 : 300,
-                                                            opacity: trackMinimised ? 0 : 1,
-                                                            overflow: 'hidden',
-                                                            transition: 'max-height 0.35s ease, opacity 0.2s ease',
-                                                        }}>
-                                                            <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.9 }}>
-                                                                Firstly, check that all your inputs are correct!
-                                                            </p>
-                                                            <p style={{ margin: '0 0 6px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif' }}>
-                                                                To get back on track either:
-                                                            </p>
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
-                                                                    {'\u2022'} Wait for average spend to balance out naturally
+                                                        <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', opacity: 1, lineHeight: 1.5 }}>
+                                                            Your actual balance vs your forecast
+                                                        </p>
+                                                        <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
+                                                            This is the difference between where you are and where your forecast expected you to be. Some drift is normal — we spread your weekly spend evenly, but real life doesn't work like that!
+                                                        </p>
+                                                        <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', opacity: 1, lineHeight: 1.5 }}>
+                                                            Big difference?
+                                                        </p>
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                                                <span style={{ fontSize: 12, opacity: 0.85 }}>{'\u2022'}</span>
+                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
+                                                                    <strong style={{ opacity: 1 }}>Adjust your inputs</strong> — your average spending might need tweaking
                                                                 </p>
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
-                                                                    {'\u2022'} Adjust inputs to make forecast more realistic
-                                                                </p>
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
-                                                                    {'\u2022'} Spend <span style={{ fontWeight: 800, opacity: 1 }}>{sym}{weeklyAdj}/wk</span> less over the next couple of weeks
-                                                                </p>
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92 }}>
-                                                                    {'\u2022'} Earn <span style={{ fontWeight: 800, opacity: 1 }}>{sym}{weeklyAdj}/wk</span> more over the next couple of weeks
+                                                            </div>
+                                                            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                                                <span style={{ fontSize: 12, opacity: 0.85 }}>{'\u2022'}</span>
+                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
+                                                                    <strong style={{ opacity: 1 }}>Or stay the course</strong> — spend less or earn more over the next few weeks to get back on track
                                                                 </p>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                )}
+                                                </div>
+                                            </div>
+                                        )
+                                    })()}
+
+                                    {/* Will I run out? */}
+                                    {(() => {
+                                        const od = overdraftNum || 0
+                                        const limit = od > 0 ? -od + 100 : 100
+                                        const zeroDate = graphZeroDate
+                                        const overdraftDate = graphOverdraftDate
+                                        const willRunOut = zeroDate || overdraftDate || projectionBalance <= limit
+                                        if (!willRunOut) return null
+
+                                        const targetDate = overdraftDate || zeroDate
+                                        const daysUntil = targetDate ? daysBetween(todayStr, targetDate) : 0
+                                        const alreadyOut = projectionBalance <= limit
+
+                                        const targetDateFormatted = targetDate
+                                            ? new Date(targetDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+                                            : ''
+
+                                        const isUoB = (formData.university || '').toLowerCase().includes('bristol')
+
+                                        return (
+                                            <div style={{
+                                                background: 'linear-gradient(135deg, #c9404f, #a8293a)',
+                                                borderRadius: 14, padding: warningMinimised ? '12px 18px' : '20px 18px', marginBottom: 10,
+                                                color: '#fff', position: 'relative', overflow: 'hidden',
+                                                transition: 'padding 0.25s ease',
+                                            }}>
+                                                {/* Decorative circle */}
+                                                <div style={{
+                                                    position: 'absolute', top: -20, right: -20,
+                                                    width: 80, height: 80, borderRadius: '50%',
+                                                    background: 'rgba(255,255,255,0.08)',
+                                                }} />
+                                                <div style={{
+                                                    position: 'absolute', bottom: -30, left: -10,
+                                                    width: 60, height: 60, borderRadius: '50%',
+                                                    background: 'rgba(255,255,255,0.05)',
+                                                }} />
+
+                                                {/* Header with minimise toggle */}
+                                                <div
+                                                    onClick={() => setWarningMinimised(m => !m)}
+                                                    style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: warningMinimised ? 0 : 12, transition: 'margin 0.25s ease' }}
+                                                >
+                                                    <AlertTriangle size={20} color="#fff" strokeWidth={2.5} />
+                                                    <p style={{ margin: 0, fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
+                                                        {alreadyOut ? 'Low balance warning' : 'Running low warning'}
+                                                    </p>
+                                                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{
+                                                        transform: warningMinimised ? 'rotate(-90deg)' : 'rotate(0deg)',
+                                                        transition: 'transform 0.25s ease', flexShrink: 0,
+                                                    }}>
+                                                        <path d="M4.5 7L9 11.5L13.5 7" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                    </svg>
+                                                </div>
+
+                                                {/* Collapsible content */}
+                                                <div style={{
+                                                    maxHeight: warningMinimised ? 0 : 600,
+                                                    opacity: warningMinimised ? 0 : 1,
+                                                    overflow: 'hidden',
+                                                    transition: 'max-height 0.3s ease, opacity 0.2s ease',
+                                                }}>
+                                                    <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92, lineHeight: 1.5 }}>
+                                                        {alreadyOut
+                                                            ? <>Your balance is already within {sym}100 of {od > 0 ? `your ${sym}${od.toLocaleString()} overdraft limit` : `${sym}0`}.</>
+                                                            : <>Your forecast is on track to get within {sym}100 of {od > 0 ? `your ${sym}${od.toLocaleString()} overdraft limit` : `${sym}0`}
+                                                                {targetDate && <> in <strong>{daysUntil === 0 ? 'less than a day' : daysUntil === 1 ? '1 day' : `${daysUntil} days`}</strong> on <strong>{targetDateFormatted}</strong></>}.</>
+                                                        }
+                                                    </p>
+
+                                                    <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', opacity: 1, lineHeight: 1.5 }}>
+                                                        What can you do?
+                                                    </p>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                                                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                                            <span style={{ fontSize: 12, opacity: 0.85 }}>{'\u2022'}</span>
+                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
+                                                                Play around with the graph and your inputs — see what changes make a difference
+                                                            </p>
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                                            <span style={{ fontSize: 12, opacity: 0.85 }}>{'\u2022'}</span>
+                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
+                                                                You might already have a backup plan for situations like this
+                                                            </p>
+                                                        </div>
+                                                    </div>
+
+                                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
+                                                        {isUoB
+                                                            ? <>Your uni is there to help — check out the <strong>Resources</strong> page in the app.</>
+                                                            : <>Your uni is there to help — try searching <strong>'Money Advice'</strong> for your university.</>
+                                                        }
+                                                    </p>
+                                                </div>
                                             </div>
                                         )
                                     })()}
@@ -3770,135 +3880,6 @@ export default function Dashboard() {
                                             </div>
                                         </div>
                                     </div>
-
-                                    {/* Will I run out? */}
-                                    {(() => {
-                                        const od = overdraftNum || 0
-                                        const limit = od > 0 ? -od : 0
-                                        const zeroDate = graphZeroDate
-                                        const overdraftDate = graphOverdraftDate
-                                        const willRunOut = zeroDate || overdraftDate || projectionBalance <= limit
-                                        if (!willRunOut) return null
-
-                                        const targetDate = overdraftDate || zeroDate
-                                        const daysUntil = targetDate ? daysBetween(todayStr, targetDate) : 0
-                                        const alreadyOut = projectionBalance <= limit
-
-                                        const weeklyAmt2 = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, ''))
-                                        const weeksLeft3 = Math.max(1, Math.ceil(termDaysLeft / 7))
-
-                                        let evtsToDate = 0
-                                        if (targetDate) {
-                                            const relevantEvts = sortedEvents.filter(e => e.date >= todayStr && e.date <= targetDate)
-                                            for (const evt of relevantEvts) {
-                                                if (evt.editType === 'weeklySpend') evtsToDate -= evt.amount
-                                                else evtsToDate += evt.type === 'income' ? evt.amount : -evt.amount
-                                            }
-                                        }
-                                        const shortfall = Math.abs(Math.min(0, projectionBalance + evtsToDate - limit))
-                                        const weeksToDate = targetDate ? Math.max(1, Math.ceil(daysBetween(todayStr, targetDate) / 7)) : weeksLeft3
-                                        const spendLess = Math.round(shortfall / weeksToDate)
-
-                                        return (
-                                            <div style={{
-                                                background: 'linear-gradient(135deg, #c9404f, #a8293a)',
-                                                borderRadius: 14, padding: warningMinimised ? '12px 18px' : '20px 18px', marginBottom: 10,
-                                                color: '#fff', position: 'relative', overflow: 'hidden',
-                                                transition: 'padding 0.25s ease',
-                                            }}>
-                                                {/* Decorative circle */}
-                                                <div style={{
-                                                    position: 'absolute', top: -20, right: -20,
-                                                    width: 80, height: 80, borderRadius: '50%',
-                                                    background: 'rgba(255,255,255,0.08)',
-                                                }} />
-                                                <div style={{
-                                                    position: 'absolute', bottom: -30, left: -10,
-                                                    width: 60, height: 60, borderRadius: '50%',
-                                                    background: 'rgba(255,255,255,0.05)',
-                                                }} />
-
-                                                {/* Header with minimise toggle */}
-                                                <div
-                                                    onClick={() => setWarningMinimised(m => !m)}
-                                                    style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: warningMinimised ? 0 : 12, transition: 'margin 0.25s ease' }}
-                                                >
-                                                    <AlertTriangle size={20} color="#fff" strokeWidth={2.5} />
-                                                    <p style={{ margin: 0, fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
-                                                        {alreadyOut ? 'You\'ve run out' : 'Running out warning'}
-                                                    </p>
-                                                    {warningMinimised && (
-                                                        <span style={{ fontSize: 14, fontWeight: 800, fontFamily: 'Nunito, sans-serif', opacity: 0.9 }}>
-                                                            {alreadyOut
-                                                                ? (od > 0 ? 'Past overdraft' : `Below ${sym}0`)
-                                                                : daysUntil === 0 ? 'Today'
-                                                                    : daysUntil === 1 ? 'Tomorrow'
-                                                                        : `${daysUntil}d`
-                                                            }
-                                                        </span>
-                                                    )}
-                                                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{
-                                                        transform: warningMinimised ? 'rotate(0deg)' : 'rotate(180deg)',
-                                                        transition: 'transform 0.25s ease', flexShrink: 0,
-                                                    }}>
-                                                        <path d="M4.5 7L9 11.5L13.5 7" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                                    </svg>
-                                                </div>
-
-                                                {/* Collapsible content */}
-                                                <div style={{
-                                                    maxHeight: warningMinimised ? 0 : 300,
-                                                    opacity: warningMinimised ? 0 : 1,
-                                                    overflow: 'hidden',
-                                                    transition: 'max-height 0.3s ease, opacity 0.2s ease',
-                                                }}>
-                                                    {/* Big stat */}
-                                                    <p style={{ margin: '0 0 4px', fontSize: 28, fontWeight: 800, fontFamily: 'Nunito, sans-serif', lineHeight: 1 }}>
-                                                        {alreadyOut
-                                                            ? `${od > 0 ? 'Past overdraft' : 'Below ' + sym + '0'}`
-                                                            : daysUntil === 0 ? 'Today'
-                                                                : daysUntil === 1 ? 'Tomorrow'
-                                                                    : `${daysUntil} days`
-                                                        }
-                                                    </p>
-                                                    <p style={{ margin: '0 0 16px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.8 }}>
-                                                        {alreadyOut
-                                                            ? 'Your balance is already past the limit'
-                                                            : `until your forecast hits ${sym}0${od > 0 ? ' / overdraft' : ''}`
-                                                        }
-                                                    </p>
-
-                                                    {/* Suggestions */}
-                                                    <div style={{
-                                                        background: 'rgba(255,255,255,0.12)', borderRadius: 10, padding: '12px 14px',
-                                                        backdropFilter: 'blur(4px)',
-                                                    }}>
-                                                        <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', opacity: 0.9 }}>
-                                                            To avoid running out:
-                                                        </p>
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                                                            {spendLess > 0 && (
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85 }}>
-                                                                    {'\u2022'} Spend {sym}{spendLess}/wk less
-                                                                </p>
-                                                            )}
-                                                            {spendLess > 0 && (
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85 }}>
-                                                                    {'\u2022'} Or earn {sym}{spendLess}/wk more
-                                                                </p>
-                                                            )}
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85 }}>
-                                                                {'\u2022'} Ask family for a top-up
-                                                            </p>
-                                                            <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85 }}>
-                                                                {'\u2022'} Check uni hardship funding
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )
-                                    })()}
 
                                     {/* Spend & Income Breakdown */}
                                     {(() => {
@@ -4288,7 +4269,28 @@ export default function Dashboard() {
             {editingEvent && (() => {
                 const isIncome = editingEvent.type === 'income'
                 const color = isIncome ? '#147b75' : '#e06470'
-                const skipMonth = editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' }) : ''
+                // Look up frequency for this event's source
+                const eventFreq = (() => {
+                    if (!editingEvent.editType) return 'monthly'
+                    // Check category entries
+                    const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+                    const cat = allCats.find(c => c.id === editingEvent.editType)
+                    if (cat) {
+                        const entries = formData[cat.formKey] || []
+                        if (entries.length > 0) return entries[0].frequency || cat.defaultFrequency
+                        return cat.defaultFrequency
+                    }
+                    // Legacy flat fields
+                    const freqMap = { family: formData.familyFrequency, work: formData.workFrequency, rent: formData.rentFrequency }
+                    return freqMap[editingEvent.editType] || 'monthly'
+                })()
+                const freqLabel = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly', yearly: 'Yearly', irregular: 'Irregular', 'one-off': 'One-off' }[eventFreq] || ''
+                const skipLabel = (() => {
+                    if (!editingEvent.date) return ''
+                    if (eventFreq === 'weekly') return 'week'
+                    if (eventFreq === 'fortnightly') return 'fortnight'
+                    return new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' })
+                })()
                 const handleSave = () => {
                     const val = editAmount.replace(/[^0-9.]/g, '')
                     if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
@@ -4366,40 +4368,74 @@ export default function Dashboard() {
                 return (
                     <>
                         <div
-                            onClick={() => setEditingEvent(null)}
+                            onClick={() => { setEditingEvent(null); setNearbyEvents([]); setNearbyIdx(0) }}
                             style={{ position: 'fixed', inset: 0, zIndex: 100 }}
                         />
                         <div style={{
                             position: 'fixed',
-                            top: 0, left: 0, right: 0,
+                            left: Math.max(8, Math.min(editingEvent.clickX - 135, window.innerWidth - 278)),
+                            top: editingEvent.clickY + 18,
+                            width: 270,
                             background: '#fff',
-                            borderRadius: '0 0 14px 14px',
+                            borderRadius: 14,
                             zIndex: 101,
-                            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                            padding: 'calc(env(safe-area-inset-top, 0px) + 10px) 14px 14px',
+                            boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
+                            padding: '12px 14px',
                         }}>
-                            {/* Header: title + date + close */}
-                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-                                <div>
-                                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222' }}>
-                                        {editingEvent.label || editingEvent.sublabel}
-                                    </div>
-                                    <div style={{ fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 1 }}>
-                                        {editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
-                                    </div>
+                            {/* Close button */}
+                            <div
+                                onClick={() => { setEditingEvent(null); setNearbyEvents([]); setNearbyIdx(0) }}
+                                style={{
+                                    position: 'absolute', top: 10, right: 10,
+                                    width: 28, height: 28, borderRadius: '50%',
+                                    background: '#f0f0f0',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    cursor: 'pointer', zIndex: 1,
+                                }}
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bbb" strokeWidth="2.5" strokeLinecap="round">
+                                    <path d="M18 6L6 18M6 6l12 12" />
+                                </svg>
+                            </div>
+
+                            {/* Nearby event pills */}
+                            {nearbyEvents.length > 1 && (
+                                <div style={{ display: 'flex', gap: 5, marginBottom: 10, overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingRight: 36 }}>
+                                    {nearbyEvents.map((ev, idx) => {
+                                        const active = idx === nearbyIdx
+                                        const evColor = ev.type === 'income' ? '#147b75' : '#e06470'
+                                        return (
+                                            <button key={`${ev.editType}-${idx}`}
+                                                onClick={() => {
+                                                    setNearbyIdx(idx)
+                                                    setEditingEvent(prev => ({ ...prev, ...ev, removed: !!ev.removed }))
+                                                    setEditAmount(String(ev.amount))
+                                                }}
+                                                style={{
+                                                    padding: '4px 10px', borderRadius: 16, border: 'none',
+                                                    fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                                    background: active ? evColor : `${evColor}10`,
+                                                    color: active ? '#fff' : evColor,
+                                                    cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                                                    transition: 'all 0.15s ease',
+                                                }}
+                                            >
+                                                {ev.label || ev.sublabel}
+                                            </button>
+                                        )
+                                    })}
                                 </div>
-                                <div
-                                    onClick={() => setEditingEvent(null)}
-                                    style={{
-                                        width: 28, height: 28, borderRadius: '50%',
-                                        background: '#f0f0f0',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        cursor: 'pointer', flexShrink: 0,
-                                    }}
-                                >
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2.5" strokeLinecap="round">
-                                        <path d="M18 6L6 18M6 6l12 12" />
-                                    </svg>
+                            )}
+
+                            {/* Header: title + date */}
+                            <div style={{ marginBottom: 8, paddingRight: 36 }}>
+                                <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222', display: 'flex', alignItems: 'center', gap: 7 }}>
+                                    <div style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                                    {editingEvent.label || editingEvent.sublabel}
+                                </div>
+                                <div style={{ fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 1 }}>
+                                    {editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                                    {freqLabel ? <> · {freqLabel}</> : ''}
                                 </div>
                             </div>
 
@@ -4443,9 +4479,9 @@ export default function Dashboard() {
                                 {/* Amount + Save + Skip on one row */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <div style={{
-                                        display: 'flex', alignItems: 'center', flex: 1,
-                                        border: '1px solid #e8e8e8', borderRadius: 10,
-                                        padding: '0 10px', height: 40, gap: 4, background: '#fff',
+                                        display: 'flex', alignItems: 'center', flex: 1, minWidth: 0,
+                                        border: '1px solid #e8e8e8', borderRadius: 8,
+                                        padding: '0 8px', height: 34, gap: 3, background: '#fff', flexShrink: 0,
                                     }}>
                                         <span style={{ fontSize: 14, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                                         <input
@@ -4462,22 +4498,40 @@ export default function Dashboard() {
                                         />
                                     </div>
                                     <button onClick={handleSave} style={{
-                                        height: 40, borderRadius: 10, border: 'none',
-                                        background: color, padding: '0 16px',
+                                        height: 34, borderRadius: 8, border: 'none',
+                                        background: color, padding: '0 12px',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                                         cursor: 'pointer', flexShrink: 0,
                                     }}>
-                                        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
+                                        <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
                                     </button>
+                                    {editingEvent.hasOverride && (
+                                        <button onClick={() => {
+                                            const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
+                                            const updated = { ...(formData.amountOverrides || {}) }
+                                            delete updated[overrideKey]
+                                            updateField('amountOverrides', updated)
+                                            setEditingEvent(null)
+                                        }} style={{
+                                            height: 34, borderRadius: 8, border: 'none',
+                                            background: '#eef4ff', padding: '0 8px',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
+                                        }}>
+                                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6' }}>
+                                                Reset
+                                            </span>
+                                        </button>
+                                    )}
                                     {canSkip && (
                                         <button onClick={handleSkip} style={{
-                                            height: 40, borderRadius: 10, border: 'none',
-                                            background: '#f5f5f5', padding: '0 10px',
+                                            height: 34, borderRadius: 8, border: 'none',
+                                            background: '#f5f5f5', padding: '0 8px',
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
                                         }}>
                                             <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                Skip {skipMonth}
+                                                Skip {skipLabel}
                                             </span>
                                         </button>
                                     )}

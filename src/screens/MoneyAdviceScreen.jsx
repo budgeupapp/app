@@ -329,7 +329,7 @@ export default function MoneyAdviceScreen() {
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: '0 16px',
-                paddingBottom: 'calc(180px + env(safe-area-inset-bottom, 0px))',
+                paddingBottom: 'calc(150px + env(safe-area-inset-bottom, 0px))',
             }}>
                 {/* Financial situation picker — Bristol only */}
                 {isBristol && (
