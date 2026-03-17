@@ -20,6 +20,7 @@ export default function SignupForm() {
   const [loading, setLoading] = useState(false)
   const [consentChecked, setConsentChecked] = useState(false)
   const [newsletterChecked, setNewsletterChecked] = useState(true)
+  const [insightsChecked, setInsightsChecked] = useState(true)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
 
@@ -55,9 +56,9 @@ export default function SignupForm() {
     const cover = document.getElementById('safe-area-cover')
     if (cover) cover.style.background = color
     return () => {
-      document.body.style.backgroundColor = ''
-      document.getElementById('root').style.backgroundColor = ''
-      if (cover) cover.style.background = ''
+      document.body.style.backgroundColor = '#ffffff'
+      document.getElementById('root').style.backgroundColor = '#ffffff'
+      if (cover) cover.style.background = '#ffffff'
     }
   }, [showForm])
 
@@ -120,6 +121,7 @@ export default function SignupForm() {
     localStorage.setItem('signup_timestamp', Date.now().toString())
     localStorage.setItem('budgeup_newsletter', newsletterChecked ? 'true' : 'false')
     localStorage.setItem('budgeup_signup_university', university)
+    localStorage.setItem('budgeup_insights_consent', insightsChecked ? 'true' : 'false')
 
     const referralCode = localStorage.getItem('referral_code')
 
@@ -128,7 +130,10 @@ export default function SignupForm() {
       password,
       options: {
         emailRedirectTo: window.location.origin,
-        data: { referred_by: referralCode || null }
+        data: {
+          referred_by: referralCode || null,
+          insights_consent: insightsChecked,
+        }
       }
     })
 
@@ -243,19 +248,19 @@ export default function SignupForm() {
       
 
           <h1 style={{
-            fontSize: 26, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+            fontSize: 24, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
             color: '#1a1a1a', margin: '40px 0 14px', textAlign: 'center',
-            lineHeight: 1.3, position: 'relative', zIndex: 1, maxWidth: 250
+            lineHeight: 1.3, position: 'relative', zIndex: 1, maxWidth: 280
           }}>
-            A Revolution in Student Budgeting.
+            Is your bank balance more confusing than your lectures?
           </h1>
 
           <p style={{
             fontSize: 14, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
             color: '#666', margin: 0, textAlign: 'center', lineHeight: 1.6,
-            maxWidth: 400, position: 'relative', zIndex: 1,
+            maxWidth: 340, position: 'relative', zIndex: 1,
           }}>
-Budge Up is an early-stage startup founded by a couple of students at the University of Bristol. We realised that traditional budgeting is built for adults on monthly salaries, not the absurd irregularity of student finances! We're here to change the system and make your life a little easier.
+            If so, it won't be for much longer! Unlike normal budgeting tools, we don't track your past. We predict your future. It's free, zero-effort, and built by students for students. Sign up to get started!
           </p>
         </div>
 
@@ -295,6 +300,7 @@ Budge Up is an early-stage startup founded by a couple of students at the Univer
           flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch',
           padding: '24px 28px 0',
           display: 'flex', flexDirection: 'column', alignItems: 'center',
+          minHeight: 0,
         }}>
           {/* Forgot password illustration */}
           {isForgot && (
@@ -539,6 +545,29 @@ Budge Up is an early-stage startup founded by a couple of students at the Univer
                 </span>
               </label>
 
+              {/* Anonymised data consent */}
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '2px 0' }}>
+                <div
+                  onClick={(e) => { e.preventDefault(); setInsightsChecked(!insightsChecked) }}
+                  style={{
+                    width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1,
+                    border: insightsChecked ? '2px solid #147b75' : '1.5px solid #d0d0d0',
+                    background: insightsChecked ? '#147b75' : '#fff',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {insightsChecked && (
+                    <svg width="12" height="9" viewBox="0 0 14 10" fill="none">
+                      <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#444', lineHeight: 1.4 }}>
+                  I'm happy for my anonymised data to be used for student finance insights
+                </span>
+              </label>
+
               <button type="submit" disabled={loading || !consentChecked} style={{
                 ...btn,
                 background: consentChecked ? '#147b75' : '#ccc',
@@ -580,11 +609,11 @@ Budge Up is an early-stage startup founded by a couple of students at the Univer
                 })
               }}
               style={{
-                width: '100%', height: 52, borderRadius: 50,
+                width: '100%', height: 52, minHeight: 52, borderRadius: 50,
                 border: '1.5px solid #e0e0e0', background: '#fff',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
                 cursor: 'pointer', fontFamily: 'Nunito, sans-serif',
-                fontSize: 15, fontWeight: 700, color: '#333',
+                fontSize: 15, fontWeight: 700, color: '#333', flexShrink: 0,
               }}
             >
               <svg width="20" height="20" viewBox="0 0 48 48">
@@ -630,10 +659,11 @@ const field = {
   borderRadius: 12,
   border: '1.5px solid #e0e0e0',
   padding: '0 14px',
-  height: 44,
+  height: 44, minHeight: 44,
   background: '#fff',
   display: 'flex',
   alignItems: 'center',
+  flexShrink: 0,
 }
 
 const inp = {
@@ -645,11 +675,11 @@ const inp = {
 }
 
 const btn = {
-  width: '100%', height: 48, borderRadius: 50,
+  width: '100%', height: 48, minHeight: 48, borderRadius: 50,
   border: 'none', background: '#147b75',
   color: '#fff', fontSize: 16, fontWeight: 700,
   fontFamily: 'Nunito, sans-serif', marginTop: 2,
-  cursor: 'pointer',
+  cursor: 'pointer', flexShrink: 0,
 }
 
 /* ---- slide to unlock ---- */

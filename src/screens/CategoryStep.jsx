@@ -5,7 +5,7 @@ import { CATEGORY_MAP } from '../config/categories'
  * Generic step component for any income/expense category.
  * Looks up config from categories.js and renders IncomeExpenseCard.
  */
-export default function CategoryStep({ categoryId, entries = [], updateEntries }) {
+export default function CategoryStep({ categoryId, entries = [], updateEntries, compact = false }) {
     const cat = CATEGORY_MAP[categoryId]
     if (!cat) return null
 
@@ -31,6 +31,8 @@ export default function CategoryStep({ categoryId, entries = [], updateEntries }
             icon={cat.Icon}
             iconColor={cat.color}
             nameEditable={!!cat.nameEditable}
+            compact={compact}
+            frequencyLabels={cat.frequencyLabels}
         />
     )
 }

@@ -1,5 +1,5 @@
 // DEV: set to 'onboarding', 'dashboard', or 'signup' to bypass login and jump to that view. Set to null for normal behaviour.
-const DEV_VIEW = 'onboarding'
+const DEV_VIEW = null
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
@@ -49,6 +49,7 @@ import MoneyAdviceScreen from './screens/MoneyAdviceScreen'
 import SettingsScreen from './screens/SettingsScreen'
 import FeedbackScreen from './screens/FeedbackScreen'
 import NotFound from './screens/NotFound'
+import IntroScreen from './screens/IntroScreen'
 import BottomNav from './components/BottomNav'
 import MoneyAdviceSvg from './assets/money-advice.svg'
 import { saveSignupConsents } from './lib/api'
@@ -61,6 +62,8 @@ export default function App() {
     const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(null)
     const [onboardingLoading, setOnboardingLoading] = useState(true)
     const [showLoadingScreen, setShowLoadingScreen] = useState(false)
+    const savePromiseRef = useRef(null)
+    const [showIntro, setShowIntro] = useState(() => localStorage.getItem('signup_onboarding_pending') === 'true')
     const [passwordRecovery, setPasswordRecovery] = useState(recoveryPending)
 
     /* ---------------- PRELOAD ASSETS ---------------- */
@@ -256,23 +259,36 @@ export default function App() {
         localStorage.removeItem('budgeup_onboarding_state')
     }
     if (DEV_VIEW === 'onboarding' || hasCompletedOnboarding === false) {
+        if (showIntro && DEV_VIEW !== 'onboarding') {
+            return (
+                <IntroScreen onContinue={() => setShowIntro(false)} />
+            )
+        }
         if (showLoadingScreen) {
             return (
                 <LoadingScreen
                     onComplete={async () => {
+                        // Wait for save to finish before checking onboarding status
+                        if (savePromiseRef.current) {
+                            await savePromiseRef.current
+                            savePromiseRef.current = null
+                        }
+                        // Set completed optimistically so we don't flash onboarding/signup
+                        setHasCompletedOnboarding(true)
                         setShowLoadingScreen(false)
-                        // Re-verify onboarding status from database
-                        await checkOnboarding()
                     }}
                 />
             )
-        } else
-            return (
-                <FinancialOnboardingForm
-                    user={session?.user}
-                    onComplete={() => setShowLoadingScreen(true)}
-                />
-            )
+        }
+        return (
+            <FinancialOnboardingForm
+                user={session?.user}
+                onComplete={(savePromise) => {
+                    savePromiseRef.current = savePromise
+                    setShowLoadingScreen(true)
+                }}
+            />
+        )
     }
 
     /* ---------------- AUTHENTICATED & ONBOARDED - MAIN APP ---------------- */

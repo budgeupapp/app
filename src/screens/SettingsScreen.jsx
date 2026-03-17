@@ -236,7 +236,7 @@ export default function SettingsScreen() {
   const [userCreatedAt, setUserCreatedAt] = useState(null)
   const [termDates, setTermDates] = useState(null)
   const [termDatesLoading, setTermDatesLoading] = useState(true)
-  const [expandedTerm, setExpandedTerm] = useState(null)
+  const [expandedTerms, setExpandedTerms] = useState(new Set())
   const [university, setUniversity] = useState(() => {
     try {
       const saved = localStorage.getItem('budgeup_onboarding_state')
@@ -1259,8 +1259,12 @@ export default function SettingsScreen() {
                         }
                       }, 1500)
                     }}
-                    expandedTerm={expandedTerm}
-                    onExpandedTermChange={setExpandedTerm}
+                    expandedTerms={expandedTerms}
+                    onExpandedTermChange={(termId) => setExpandedTerms(prev => {
+                      const next = new Set(prev)
+                      if (next.has(termId)) next.delete(termId); else next.add(termId)
+                      return next
+                    })}
                   />
                 </div>
               ) : (

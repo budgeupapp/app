@@ -356,6 +356,90 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
     fd.incomeSources = incomeSources
     fd.expenseSources = expenseSources
 
+    // Reconstruct new category entries (cat_studentFinance, cat_rent, etc.)
+    const CATEGORY_KEY_MAP = {
+        cat_studentFinance: 'studentFinanceEntries',
+        cat_bursary: 'bursaryEntries',
+        cat_job: 'jobEntries',
+        cat_familySupport: 'familySupportEntries',
+        cat_savingsIncome: 'savingsIncomeEntries',
+        cat_sideHustles: 'sideHustlesEntries',
+        cat_benefits: 'benefitsEntries',
+        cat_otherIncome: 'otherIncomeEntries',
+        cat_uniFees: 'uniFeesEntries',
+        cat_rent: 'rentEntries',
+        cat_bills: 'billsEntries',
+        cat_phoneSubscriptions: 'phoneSubscriptionsEntries',
+        cat_holidayTrips: 'holidayTripsEntries',
+        cat_savingsGoals: 'savingsGoalsEntries',
+        cat_predictableTravel: 'predictableTravelEntries',
+        cat_bigGifts: 'bigGiftsEntries',
+        cat_rentalDeposit: 'rentalDepositEntries',
+        cat_insurance: 'insuranceEntries',
+        cat_sendingMoneyHome: 'sendingMoneyHomeEntries',
+        cat_councilTax: 'councilTaxEntries',
+        cat_loanRepayment: 'loanRepaymentEntries',
+        cat_graduation: 'graduationEntries',
+        cat_otherExpense: 'otherExpenseEntries',
+    }
+    for (const [catKey, formKey] of Object.entries(CATEGORY_KEY_MAP)) {
+        const catRows = (byCategory[catKey] || []).filter(r => !r.is_removed)
+        if (catRows.length === 0) continue
+        // Group by entry: irregular entries have subcategory=month, regular entries are standalone
+        const irregularRows = catRows.filter(r => r.recurrence === 'irregular')
+        const nonTermRows = catRows.filter(r => r.subcategory === 'non_term')
+        const regularRows = catRows.filter(r => r.recurrence !== 'irregular' && r.subcategory !== 'non_term')
+        const entries = []
+        // Regular entries — each row is one entry
+        for (const r of regularRows) {
+            const nonTerm = nonTermRows.find(nt => nt.recurrence === r.recurrence)
+            entries.push({
+                id: `${r.type}_${entries.length}`,
+                amount: String(r.amount),
+                frequency: r.recurrence || 'monthly',
+                nextDate: r.scheduled_date || '',
+                endDate: r.end_date || '',
+                label: r.title || '',
+                months: [],
+                dates: {},
+                instalmentAmounts: {},
+                variesByTerm: r.term_specific || false,
+                nonTermAmount: nonTerm ? String(nonTerm.amount) : '',
+            })
+        }
+        // Irregular entries — group months into one entry
+        if (irregularRows.length > 0) {
+            const months = []
+            const dates = {}
+            const instalmentAmounts = {}
+            for (const r of irregularRows) {
+                if (r.subcategory) {
+                    months.push(r.subcategory)
+                    dates[r.subcategory] = r.scheduled_date
+                    if (Number(r.amount) > 0) instalmentAmounts[r.subcategory] = String(r.amount)
+                }
+            }
+            entries.push({
+                id: `${irregularRows[0].type}_irr`,
+                amount: '',
+                frequency: 'irregular',
+                nextDate: '',
+                label: '',
+                months,
+                dates,
+                instalmentAmounts,
+            })
+        }
+        if (entries.length > 0) {
+            fd[formKey] = entries
+            // Also add to incomeSources/expenseSources if not already there
+            const catId = catKey.replace('cat_', '')
+            const isIncome = ['studentFinance', 'bursary', 'job', 'familySupport', 'savingsIncome', 'sideHustles', 'benefits', 'otherIncome'].includes(catId)
+            const sourceList = isIncome ? incomeSources : expenseSources
+            if (!sourceList.includes(catId)) sourceList.push(catId)
+        }
+    }
+
     return fd
 }
 

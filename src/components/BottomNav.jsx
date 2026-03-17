@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, TrendingDown, TrendingUp } from 'react-feather'
-import { PiHouse, PiHouseFill, PiChatCircle, PiChatCircleFill, PiGear, PiGearFill, PiArrowLeftBold, PiGraduationCap, PiHandCoins, PiUsers, PiBriefcase, PiDotsThree, PiLightningFill, PiBank, PiPiggyBank, PiRepeat, PiIdentificationCard, PiAirplaneTilt, PiMusicNotes, PiGift, PiDeviceMobile, PiTShirt, PiHeartbeat, PiBookOpen, PiBookOpenFill, PiStorefront, PiLifebuoy, PiLaptop } from 'react-icons/pi'
+import { PiHouse, PiHouseFill, PiChatCircle, PiChatCircleFill, PiGear, PiGearFill, PiArrowLeftBold, PiBookOpen, PiBookOpenFill } from 'react-icons/pi'
 import { analytics, MONEY_ADVICE_EVENTS } from '../lib/analytics/index.js'
 import { getCurrencySymbol } from '../lib/settings'
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../config/categories'
 import './BottomNav.css'
 
 export default function BottomNav() {
@@ -159,42 +160,8 @@ export default function BottomNav() {
         }, 250)
     }
 
-    const activeSources = window.__budgeup_active_sources || { income: [], expense: [], flexIncome: [], flexExpense: [] }
-    const incomeSources = [
-        { id: 'maintenance_loan', label: 'Loan', Icon: PiGraduationCap },
-        { id: 'bursary', label: 'Bursary', Icon: PiHandCoins },
-        { id: 'family_friends', label: 'Family', Icon: PiUsers },
-        { id: 'work', label: 'Work', Icon: PiBriefcase },
-        { id: 'other_income', label: 'Other', Icon: PiDotsThree },
-    ].filter(s => s.id === 'other_income' || !activeSources.income.includes(s.id))
-    const expenseSources = [
-        { id: 'rent', label: 'Rent', Icon: PiHouse },
-        { id: 'bills', label: 'Bills', Icon: PiLightningFill },
-        { id: 'uni_fees', label: 'Uni Fees', Icon: PiBank },
-        { id: 'savings_investments', label: 'Savings', Icon: PiPiggyBank },
-        { id: 'subscriptions', label: 'Subscriptions', Icon: PiRepeat },
-        { id: 'memberships', label: 'Memberships', Icon: PiIdentificationCard },
-        { id: 'other_expense', label: 'Other', Icon: PiDotsThree },
-    ].filter(s => s.id === 'other_expense' || !activeSources.expense.includes(s.id))
-    const flexIncomeSources = [
-        { id: 'flex_freelance', label: 'Freelance', Icon: PiBriefcase },
-        { id: 'flex_family_topups', label: 'Family Top-ups', Icon: PiUsers },
-        { id: 'flex_savings_dip', label: 'Savings Dip', Icon: PiPiggyBank },
-        { id: 'flex_selling', label: 'Selling', Icon: PiStorefront },
-        { id: 'flex_hardship', label: 'Hardship', Icon: PiLifebuoy },
-        { id: 'flex_side_projects', label: 'Side Projects', Icon: PiLaptop },
-        { id: 'flex_other_income', label: 'Other', Icon: PiDotsThree },
-    ].filter(s => !(activeSources.flexIncome || []).includes(s.id))
-    const flexExpenseSources = [
-        { id: 'flex_travel', label: 'Travel', Icon: PiAirplaneTilt },
-        { id: 'flex_events', label: 'Events', Icon: PiMusicNotes },
-        { id: 'flex_gifts', label: 'Gifts', Icon: PiGift },
-        { id: 'flex_tech', label: 'Tech', Icon: PiDeviceMobile },
-        { id: 'flex_clothing', label: 'Clothing', Icon: PiTShirt },
-        { id: 'flex_health', label: 'Health', Icon: PiHeartbeat },
-        { id: 'flex_course_materials', label: 'Materials', Icon: PiBookOpen },
-        { id: 'flex_other_expense', label: 'Other', Icon: PiDotsThree },
-    ].filter(s => !(activeSources.flexExpense || []).includes(s.id))
+    const incomeSources = INCOME_CATEGORIES.map(c => ({ id: c.id, label: c.label, Icon: c.Icon }))
+    const expenseSources = EXPENSE_CATEGORIES.map(c => ({ id: c.id, label: c.label, Icon: c.Icon }))
 
     useEffect(() => {
         if (!fabOpen) return
@@ -280,13 +247,11 @@ export default function BottomNav() {
     const t = '0.4s cubic-bezier(0.22, 1, 0.36, 1)'
     const tOut = '0.25s cubic-bezier(0.4, 0, 0.2, 1)'
 
-    const allIncomeSources = [...incomeSources, ...flexIncomeSources]
-    const allExpenseSources = [...expenseSources, ...flexExpenseSources]
     const accentColor = fabSourcePicker === 'income' ? '#147b75'
         : fabSourcePicker === 'expense' ? '#d4566a'
             : '#147b75'
-    const sources = fabSourcePicker === 'income' ? allIncomeSources
-        : fabSourcePicker === 'expense' ? allExpenseSources
+    const sources = fabSourcePicker === 'income' ? incomeSources
+        : fabSourcePicker === 'expense' ? expenseSources
             : []
 
     // Helper for consistent button style
@@ -450,8 +415,7 @@ export default function BottomNav() {
                                         el.style.transform = 'scale(1.1)'
                                         el.style.opacity = '0'
                                         setTimeout(() => {
-                                            const isFlex = src.id.startsWith('flex_')
-                                            handleAction(isFlex ? `add-flex:${src.id}:${fabSourcePicker}` : `add-source:${src.id}:${fabSourcePicker}`)
+                                            handleAction(`add-source:${src.id}:${fabSourcePicker}`)
                                         }, 150)
                                     }, 120)
                                 }}

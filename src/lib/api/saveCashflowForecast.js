@@ -473,6 +473,66 @@ export async function saveCashflowForecast(userId, data) {
         })
     }
 
+    /* --- New category entries (studentFinanceEntries, rentEntries, etc.) --- */
+    const CATEGORY_FORM_KEYS = [
+        'studentFinanceEntries', 'bursaryEntries', 'jobEntries', 'familySupportEntries',
+        'savingsIncomeEntries', 'sideHustlesEntries', 'benefitsEntries', 'otherIncomeEntries',
+        'uniFeesEntries', 'rentEntries', 'billsEntries', 'phoneSubscriptionsEntries',
+        'holidayTripsEntries', 'savingsGoalsEntries', 'predictableTravelEntries', 'bigGiftsEntries',
+        'rentalDepositEntries', 'insuranceEntries', 'sendingMoneyHomeEntries', 'councilTaxEntries',
+        'loanRepaymentEntries', 'graduationEntries', 'otherExpenseEntries',
+    ]
+    const INCOME_KEYS = ['studentFinanceEntries', 'bursaryEntries', 'jobEntries', 'familySupportEntries', 'savingsIncomeEntries', 'sideHustlesEntries', 'benefitsEntries', 'otherIncomeEntries']
+    for (const formKey of CATEGORY_FORM_KEYS) {
+        const entries = data[formKey]
+        if (!Array.isArray(entries) || entries.length === 0) continue
+        const catId = formKey.replace('Entries', '')
+        const isIncome = INCOME_KEYS.includes(formKey)
+        for (const entry of entries) {
+            const amt = stripCommas(entry.amount)
+            if (!amt && !entry.months?.length) continue
+            const freq = entry.frequency || 'monthly'
+            if (freq === 'irregular' && entry.months?.length) {
+                // Irregular: save each month as a separate row
+                for (const month of entry.months) {
+                    const date = entry.dates?.[month] || MONTH_TO_DEFAULT_DATE[month] || '2025-09-15'
+                    const instalmentAmt = entry.instalmentAmounts?.[month]
+                    const rowAmt = instalmentAmt ? stripCommas(String(instalmentAmt)) : null
+                    rows.push({
+                        user_id: userId, direction: isIncome ? 'in' : 'out',
+                        type: catId, title: `${catId} - ${month}`,
+                        amount: rowAmt || '0', currency: 'GBP', recurrence: 'irregular',
+                        scheduled_date: date, end_date: null, source: 'manual',
+                        category: `cat_${catId}`, subcategory: month,
+                    })
+                }
+            } else {
+                rows.push({
+                    user_id: userId, direction: isIncome ? 'in' : 'out',
+                    type: catId, title: entry.label || catId,
+                    amount: amt || '0', currency: 'GBP',
+                    recurrence: mapFrequencyToRecurrence(freq),
+                    scheduled_date: entry.nextDate || '2025-09-01',
+                    end_date: entry.endDate || null, source: 'manual',
+                    category: `cat_${catId}`,
+                    term_specific: entry.variesByTerm || false,
+                })
+                if (entry.variesByTerm && entry.nonTermAmount) {
+                    rows.push({
+                        user_id: userId, direction: isIncome ? 'in' : 'out',
+                        type: `${catId}_non_term`, title: (entry.label || catId) + ' (non-term)',
+                        amount: stripCommas(entry.nonTermAmount), currency: 'GBP',
+                        recurrence: mapFrequencyToRecurrence(freq),
+                        scheduled_date: entry.nextDate || '2025-09-01',
+                        end_date: entry.endDate || null, source: 'manual',
+                        category: `cat_${catId}`, subcategory: 'non_term',
+                        term_specific: true,
+                    })
+                }
+            }
+        }
+    }
+
     if (!rows.length) return
 
     const { error } = await supabase.from('cashflow_forecast').insert(rows)

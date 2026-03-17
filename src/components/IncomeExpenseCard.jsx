@@ -96,7 +96,7 @@ function CustomSelect({ value, onChange, options, minWidth = 120, triggerStyle }
             {/* Backdrop */}
             {open && <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />}
 
-            <div ref={ref} style={{ position: 'relative', zIndex: open ? 9999 : 'auto' }}>
+            <div ref={ref} style={{ position: 'relative', zIndex: open ? 9999 : 'auto', height: '100%', display: 'flex' }}>
                 {/* Trigger */}
                 <div
                     onClick={handleOpen}
@@ -221,6 +221,7 @@ export default function IncomeExpenseCard({
     subtitle = '',
     entryLabel = 'Entry',        // "Loan", "Bursary", "Payment" etc
     addLabel = 'Add another',    // "Add another loan"
+    compact = false,              // hide add button + spacer (Dashboard mode)
     frequencyOptions = ['weekly', 'monthly', 'yearly', 'irregular'],
     defaultFrequency = 'yearly',
     defaultMonths = [],           // for irregular mode
@@ -229,7 +230,29 @@ export default function IncomeExpenseCard({
     icon: IconComponent = null,   // Phosphor icon component
     iconColor = null,             // icon tint (defaults to accent)
     nameEditable = false,         // show name input per entry
+    frequencyLabels: freqLabelOverrides = null, // custom labels e.g. { irregular: 'Per instalment' }
 }) {
+    const wrapperRef = useRef(null)
+    const touchStartRef = useRef(null)
+
+    // Compact mode: same pattern as onboarding — prevent viewport bounce on input focus
+    useEffect(() => {
+        if (!compact || !wrapperRef.current) return
+        const el = wrapperRef.current
+
+        const handleTouchEnd = (e) => {
+            const t = e.target
+            if (!t.matches('input, textarea, select')) return
+            if (t.type === 'date') return
+            if (t === document.activeElement) return
+            e.preventDefault()
+            t.focus({ preventScroll: true })
+        }
+
+        el.addEventListener('touchend', handleTouchEnd, { passive: false })
+        return () => el.removeEventListener('touchend', handleTouchEnd)
+    }, [compact])
+
     const [newId, setNewId] = useState(null)
     const addEntry = () => {
         const id = `entry_${Date.now()}`
@@ -256,26 +279,28 @@ export default function IncomeExpenseCard({
     }
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div style={{ padding: '0 24px 12px', flexShrink: 0 }}>
-                <p style={{
-                    fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                    color: '#444', margin: 0, lineHeight: 1.5,
-                }}>
-                    {subtitle}
-                </p>
-            </div>
+        <div ref={wrapperRef} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+            {!compact && subtitle && (
+                <div style={{ padding: '0 24px 12px', flexShrink: 0 }}>
+                    <p style={{
+                        fontSize: 15, fontFamily: 'Nunito, sans-serif',
+                        color: '#444', margin: 0, lineHeight: 1.5,
+                    }}>
+                        {subtitle}
+                    </p>
+                </div>
+            )}
             <div style={{
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
-                padding: '0 24px 24px',
+                padding: compact ? '0 16px 12px' : '0 24px 24px',
                 minHeight: 0,
             }}>
                 {entries.map((entry, idx) => {
                     const isNew = entry.id === newId
                     return (
                     <div key={entry.id || idx} data-entry data-entry-id={entry.id} style={{
-                        marginBottom: 20,
+                        marginBottom: compact ? 12 : 20,
                         ...(isNew ? {
                             animation: 'loanFadeIn 0.35s ease',
                         } : {}),
@@ -321,32 +346,36 @@ export default function IncomeExpenseCard({
                             defaultMonths={defaultMonths}
                             defaultDates={defaultDates}
                             isExpense={isExpense}
-                            scrollOnFocus={idx > 0}
+                            scrollOnFocus={!compact && idx > 0}
+                            compact={compact}
+                            freqLabelOverrides={freqLabelOverrides}
                         />
                     </div>
                 )})}
-                <button
-                    onClick={addEntry}
-                    style={{
-                        width: '100%', height: 48,
-                        background: isExpense ? 'rgba(224,100,112,0.08)' : 'rgba(20,123,117,0.08)',
-                        border: 'none',
-                        borderRadius: 14,
-                        fontSize: 14, fontWeight: 700,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: isExpense ? '#e06470' : '#147b75',
-                        cursor: 'pointer',
-                        display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', gap: 6,
-                        marginTop: 16,
-                    }}
-                >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                        <path d="M12 5v14M5 12h14" />
-                    </svg>
-                    {addLabel}
-                </button>
-                <div style={{ height: '15vh', flexShrink: 0 }} />
+                {!compact && (
+                    <button
+                        onClick={addEntry}
+                        style={{
+                            width: '100%', height: 48,
+                            background: isExpense ? 'rgba(224,100,112,0.08)' : 'rgba(20,123,117,0.08)',
+                            border: 'none',
+                            borderRadius: 14,
+                            fontSize: 14, fontWeight: 700,
+                            fontFamily: 'Nunito, sans-serif',
+                            color: isExpense ? '#e06470' : '#147b75',
+                            cursor: 'pointer',
+                            display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', gap: 6,
+                            marginTop: 16,
+                        }}
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                        {addLabel}
+                    </button>
+                )}
+                {!compact && <div style={{ height: '15vh', flexShrink: 0 }} />}
             </div>
         </div>
     )
@@ -364,6 +393,8 @@ function EntryCard({
     defaultDates,
     isExpense,
     scrollOnFocus,
+    compact,
+    freqLabelOverrides,
 }) {
     const {
         amount = '',
@@ -372,6 +403,8 @@ function EntryCard({
         months: monthsProp = defaultMonths,
         dates: datesProp = defaultDates,
         instalmentAmounts = {},
+        variesByTerm = false,
+        nonTermAmount = '',
     } = entry
 
     const accent = isExpense ? '#e06470' : '#147b75'
@@ -385,6 +418,15 @@ function EntryCard({
         const n = parseFloat(String(amount || '').replace(/,/g, ''))
         setRawAmount(n ? String(n) : '')
     }, [amount])
+
+    const [rawNonTermAmount, setRawNonTermAmount] = useState(() => {
+        const n = parseFloat(String(nonTermAmount || '').replace(/,/g, ''))
+        return n ? String(n) : ''
+    })
+    useEffect(() => {
+        const n = parseFloat(String(nonTermAmount || '').replace(/,/g, ''))
+        setRawNonTermAmount(n ? String(n) : '')
+    }, [nonTermAmount])
 
     const [rawInstalments, setRawInstalments] = useState(() => {
         const obj = {}
@@ -411,12 +453,17 @@ function EntryCard({
     )
     const dateActiveRef = useRef(false)
     const [showFreqPicker, setShowFreqPicker] = useState(frequency === 'yearly')
-    const [scheduleFreq, setScheduleFreq] = useState(entry.scheduleFrequency || 'monthly')
+    // Default schedule frequency: pick first non-yearly, non-one-off option, fallback to 'monthly'
+    const defaultScheduleFreq = entry.scheduleFrequency || frequencyOptions.find(f => f !== 'yearly' && f !== 'one-off') || 'monthly'
+    const [scheduleFreq, setScheduleFreq] = useState(defaultScheduleFreq)
 
     const isIrregular = frequency === 'irregular'
     const months = (monthsProp || defaultMonths)
         .slice()
         .sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
+
+    // When freqLabelOverrides maps irregular to 'Per instalment', amount is per-instalment (not total)
+    const isPerInstalment = freqLabelOverrides?.irregular === 'Per instalment'
 
     const handleAmountChange = (e) => {
         const val = cleanNum(e.target.value)
@@ -426,13 +473,25 @@ function EntryCard({
         if (isIrregular) {
             const numVal = parseFloat(val) || 0
             if (numVal > 0 && months.length > 0) {
-                const amounts = splitEvenly(numVal, months.length)
                 const ni = {}, nr = {}
-                months.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
+                if (isPerInstalment) {
+                    // Per instalment: each month gets the same entered amount
+                    months.forEach(m => { ni[m] = val; nr[m] = val })
+                } else {
+                    // Total: distribute evenly across months
+                    const amounts = splitEvenly(numVal, months.length)
+                    months.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
+                }
                 updateField('instalmentAmounts', ni)
                 setRawInstalments(nr)
             }
         }
+    }
+
+    const handleNonTermAmountChange = (e) => {
+        const val = cleanNum(e.target.value)
+        setRawNonTermAmount(val)
+        updateField('nonTermAmount', val)
     }
 
     const handleInstalmentChange = (month, e) => {
@@ -451,9 +510,14 @@ function EntryCard({
         const numVal = parseFloat(String(amount || '').replace(/,/g, '')) || 0
         if (numVal > 0 && next.length > 0) {
             const sortedNext = next.slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
-            const amounts = splitEvenly(numVal, sortedNext.length)
             const ni = {}, nr = {}
-            sortedNext.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
+            if (isPerInstalment) {
+                const amtStr = String(numVal)
+                sortedNext.forEach(m => { ni[m] = amtStr; nr[m] = amtStr })
+            } else {
+                const amounts = splitEvenly(numVal, sortedNext.length)
+                sortedNext.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
+            }
             updateField('instalmentAmounts', ni)
             setRawInstalments(nr)
         }
@@ -466,69 +530,162 @@ function EntryCard({
     // When yearly is selected and user picks a sub-frequency in Schedule card
     const sf = showFreqPicker ? scheduleFreq : frequency
 
+    const isRegularFreq = frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly'
+
+    const scrollOnFocusHandler = scrollOnFocus ? (e) => {
+        const el = e.target.closest('[data-entry]')
+        if (el) setTimeout(() => {
+            const panel = el.closest('.onboarding-panel')
+            if (panel) {
+                const panelRect = panel.getBoundingClientRect()
+                const elRect = el.getBoundingClientRect()
+                const offset = elRect.top - panelRect.top + panel.scrollTop - 10
+                panel.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
+            }
+        }, 301)
+    } : undefined
+
+    const showTermSplit = variesByTerm && isRegularFreq
+
     return (
         <div>
             {/* Amount + frequency */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
-                        Amount
-                    </span>
-                    <div style={{
-                        display: 'flex', alignItems: 'center',
-                        border: '1px solid #e8e8e8',
-                        borderRadius: 10, background: '#fff',
-                        padding: '0 14px', height: 44, gap: 6,
-                    }}>
-                        <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>
-                            {getCurrencySymbol()}
-                        </span>
-                        <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0.00"
-                            value={formatDisplay(rawAmount)}
-                            onChange={handleAmountChange}
-                            onFocus={scrollOnFocus ? (e) => {
-                                const el = e.target.closest('[data-entry]')
-                                if (el) setTimeout(() => {
-                                    const panel = el.closest('.onboarding-panel')
-                                    if (panel) {
-                                        const panelRect = panel.getBoundingClientRect()
-                                        const elRect = el.getBoundingClientRect()
-                                        const offset = elRect.top - panelRect.top + panel.scrollTop - 10
-                                        panel.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
-                                    }
-                                }, 301)
-                            } : undefined}
-                            style={{
-                                flex: 1, border: 'none', background: 'transparent',
-                                fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
-                                color: '#000', outline: 'none', padding: 0,
-                            }}
-                        />
+            <div style={{ marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                    Amount
+                </span>
+                <div style={{ display: 'flex', gap: 8, height: showTermSplit ? 89 : 44, transition: 'height 0.3s ease' }}>
+                    <div style={{ flex: 1, minWidth: 0, height: '100%' }}>
+                        <div style={{
+                            border: '1px solid #e8e8e8',
+                            borderRadius: 10, background: '#fff',
+                            overflow: 'hidden',
+                            height: '100%',
+                        }}>
+                            {/* Term amount row */}
+                            <div style={{
+                                display: 'flex', alignItems: 'center',
+                                padding: '0 14px', height: 44, gap: 6,
+                            }}>
+                                {showTermSplit && (
+                                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#aaa', whiteSpace: 'nowrap' }}>
+                                        Term
+                                    </span>
+                                )}
+                                <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>
+                                    {getCurrencySymbol()}
+                                </span>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="0.00"
+                                    value={formatDisplay(rawAmount)}
+                                    onChange={handleAmountChange}
+                                    onFocus={scrollOnFocusHandler}
+                                    style={{
+                                        flex: 1, border: 'none', background: 'transparent',
+                                        fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
+                                        color: '#000', outline: 'none', padding: 0,
+                                    }}
+                                />
+                            </div>
+
+                            {/* Non-term amount row */}
+                            {showTermSplit && (
+                                <div style={{
+                                    display: 'flex', alignItems: 'center',
+                                    padding: '0 14px', height: 44, gap: 6,
+                                    borderTop: '1px solid #f0f0f0',
+                                }}>
+                                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#aaa', whiteSpace: 'nowrap' }}>
+                                        Hols
+                                    </span>
+                                    <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>
+                                        {getCurrencySymbol()}
+                                    </span>
+                                    <input
+                                        type="text"
+                                        inputMode="decimal"
+                                        placeholder="0.00"
+                                        value={formatDisplay(rawNonTermAmount)}
+                                        onChange={handleNonTermAmountChange}
+                                        onFocus={scrollOnFocusHandler}
+                                        style={{
+                                            flex: 1, border: 'none', background: 'transparent',
+                                            fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
+                                            color: '#000', outline: 'none', padding: 0,
+                                        }}
+                                    />
+                                </div>
+                            )}
+                        </div>
                     </div>
+                    <CustomSelect
+                        value={frequency}
+                        onChange={(v) => {
+                            updateField('frequency', v)
+                            setShowFreqPicker(v === 'yearly')
+                            if (v !== 'weekly' && v !== 'fortnightly' && v !== 'monthly') {
+                                if (variesByTerm) {
+                                    updateField('variesByTerm', false)
+                                    updateField('nonTermAmount', '')
+                                    setRawNonTermAmount('')
+                                }
+                            }
+                        }}
+                        options={frequencyOptions.map(f => ({ value: f, label: freqLabelOverrides?.[f] || FREQ_LABELS[f] }))}
+                        minWidth={100}
+                        triggerStyle={{
+                            width: 150, border: '1px solid #e8e8e8',
+                            borderRadius: 10,
+                            padding: '0 28px 0 12px',
+                            fontSize: 14, fontWeight: 600,
+                            fontFamily: 'Nunito, sans-serif',
+                            color: '#333', background: '#fff',
+                            cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxSizing: 'border-box',
+                            minHeight: 44, height: '100%',
+                        }}
+                    />
                 </div>
-                <CustomSelect
-                    value={frequency}
-                    onChange={(v) => {
-                        updateField('frequency', v)
-                        setShowFreqPicker(v === 'yearly')
-                    }}
-                    options={frequencyOptions.map(f => ({ value: f, label: FREQ_LABELS[f] }))}
-                    minWidth={100}
-                    triggerStyle={{
-                        width: 150, height: 44, border: '1px solid #e8e8e8',
-                        borderRadius: 10,
-                        padding: '0 28px 0 12px',
-                        fontSize: 14, fontWeight: 600,
-                        fontFamily: 'Nunito, sans-serif',
-                        color: '#333', background: '#fff',
-                        cursor: 'pointer',
-                        display: 'flex', alignItems: 'center',
-                        boxSizing: 'border-box',
-                    }}
-                />
+
+                {/* Toggle — only for regular frequencies */}
+                {isRegularFreq && (
+                    <button
+                        onClick={() => {
+                            updateField('variesByTerm', !variesByTerm)
+                            if (variesByTerm) {
+                                updateField('nonTermAmount', '')
+                                setRawNonTermAmount('')
+                            }
+                        }}
+                        style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            width: '100%', boxSizing: 'border-box',
+                            background: 'none', border: 'none',
+                            cursor: 'pointer', padding: '10px 0 0', margin: 0,
+                        }}
+                    >
+                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#666' }}>
+                            Different amount outside term
+                        </span>
+                        <div style={{
+                            width: 40, height: 22, borderRadius: 11,
+                            background: variesByTerm ? '#147b75' : '#e0e0e0',
+                            transition: 'background 0.2s ease',
+                            position: 'relative', flexShrink: 0,
+                        }}>
+                            <div style={{
+                                width: 18, height: 18, borderRadius: 9,
+                                background: '#fff', position: 'absolute',
+                                top: 2, left: variesByTerm ? 20 : 2,
+                                transition: 'left 0.2s ease',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                            }} />
+                        </div>
+                    </button>
+                )}
             </div>
 
             {/* === ONE-OFF MODE: just a date picker === */}
@@ -594,7 +751,7 @@ function EntryCard({
                                     setScheduleFreq(v)
                                     updateField('scheduleFrequency', v)
                                 }}
-                                options={frequencyOptions.filter(f => f !== 'one-off').map(f => ({ value: f, label: SCHEDULE_FREQ_LABELS[f] || FREQ_LABELS[f] }))}
+                                options={frequencyOptions.filter(f => f !== 'one-off').map(f => ({ value: f, label: freqLabelOverrides?.[f] || SCHEDULE_FREQ_LABELS[f] || FREQ_LABELS[f] }))}
                                 triggerStyle={{
                                     fontSize: 14, fontWeight: 600, color: '#888',
                                     fontFamily: 'Nunito, sans-serif',
@@ -842,11 +999,12 @@ function EntryCard({
                                             <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333', minWidth: 70 }}>
                                                 {MONTH_LABELS[m]}
                                             </span>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginRight: -5 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: -5 }}>
                                                 <div style={{
                                                     display: 'flex', alignItems: 'center', gap: 2,
                                                     background: '#f8f8f8', borderRadius: 8,
                                                     padding: '4px 8px', width: 80, boxSizing: 'border-box',
+                                                    marginLeft: 5
                                                 }}>
                                                     <span style={{ fontSize: 14, fontWeight: 600, color: '#888', fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>
                                                         {getCurrencySymbol()}
@@ -855,7 +1013,7 @@ function EntryCard({
                                                         type="text" inputMode="decimal" placeholder="0.00"
                                                         value={formatDisplay(rawInstalments[m] || '')}
                                                         onChange={(e) => handleInstalmentChange(m, e)}
-                                                        onFocus={(e) => {
+                                                        onFocus={compact ? undefined : (e) => {
                                                             const row = e.target.closest('[data-month-row]')
                                                             if (row) setTimeout(() => row.scrollIntoView({ behavior: 'smooth', block: 'start' }), 301)
                                                         }}

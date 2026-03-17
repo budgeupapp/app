@@ -337,40 +337,47 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
     // Green line position: based on projection balance (balNum), not actual balance
     const greenTopPct = hasBalance ? toTopPct(balNum) : balTopPct
 
-    // Animate stepped line when event count changes
+    // Animate stepped line when events actually change (new events added/removed, not just filtered)
     const [eventsRevealed, setEventsRevealed] = useState(false)
-    const prevEventCountRef = useRef(0)
+    const prevEventKeyRef = useRef('')
+    const totalEventCount = events.filter(e => !e.removed && e.amount > 0).length
+    const eventKey = `${totalEventCount}`
 
     useEffect(() => {
         if (futureEvents.length > 0) {
-            if (futureEvents.length !== prevEventCountRef.current) {
-                setEventsRevealed(false)
+            if (eventKey !== prevEventKeyRef.current) {
+                // Only re-animate if the total event pool changed (not just filtering)
+                if (prevEventKeyRef.current !== '') {
+                    setEventsRevealed(false)
+                }
+                prevEventKeyRef.current = eventKey
             }
-            prevEventCountRef.current = futureEvents.length
             const t = setTimeout(() => setEventsRevealed(true), 30)
             return () => clearTimeout(t)
         }
         setEventsRevealed(false)
-        prevEventCountRef.current = 0
-    }, [futureEvents.length])
+        prevEventKeyRef.current = eventKey
+    }, [futureEvents.length, eventKey])
 
-    // Animate past stepped line when past event count changes
+    // Animate past stepped line when past events actually change
     const [pastRevealed, setPastRevealed] = useState(false)
     const pastEventCount = hasBalance ? activeEvents.filter(e => e.amount > 0 && datePct(e.date) < markerPct).length : 0
-    const prevPastCountRef = useRef(0)
+    const prevPastKeyRef = useRef('')
 
     useEffect(() => {
         if (hasBalance) {
-            if (pastEventCount !== prevPastCountRef.current) {
-                setPastRevealed(false)
+            if (`${totalEventCount}` !== prevPastKeyRef.current) {
+                if (prevPastKeyRef.current !== '') {
+                    setPastRevealed(false)
+                }
+                prevPastKeyRef.current = `${totalEventCount}`
             }
-            prevPastCountRef.current = pastEventCount
             const t = setTimeout(() => setPastRevealed(true), 30)
             return () => clearTimeout(t)
         }
         setPastRevealed(false)
-        prevPastCountRef.current = 0
-    }, [pastEventCount, hasBalance])
+        prevPastKeyRef.current = `${totalEventCount}`
+    }, [pastEventCount, hasBalance, totalEventCount])
 
     // Animate balance history dots growing in with line draw
     const [balHistRevealed, setBalHistRevealed] = useState(false)
@@ -1483,7 +1490,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     const isCurrent = !currentEventType || dot.event.editType === currentEventType
                                     const isDimmed = currentEventType && !isCurrent
                                     const delay = 0.25 + i * 0.12
-                                    const bg = isIncome ? '#7ec8b8' : '#f2c4c8'
+                                    const bg = isIncome ? '#6dbfad' : '#f2c4c8'
                                     const isActive = activeEventDot && activeEventDot.date === dot.event.date && activeEventDot.editType === dot.event.editType
                                     return (
                                         <div
@@ -1504,7 +1511,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                                     ? 'transform 0.15s ease, top 0.4s ease, left 0.4s ease'
                                                     : pastRevealed
                                                         ? 'transform 0.15s ease, opacity 0.2s ease, background 0.2s ease, top 0.4s ease, left 0.4s ease'
-                                                        : `transform 0.35s cubic-bezier(.34,1.56,.64,1) ${delay}s, opacity 0.2s ease ${delay}s`,
+                                                        : `transform 0.3s cubic-bezier(.22,1,.36,1) ${delay}s, opacity 0.2s ease ${delay}s`,
                                             }}
                                         >
                                             <div style={{
@@ -1566,13 +1573,9 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             const isCurrent = !currentEventType || dot.event.editType === currentEventType
                             const isPast = dot.x < markerPct
                             const forcedColor2 = forceDotColor === 'green' ? '#147b75' : forceDotColor === 'red' ? '#e06470' : (forceGreenDots ? '#147b75' : null)
-                            const color = forcedColor2
-                                ? (isPast ? (isIncome ? '#7ec8b8' : '#f2c4c8') : forcedColor2)
-                                : isPast
-                                    ? (isIncome ? '#7ec8b8' : '#f2c4c8')
-                                    : isCurrent
-                                        ? (isIncome ? '#147b75' : '#e06470')
-                                        : (isIncome ? '#7ec8b8' : '#f2c4c8')
+                            const color = isPast || !isCurrent
+                                ? (isIncome ? '#6dbfad' : '#f2c4c8')
+                                : (isIncome ? '#147b75' : '#e06470')
                             const delay = 0.25 + i * 0.12
                             const isActive = activeEventDot && activeEventDot.date === dot.event.date && activeEventDot.editType === dot.event.editType
                             return (
@@ -1595,7 +1598,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                             ? 'transform 0.15s ease, top 0.4s ease, left 0.4s ease'
                                             : eventsRevealed
                                                 ? 'transform 0.15s ease, opacity 0.2s ease, top 0.4s ease, left 0.4s ease'
-                                                : `transform 0.35s cubic-bezier(.34,1.56,.64,1) ${delay}s, opacity 0.2s ease ${delay}s`,
+                                                : `transform 0.3s cubic-bezier(.22,1,.36,1) ${delay}s, opacity 0.2s ease ${delay}s`,
                                     }}
                                 >
                                     <div style={{
@@ -1808,8 +1811,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                         })}
 
                         {/* Past events: stepped line + fill (inside zoom div — no CSS scale so strokes stay clean) */}
-                        {/* Past balance: flat line (no past events) — uses divs with top transition */}
-                        {balanceVisible && pastPath && pastPath.dots.length === 0 && (
+                        {/* Past balance: flat line (no past events) — only show if steppedPath has no past line */}
+                        {balanceVisible && pastPath && pastPath.dots.length === 0 && !steppedPath?.pastLinePath && (
                             <>
                                 <div style={{
                                     position: 'absolute',
@@ -1842,7 +1845,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             </>
                         )}
                         {/* Past balance: stepped line (has past events) — uses SVG */}
-                        {balanceVisible && pastPath && pastPath.dots.length > 0 && (
+                        {balanceVisible && pastPath && pastPath.dots.length > 0 && !steppedPath?.pastLinePath && (
                             <div style={{
                                 position: 'absolute', inset: 0,
                                 pointerEvents: 'none',
@@ -2060,7 +2063,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                                     pointerEvents: showBalanceHistory ? 'auto' : 'none',
                                                     cursor: 'pointer',
                                                     zIndex: isActive ? 20 : 11,
-                                                    transition: `transform 0.3s cubic-bezier(.34,1.56,.64,1) ${delay}s, width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease`,
+                                                    transition: `transform 0.3s cubic-bezier(.22,1,.36,1) ${delay}s, width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease`,
                                                 }}
                                             />
                                         )

@@ -13,7 +13,6 @@ import RegularIncomeStep from './RegularIncomeStep'
 import CategoryStep from './CategoryStep'
 import RegularExpensesStep from './RegularExpensesStep'
 import OverdraftStep from './OverdraftStep'
-import OneOffItemsStep from './OneOffItemsStep'
 import WeeklySpendStep from './WeeklySpendStep'
 import { SOURCE_ICONS } from '../config/categories'
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORY_MAP, SOURCE_ICONS as CATEGORY_SOURCE_ICONS } from '../config/categories'
@@ -193,10 +192,15 @@ function buildGraphEvents(formData) {
                     while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
                     while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
                 }
+                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : amt
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
                 while (d <= endDate) {
                     if (d >= AY_START) {
-                        events.push({ date: toLocalDate(d), amount: amt, type, label: cat.label, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${cat.label.toLowerCase()}`, editType: cat.id })
+                        const dateStr = toLocalDate(d)
+                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
+                        if (eventAmt > 0) {
+                            events.push({ date: dateStr, amount: eventAmt, type, label: cat.label, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${cat.label.toLowerCase()}`, editType: cat.id })
+                        }
                     }
                     d = new Date(d.getTime() + interval * 86400000)
                 }
@@ -207,6 +211,7 @@ function buildGraphEvents(formData) {
                 const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
                 const earliest = startFrom > AY_START ? startFrom : AY_START
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
+                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : amt
                 let month = AY_START.getMonth()
                 let year = AY_START.getFullYear()
                 for (let i = 0; i < 13; i++) {
@@ -214,7 +219,11 @@ function buildGraphEvents(formData) {
                     const day = Math.min(domTarget, lastDay)
                     const d = new Date(year, month, day)
                     if (d >= earliest && d <= endDate) {
-                        events.push({ date: toLocalDate(d), amount: amt, type, label: cat.label, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${cat.label.toLowerCase()}`, editType: cat.id })
+                        const dateStr = toLocalDate(d)
+                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
+                        if (eventAmt > 0) {
+                            events.push({ date: dateStr, amount: eventAmt, type, label: cat.label, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${cat.label.toLowerCase()}`, editType: cat.id })
+                        }
                     }
                     month++
                     if (month > 11) { month = 0; year++ }
@@ -1249,6 +1258,16 @@ export default function FinancialOnboardingForm({ onComplete }) {
             if (!entries.some(e => e.amount)) {
                 return 'Please enter an amount'
             }
+            for (const entry of entries) {
+                if (!entry.amount) continue
+                const freq = entry.frequency || cat.defaultFrequency
+                if (freq === 'irregular' && (!entry.months || entry.months.length === 0)) {
+                    return 'Please select at least one month'
+                }
+                if (freq === 'one-off' && !entry.nextDate) {
+                    return 'Please select a date'
+                }
+            }
         }
 
         return null
@@ -1395,6 +1414,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     const handlePanelNext = () => {
         if (transitionRef.current) return
+        // If on summary panel, always submit
+        if (PANEL_STEPS[activePanel] === 'summary') {
+            submit()
+            return
+        }
         const error = checkRequiredFields()
         if (error) {
             showToast(error)
@@ -1403,7 +1427,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         setExpandedTerms(new Set())
         setTitleBorderVisible(false)
         const panels = buildPanelSteps(formData.incomeSources, formData.expenseSources)
-        if (returnToSummaryRef.current) {
+        if (returnToSummaryRef.current && PANEL_STEPS[activePanel] !== 'summary') {
             returnToSummaryRef.current = false
             const summaryIdx = panels.indexOf('summary')
             if (summaryIdx >= 0) {
@@ -1415,6 +1439,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 return
             }
         }
+        returnToSummaryRef.current = false
         const nextPanelIdx = activePanel + 1
         if (nextPanelIdx < panels.length) {
             // Still in panel group — advance to next panel step
@@ -1437,12 +1462,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const submit = async () => {
         setSubmitting(true)
 
-        // Show loading screen immediately
-        if (onComplete) {
-            onComplete()
-        }
-
-        // Save data in the background
+        // Start saving and pass the promise to the loading screen
+        const savePromise = (async () => {
         try {
             const {
                 data: { user },
@@ -1514,6 +1535,12 @@ export default function FinancialOnboardingForm({ onComplete }) {
         } finally {
             setSubmitting(false)
         }
+        })()
+
+        // Show loading screen immediately, passing the save promise
+        if (onComplete) {
+            onComplete(savePromise)
+        }
     }
 
 
@@ -1531,7 +1558,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         regularIncome: 'Confirm Income',
         regularExpenses: 'Confirm Expenses',
         weeklySpend: 'Confirm Weekly Spend',
-        summary: 'Reveal My Financial Future',
+        summary: 'Predict My Financial Future',
     }
     for (const cat of [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]) {
         PANEL_LABEL_MAP[cat.panelId] = `Confirm ${cat.label}`
@@ -2067,7 +2094,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             return next
                                         })}
                                         subtitle={formData.university === 'University of Bristol'
-                                            ? "These are the correct dates for Bristol."
+                                            ? "These are the correct dates for the University of Bristol."
                                             : "Enter your term dates and any holidays or breaks you'd like to add."}
                                     />
                                 )}
@@ -2128,12 +2155,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     <RegularExpensesStep
                                         expenseSources={formData.expenseSources || []}
                                         updateExpenseSources={(val) => updateField('expenseSources', val)}
-                                    />
-                                )}
-                                {panelId === 'oneOffItems' && (
-                                    <OneOffItemsStep
-                                        items={formData.oneOffItems || [{ name: '', amount: '', date: '', direction: 'out' }]}
-                                        updateItems={(val) => updateField('oneOffItems', val)}
                                     />
                                 )}
                                 {panelId === 'weeklySpend' && (
@@ -2307,18 +2328,21 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
                 </div>
 
-                {/* Floating bottom buttons */}
+                {/* Floating bottom buttons — solid blocker + gradient fade */}
                 <div style={{
                     position: 'absolute',
                     bottom: 0, left: 0, right: 0,
-                    background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, #fff 40%)',
-                    padding: '28px 24px calc(14px + env(safe-area-inset-bottom, 0px))',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0,
                     zIndex: 5,
-                    pointerEvents: 'none',
+                    display: 'flex', flexDirection: 'column',
                 }}>
+                    {/* Transparent gradient — allows scroll through */}
+                    <div style={{ height: 24, background: 'linear-gradient(to bottom, rgba(255,255,255,0), #fff)', pointerEvents: 'none' }} />
+                    {/* Solid area — blocks clicks to content behind */}
+                    <div style={{
+                        background: '#fff',
+                        padding: '4px 24px calc(14px + env(safe-area-inset-bottom, 0px))',
+                        display: 'flex', alignItems: 'center', gap: 0,
+                    }}>
                     <button
                         onClick={panelOnBack}
                         style={{
@@ -2350,7 +2374,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             fontFamily: 'Nunito, sans-serif',
                             cursor: 'pointer', letterSpacing: 0.3,
                             overflow: 'hidden', whiteSpace: 'nowrap',
-                            pointerEvents: 'auto',
                         }}
                     >
                         {returnToSummaryRef.current ? 'Save' : PANEL_LABELS[activePanel]}
@@ -2368,11 +2391,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             opacity: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 1 : 0,
                             marginLeft: (PANEL_TO_SOURCE[PANEL_STEPS[activePanel]] || PANEL_STEPS[activePanel] === 'oneOffItems') ? 12 : 0,
                             transition: 'width 0.3s cubic-bezier(.25,1,.5,1), opacity 0.2s ease, margin-left 0.3s cubic-bezier(.25,1,.5,1)',
-                            pointerEvents: 'auto',
                         }}
                     >
                         Skip
                     </button>
+                    </div>
                 </div>
 
                 {/* Event edit modal */}

@@ -21,11 +21,9 @@ import {
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORY_MAP, SOURCE_ICONS as CATEGORY_SOURCE_ICONS } from '../config/categories'
 import CategoryStep from './CategoryStep'
 import WeeklySpendStep from './WeeklySpendStep'
-import OneOffItemsStep from './OneOffItemsStep'
 
 // Icons from onboarding (kept for flex sources)
 import { PiGraduationCap, PiHandCoins, PiUsers, PiBriefcase, PiDotsThree, PiHouse, PiLightningFill, PiBank, PiPiggyBank, PiRepeat, PiIdentificationCard, PiAirplaneTilt, PiMusicNotes, PiGift, PiDeviceMobile, PiTShirt, PiHeartbeat, PiBookOpen, PiStorefront, PiLifebuoy, PiLaptop } from 'react-icons/pi'
-import FlexSourceStep from './FlexSourceStep'
 
 // Phosphor icon components + colors for each source (used in FAB + SourceRow)
 export const SOURCE_ICONS = {
@@ -139,10 +137,15 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                     while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
                     while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
                 }
+                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : amt
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
                 while (d <= endDate) {
                     if (d >= AY_START) {
-                        events.push({ date: toLocalDate(d), amount: amt, type, label: cat.label, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${cat.label.toLowerCase()}`, editType: cat.id })
+                        const dateStr = toLocalDate(d)
+                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
+                        if (eventAmt > 0) {
+                            events.push({ date: dateStr, amount: eventAmt, type, label: cat.label, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${cat.label.toLowerCase()}`, editType: cat.id })
+                        }
                     }
                     d = new Date(d.getTime() + interval * 86400000)
                 }
@@ -153,6 +156,7 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                 const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
                 const earliest = startFrom > AY_START ? startFrom : AY_START
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
+                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : amt
                 let month = AY_START.getMonth()
                 let year = AY_START.getFullYear()
                 for (let i = 0; i < 13; i++) {
@@ -160,7 +164,11 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                     const day = Math.min(domTarget, lastDay)
                     const d = new Date(year, month, day)
                     if (d >= earliest && d <= endDate) {
-                        events.push({ date: toLocalDate(d), amount: amt, type, label: cat.label, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${cat.label.toLowerCase()}`, editType: cat.id })
+                        const dateStr = toLocalDate(d)
+                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
+                        if (eventAmt > 0) {
+                            events.push({ date: dateStr, amount: eventAmt, type, label: cat.label, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${cat.label.toLowerCase()}`, editType: cat.id })
+                        }
                     }
                     month++
                     if (month > 11) { month = 0; year++ }
@@ -667,6 +675,16 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
     const innerRef = useRef(null)
     const [measuredHeight, setMeasuredHeight] = useState(0)
     const [deleting, setDeleting] = useState(false)
+    const [settled, setSettled] = useState(!!expanded)
+
+    useEffect(() => {
+        if (expanded) {
+            const t = setTimeout(() => setSettled(true), 750)
+            return () => clearTimeout(t)
+        } else {
+            setSettled(false)
+        }
+    }, [expanded])
 
     useLayoutEffect(() => {
         if (expanded && innerRef.current) {
@@ -693,14 +711,15 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
 
     return (
         <div data-source-row data-source-id={srcId} style={{
-            margin: '0 12px', borderRadius: 10, background: !active ? '#f0f0f0' : '#f5f5f5', overflow: 'hidden',
+            borderRadius: 14, background: !active ? '#f5f5f5' : '#fff', overflow: 'hidden',
             maxHeight: deleting ? 0 : 1000,
             opacity: deleting ? 0 : !active ? 0.55 : 1,
-            marginBottom: deleting ? -2 : 6,
+            marginBottom: deleting ? -2 : 8,
+            boxShadow: expanded ? '0 2px 12px rgba(0,0,0,0.06)' : '0 1px 4px rgba(0,0,0,0.04)',
             transform: deleting ? 'translateX(-40px) scale(0.97)' : 'translateX(0) scale(1)',
             transition: deleting
                 ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s, opacity 0.25s ease, margin-bottom 0.4s ease 0.1s, transform 0.3s ease'
-                : 'opacity 0.3s ease, background 0.3s ease',
+                : 'opacity 0.3s ease, background 0.3s ease, box-shadow 0.3s ease',
         }}>
             <div onClick={onExpandToggle} style={{ display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 12, cursor: 'pointer' }}>
                 {si && (
@@ -751,15 +770,17 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
                         </div>
                     </button>
                 )}
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isExpense ? '#bbb' : '#999'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)' }}><path d="M6 9l6 6 6-6" /></svg>
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.25s cubic-bezier(.25,1,.5,1)' }}><path d="M7 4.5L12 9L7 13.5" stroke={isExpense ? '#bbb' : '#999'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
             <div style={{
-                maxHeight: expanded ? (measuredHeight + 20) || 800 : 0,
+                maxHeight: expanded ? (settled ? 'none' : (measuredHeight + 20) || 800) : 0,
                 opacity: expanded ? 1 : 0,
-                overflow: 'hidden',
-                transition: expanded
+                overflow: settled ? 'visible' : 'hidden',
+                transition: (expanded && !settled)
                     ? 'max-height 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.2s ease'
-                    : 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease',
+                    : !expanded
+                        ? 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease'
+                        : 'none',
             }}>
                 <div ref={innerRef}>
                     <div style={{ borderTop: '1px solid #eee', padding: '8px 14px 4px', background: '#fafafa' }}>
@@ -835,16 +856,16 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
 
     return (
         <div ref={rowRef} data-source-row data-source-id={source.id} style={{
-            margin: '0 12px',
-            borderRadius: 10,
-            background: isInactive ? '#f0f0f0' : '#f5f5f5',
+            borderRadius: 14,
+            background: isInactive ? '#f5f5f5' : '#fff',
             overflow: 'hidden',
             maxHeight: deleting ? 0 : naturalHeight != null ? naturalHeight : 1000,
             opacity: deleting ? 0 : isInactive ? 0.55 : 1,
-            marginBottom: deleting ? 0 : 6,
+            marginBottom: deleting ? 0 : 8,
+            boxShadow: expanded ? '0 2px 12px rgba(0,0,0,0.06)' : '0 1px 4px rgba(0,0,0,0.04)',
             transition: deleting
                 ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.25s ease, margin-bottom 0.4s cubic-bezier(0.22, 0.61, 0.36, 1)'
-                : 'opacity 0.25s ease, background 0.25s ease',
+                : 'opacity 0.25s ease, background 0.25s ease, box-shadow 0.3s ease',
         }}>
             {/* Tappable row */}
             <div
@@ -899,7 +920,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                         color: isInactive ? '#bbb' : '#999',
                         margin: 0,
                     }}>
-                        {`${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr`}
+                        {yearlyAmount === 0 ? `${getCurrencySymbol()}0/yr` : `${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr`}
                     </p>
                     {removedCount > 0 && (
                         <button
@@ -939,17 +960,19 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                         }
                     </div>
                 </button>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isInactive ? '#bbb' : '#ccc'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)' }}><path d="M6 9l6 6 6-6" /></svg>
+                <svg width="16" height="16" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0, transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.25s cubic-bezier(.25,1,.5,1)' }}><path d="M7 4.5L12 9L7 13.5" stroke={isInactive ? '#bbb' : '#aaa'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
 
             {/* Expanded section — animated height */}
             <div data-expand-content style={{
-                maxHeight: expanded ? (measuredHeight + 20) || 800 : 0,
+                maxHeight: expanded ? (settled ? 'none' : (measuredHeight + 20) || 800) : 0,
                 opacity: expanded ? 1 : 0,
-                overflow: 'hidden',
-                transition: expanded
+                overflow: settled ? 'visible' : 'hidden',
+                transition: (expanded && !settled)
                     ? 'max-height 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.2s ease'
-                    : 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease',
+                    : !expanded
+                        ? 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease'
+                        : 'none',
             }}>
                 <div ref={innerRef}>
                     {children && (
@@ -958,12 +981,11 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                         </div>
                     )}
                     {onDelete && (
-                        <div style={{ padding: '4px 10px 10px', textAlign: 'center', background: '#fafafa' }}>
+                        <div style={{ padding: '0 10px 14px', textAlign: 'center', background: '#fafafa' }}>
                             <span
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     if (deleting) return
-                                    // Capture actual height before collapsing
                                     if (rowRef.current) setNaturalHeight(rowRef.current.offsetHeight)
                                     requestAnimationFrame(() => {
                                         setDeleting(true)
@@ -971,9 +993,9 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                                     })
                                 }}
                                 style={{
-                                    fontSize: 10, fontWeight: 600,
+                                    fontSize: 12, fontWeight: 600,
                                     fontFamily: 'Nunito, sans-serif',
-                                    color: '#e06470', cursor: 'pointer',
+                                    color: '#d4566a', cursor: 'pointer',
                                 }}
                             >
                                 Delete {source.label.toLowerCase()}
@@ -1202,6 +1224,7 @@ export default function Dashboard() {
     const [warningMinimised, setWarningMinimisedRaw] = useState(() => localStorage.getItem('budgeup_warning_minimised') === 'true')
     const setWarningMinimised = (fn) => { setWarningMinimisedRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; localStorage.setItem('budgeup_warning_minimised', String(val)); return val }) }
     const [trackMinimised, setTrackMinimised] = useState(false)
+    const [disclaimerOpen, setDisclaimerOpen] = useState(() => localStorage.getItem('budgeup_disclaimer_seen') !== 'true')
     const [tappedSegment, setTappedSegment] = useState(null)
     const breakdownRef = useRef(null)
     // Close tooltip on click anywhere
@@ -1442,6 +1465,12 @@ export default function Dashboard() {
                         const localFD = parsed.formData || {}
                         if (localFD.overdraft != null) merged.overdraft = localFD.overdraft
                         if (localFD.amountOverrides) merged.amountOverrides = { ...(merged.amountOverrides || {}), ...localFD.amountOverrides }
+                        // Preserve all category entries from localStorage
+                        for (const key of Object.keys(localFD)) {
+                            if (key.endsWith('Entries') && Array.isArray(localFD[key]) && localFD[key].length > 0) {
+                                merged[key] = localFD[key]
+                            }
+                        }
                         if (parsed.formData?.termDates?.terms?.length) {
                             merged.termDates = parsed.formData.termDates
                         }
@@ -1521,6 +1550,12 @@ export default function Dashboard() {
                             if (localFD[k]?.length) merged[k] = [...new Set([...(merged[k] || []), ...localFD[k]])]
                         }
                         if (localFD.flexSourceData) merged.flexSourceData = { ...(merged.flexSourceData || {}), ...localFD.flexSourceData }
+                        // Preserve all category entries (e.g. studentFinanceEntries, rentEntries, etc.)
+                        for (const key of Object.keys(localFD)) {
+                            if (key.endsWith('Entries') && Array.isArray(localFD[key]) && localFD[key].length > 0) {
+                                merged[key] = localFD[key]
+                            }
+                        }
                         if (localFD.otherIncomes?.length) merged.otherIncomes = [...new Set([...(merged.otherIncomes || []).map(i => JSON.stringify(i)), ...localFD.otherIncomes.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
                         if (localFD.otherExpenses?.length) merged.otherExpenses = [...new Set([...(merged.otherExpenses || []).map(i => JSON.stringify(i)), ...localFD.otherExpenses.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
                         // Prefer localStorage overdraft/overrides (Settings saves there immediately, Supabase may lag)
@@ -1767,7 +1802,7 @@ export default function Dashboard() {
                 if (graphEl) graphEl.style.height = `${MIN_H}px`
                 const cover = (p - SHRINK_DIST) / MIN_H
                 const cardH = MIN_H * (1 - cover)
-                gc.style.height = `${Math.max(0, cardH)}px`
+                gc.style.height = `${Math.max(4, cardH)}px`
                 gc.style.marginTop = '0px'
                 if (heroEl) {
                     heroEl.style.opacity = '0'
@@ -1817,7 +1852,7 @@ export default function Dashboard() {
                 if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
             } else {
                 if (graphEl) graphEl.style.height = `${MIN_H}px`
-                gc.style.height = '0px'
+                gc.style.height = '4px'
                 gc.style.marginTop = '0px'
                 if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
             }
@@ -1958,7 +1993,7 @@ export default function Dashboard() {
                     setGraphCovered(false)
                 } else {
                     graphEl.style.height = `${MIN_H}px`
-                    gc.style.height = '0px'
+                    gc.style.height = '4px'
                     if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
                 }
             } else {
@@ -2083,7 +2118,7 @@ export default function Dashboard() {
         const heroEl = heroHeaderRef.current
         if (graphCovered) {
             if (graphEl) graphEl.style.height = `${MIN_H}px`
-            if (gc) { gc.style.height = '0px'; gc.style.marginTop = '0px' }
+            if (gc) { gc.style.height = '4px'; gc.style.marginTop = '0px' }
             if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
         } else {
             const pos = parseInt(saved || '0', 10)
@@ -2110,7 +2145,7 @@ export default function Dashboard() {
         const heroEl = heroHeaderRef.current
         if (graphCovered) {
             if (graphEl) graphEl.style.height = `${MIN_H}px`
-            if (gc) { gc.style.height = '0px'; gc.style.marginTop = '0px' }
+            if (gc) { gc.style.height = '4px'; gc.style.marginTop = '0px' }
             if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
         } else {
             const pos = parseInt(saved || '0', 10)
@@ -2213,16 +2248,30 @@ export default function Dashboard() {
                     el.scrollTop = savedScroll
                     applyScrollStyles(savedScroll)
                 }
-                // Step 2: add source — use addSource for other_income/other_expense (creates instances)
-                if (sourceId === 'other_income' || sourceId === 'other_expense') {
-                    addSource(sourceId, isExp)
-                } else {
-                    if (isExp) {
-                        const sources = formData.expenseSources || []
-                        if (!sources.includes(sourceId)) updateField('expenseSources', [...sources, sourceId])
+                // Step 2: add source or add another entry if already exists
+                {
+                    const key = isExp ? 'expenseSources' : 'incomeSources'
+                    const sources = formData[key] || []
+                    if (!sources.includes(sourceId)) {
+                        updateField(key, [...sources, sourceId])
                     } else {
-                        const sources = formData.incomeSources || []
-                        if (!sources.includes(sourceId)) updateField('incomeSources', [...sources, sourceId])
+                        // Source already exists — add another entry
+                        const cat = CATEGORY_MAP[sourceId]
+                        if (cat) {
+                            const newEntry = {
+                                id: `${cat.id}_${Date.now()}`,
+                                amount: '',
+                                frequency: cat.defaultFrequency,
+                                nextDate: '',
+                                months: [...(cat.defaultMonths || [])],
+                                dates: { ...(cat.defaultDates || {}) },
+                                instalmentAmounts: {},
+                            }
+                            setFormData(prev => ({
+                                ...prev,
+                                [cat.formKey]: [...(prev[cat.formKey] || []), newEntry],
+                            }))
+                        }
                     }
                     setExpandedSources(prev => new Set(prev).add(sourceId))
                 }
@@ -2621,9 +2670,9 @@ export default function Dashboard() {
         setEditOverdraftAmount(String(overdraftNum || ''))
     }, [overdraftNum])
 
-    const incomeEmpty = INCOME_SOURCES.filter(s => isSourceVisible(s.id, formData.incomeSources)).length === 0 && (formData.flexIncomeSources || []).length === 0
-    const expenseEmpty = EXPENSE_SOURCES.filter(s => isSourceVisible(s.id, formData.expenseSources)).length === 0 && (formData.flexExpenseSources || []).length === 0
-    const tabContentEmpty = (activeTab === 'income' && incomeEmpty) || (activeTab === 'expenses' && expenseEmpty)
+    const incomeEmpty = INCOME_SOURCES.filter(s => isSourceVisible(s.id, formData.incomeSources)).length === 0
+    const expenseEmpty = EXPENSE_SOURCES.filter(s => isSourceVisible(s.id, formData.expenseSources)).length === 0
+    const tabContentEmpty = (activeTab === 'income' && incomeEmpty)
 
     return (
         <div style={{
@@ -2633,6 +2682,7 @@ export default function Dashboard() {
         }}>
             {/* Scrollable content */}
             <div
+                data-scroll-container
                 ref={scrollRef}
                 onScroll={handleScroll}
                 style={{
@@ -2645,6 +2695,8 @@ export default function Dashboard() {
                     background: '#f5f7f7',
                 }}
             >
+                {/* White cover so grey doesn't show behind safe area on overscroll */}
+                <div style={{ position: 'sticky', top: 0, zIndex: 11, height: 'env(safe-area-inset-top, 0px)', background: '#fff', marginBottom: 'calc(-1 * env(safe-area-inset-top, 0px))' }} />
                 {/* Graph + tabs — sticky, shrinks on scroll */}
                 <div data-sticky-header ref={stickyHeaderRef} style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 0, boxShadow: 'none' }}>
 
@@ -3072,48 +3124,29 @@ export default function Dashboard() {
                             })()}
 
                             {/* Empty state when no income sources */}
-                            {INCOME_SOURCES.filter(s => isSourceVisible(s.id, formData.incomeSources)).length === 0 &&
-                                (formData.flexIncomeSources || []).length === 0 && (
-                                    <div style={{
-                                        textAlign: 'center',
-                                        padding: '24px 40px',
-                                    }}>
-                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
-                                            No income sources yet
-                                        </p>
-                                        <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>
-                                            Tap + to add
-                                        </p>
-                                    </div>
-                                )}
+                            {incomeEmpty && (
+                                <div style={{ textAlign: 'center', padding: '16px 40px' }}>
+                                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                                        No income sources yet
+                                    </p>
+                                    <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>
+                                        Tap + to add
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Income Section */}
-                            {(INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).length > 0 || (formData.flexIncomeSources || []).length > 0 || addingSourceType === 'income' || collapsingSections.has('income')) && (
+                            {(INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).length > 0 || addingSourceType === 'income' || collapsingSections.has('income')) && (
                                 <div data-section="income" style={{
                                     margin: collapsingSections.has('income') ? '0' : '0 0 10px',
-                                    background: '#fff', borderRadius: 14,
-                                    padding: collapsingSections.has('income') ? 0 : '0 0 8px',
-                                    overflow: 'hidden',
-                                    maxHeight: collapsingSections.has('income') ? 0 : 2000,
+                                    overflow: collapsingSections.has('income') ? 'hidden' : 'visible',
+                                    maxHeight: collapsingSections.has('income') ? 0 : undefined,
                                     opacity: collapsingSections.has('income') ? 0 : 1,
                                     transition: collapsingSections.has('income')
-                                        ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease, margin 0.4s ease, padding 0.4s ease'
+                                        ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease, margin 0.4s ease'
                                         : undefined,
                                 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
-                                        <span style={{
-                                            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a',
-                                        }}>Income</span>
-                                        {INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).length > 4 && (
-                                            <span
-                                                onClick={() => setShowAllIncome(p => !p)}
-                                                style={{
-                                                    fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75',
-                                                    cursor: 'pointer',
-                                                }}
-                                            >{showAllIncome ? 'Show less' : 'See all'}</span>
-                                        )}
-                                    </div>
+                                    <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: '0 0 8px', padding: '0 4px' }}>Income</p>
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
                                         {INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).slice(0, showAllIncome ? undefined : 4).map(source => {
@@ -3145,50 +3178,29 @@ export default function Dashboard() {
                                                     {(() => {
                                                         const cat = CATEGORY_MAP[source.id]
                                                         if (!cat) return null
+                                                        let entries = formData[cat.formKey] || []
+                                                        if (entries.length === 0) {
+                                                            const defaultEntry = {
+                                                                id: `${cat.id}_0`,
+                                                                amount: '',
+                                                                frequency: cat.defaultFrequency,
+                                                                nextDate: '',
+                                                                months: [...(cat.defaultMonths || [])],
+                                                                dates: { ...(cat.defaultDates || {}) },
+                                                                instalmentAmounts: {},
+                                                            }
+                                                            entries = [defaultEntry]
+                                                            setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
+                                                        }
                                                         return (
                                                             <CategoryStep
-                                                                categoryId={cat.id}
-                                                                entries={formData[cat.formKey] || []}
-                                                                updateEntries={(val) => updateField(cat.formKey, val)}
+                                                                categoryId={cat.id} compact
+                                                                entries={entries}
+                                                                updateEntries={(val) => setFormData(prev => ({ ...prev, [cat.formKey]: typeof val === 'function' ? val(prev[cat.formKey] || []) : val }))}
                                                             />
                                                         )
                                                     })()}
                                                 </SourceRow>
-                                            )
-                                        })}
-
-                                        {/* Flex income rows (merged into same card) */}
-                                        {(formData.flexIncomeSources || []).map(srcId => {
-                                            const src = FLEX_INCOME_SOURCES.find(s => s.id === srcId)
-                                            if (!src) return null
-                                            const srcData = formData.flexSourceData?.[srcId] || { frequency: src.defaultFreq }
-                                            const si = SOURCE_ICONS[srcId]
-                                            const amt = parseFloat(String(srcData.amount || '0').replace(/,/g, ''))
-                                            return (
-                                                <FlexRow key={srcId} srcId={srcId} label={src.label} amt={amt} frequency={srcData.frequency} si={si}
-                                                    isExpense={false} expanded={expandedSources.has(srcId)}
-                                                    active={!hiddenSources.has(srcId)}
-                                                    removedCount={getSourceRemovedCount([srcId])}
-                                                    onRestoreRemoved={() => restoreSourceEvents([srcId])}
-                                                    overrideCount={getSourceOverrideCount([srcId])}
-                                                    onClearOverrides={() => clearSourceOverrides([srcId])}
-                                                    onToggleVisibility={() => toggleSourceVisibility(srcId)}
-                                                    onExpandToggle={() => handleExpandToggle(srcId)}
-                                                    onDelete={() => {
-                                                        setFormData(prev => ({
-                                                            ...prev,
-                                                            flexIncomeSources: (prev.flexIncomeSources || []).filter(s => s !== srcId),
-                                                            flexSourceData: { ...prev.flexSourceData, [srcId]: undefined },
-                                                        }))
-                                                        setExpandedSources(prev => { const n = new Set(prev); n.delete(srcId); return n })
-                                                    }}
-                                                >
-                                                    <FlexSourceStep
-                                                        data={srcData}
-                                                        onChange={(val) => setFormData(prev => ({ ...prev, flexSourceData: { ...prev.flexSourceData, [srcId]: val } }))}
-                                                        isExpense={false}
-                                                    />
-                                                </FlexRow>
                                             )
                                         })}
 
@@ -3270,18 +3282,6 @@ export default function Dashboard() {
                                 )
                             })()}
 
-                            {/* Empty state when no expense sources */}
-                            {expenseEmpty && (
-                                <div style={{ textAlign: 'center', padding: '24px 40px' }}>
-                                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
-                                        No expense sources yet
-                                    </p>
-                                    <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>
-                                        Tap + to add
-                                    </p>
-                                </div>
-                            )}
-
                             {/* Weekly Spend Card */}
                             <div style={{
                                 padding: '14px 16px 8px', background: '#fff', borderRadius: 14, marginBottom: 10,
@@ -3301,17 +3301,27 @@ export default function Dashboard() {
                                 />
                             </div>
 
+                            {/* Empty state when no expense sources */}
+                            {expenseEmpty && (
+                                <div style={{ textAlign: 'center', padding: '16px 40px' }}>
+                                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                                        No expense sources yet
+                                    </p>
+                                    <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>
+                                        Tap + to add
+                                    </p>
+                                </div>
+                            )}
+
                             {/* Expenses Section */}
-                            {(EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).length > 0 || (formData.flexExpenseSources || []).length > 0 || addingSourceType === 'expense' || collapsingSections.has('expenses')) && (
+                            {(EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).length > 0 || addingSourceType === 'expense' || collapsingSections.has('expenses')) && (
                                 <div data-section="expenses" style={{
                                     margin: collapsingSections.has('expenses') ? '0' : '0 0 10px',
-                                    background: '#fff', borderRadius: 14,
-                                    padding: collapsingSections.has('expenses') ? 0 : '0 0 8px',
-                                    overflow: 'hidden',
-                                    maxHeight: collapsingSections.has('expenses') ? 0 : 2000,
+                                    overflow: collapsingSections.has('expenses') ? 'hidden' : 'visible',
+                                    maxHeight: collapsingSections.has('expenses') ? 0 : undefined,
                                     opacity: collapsingSections.has('expenses') ? 0 : 1,
                                     transition: collapsingSections.has('expenses')
-                                        ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease, margin 0.4s ease, padding 0.4s ease'
+                                        ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease, margin 0.4s ease'
                                         : undefined,
                                 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
@@ -3359,50 +3369,29 @@ export default function Dashboard() {
                                                     {(() => {
                                                         const cat = CATEGORY_MAP[source.id]
                                                         if (!cat) return null
+                                                        let entries = formData[cat.formKey] || []
+                                                        if (entries.length === 0) {
+                                                            const defaultEntry = {
+                                                                id: `${cat.id}_0`,
+                                                                amount: '',
+                                                                frequency: cat.defaultFrequency,
+                                                                nextDate: '',
+                                                                months: [...(cat.defaultMonths || [])],
+                                                                dates: { ...(cat.defaultDates || {}) },
+                                                                instalmentAmounts: {},
+                                                            }
+                                                            entries = [defaultEntry]
+                                                            setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
+                                                        }
                                                         return (
                                                             <CategoryStep
-                                                                categoryId={cat.id}
-                                                                entries={formData[cat.formKey] || []}
-                                                                updateEntries={(val) => updateField(cat.formKey, val)}
+                                                                categoryId={cat.id} compact
+                                                                entries={entries}
+                                                                updateEntries={(val) => setFormData(prev => ({ ...prev, [cat.formKey]: typeof val === 'function' ? val(prev[cat.formKey] || []) : val }))}
                                                             />
                                                         )
                                                     })()}
                                                 </SourceRow>
-                                            )
-                                        })}
-
-                                        {/* Flex expense rows (merged into same card) */}
-                                        {(formData.flexExpenseSources || []).map(srcId => {
-                                            const src = FLEX_EXPENSE_SOURCES.find(s => s.id === srcId)
-                                            if (!src) return null
-                                            const srcData = formData.flexSourceData?.[srcId] || { frequency: src.defaultFreq }
-                                            const si = SOURCE_ICONS[srcId]
-                                            const amt = parseFloat(String(srcData.amount || '0').replace(/,/g, ''))
-                                            return (
-                                                <FlexRow key={srcId} srcId={srcId} label={src.label} amt={amt} frequency={srcData.frequency} si={si}
-                                                    isExpense={true} expanded={expandedSources.has(srcId)}
-                                                    active={!hiddenSources.has(srcId)}
-                                                    removedCount={getSourceRemovedCount([srcId])}
-                                                    onRestoreRemoved={() => restoreSourceEvents([srcId])}
-                                                    overrideCount={getSourceOverrideCount([srcId])}
-                                                    onClearOverrides={() => clearSourceOverrides([srcId])}
-                                                    onToggleVisibility={() => toggleSourceVisibility(srcId)}
-                                                    onExpandToggle={() => handleExpandToggle(srcId)}
-                                                    onDelete={() => {
-                                                        setFormData(prev => ({
-                                                            ...prev,
-                                                            flexExpenseSources: (prev.flexExpenseSources || []).filter(s => s !== srcId),
-                                                            flexSourceData: { ...prev.flexSourceData, [srcId]: undefined },
-                                                        }))
-                                                        setExpandedSources(prev => { const n = new Set(prev); n.delete(srcId); return n })
-                                                    }}
-                                                >
-                                                    <FlexSourceStep
-                                                        data={srcData}
-                                                        onChange={(val) => setFormData(prev => ({ ...prev, flexSourceData: { ...prev.flexSourceData, [srcId]: val } }))}
-                                                        isExpense={true}
-                                                    />
-                                                </FlexRow>
                                             )
                                         })}
 
@@ -3740,6 +3729,47 @@ export default function Dashboard() {
                                             </div>
                                         )
                                     })()}
+
+                                    {/* Not Financial Advice disclaimer */}
+                                    <div style={{
+                                        background: '#fff', borderRadius: 14, padding: disclaimerOpen ? '16px 18px' : '12px 18px',
+                                        marginBottom: 10, transition: 'padding 0.25s ease',
+                                        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                                    }}>
+                                        <div
+                                            onClick={() => {
+                                                const next = !disclaimerOpen
+                                                setDisclaimerOpen(next)
+                                                if (!next) localStorage.setItem('budgeup_disclaimer_seen', 'true')
+                                            }}
+                                            style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
+                                        >
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EC8C17" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                            <p style={{ margin: 0, fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', flex: 1 }}>
+                                                Important: Not Financial Advice
+                                            </p>
+                                            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0, transform: disclaimerOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.25s cubic-bezier(.25,1,.5,1)' }}>
+                                                <path d="M7 4.5L12 9L7 13.5" stroke="#aaa" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </div>
+                                        <div style={{
+                                            maxHeight: disclaimerOpen ? 400 : 0,
+                                            opacity: disclaimerOpen ? 1 : 0,
+                                            overflow: 'hidden',
+                                            transition: 'max-height 0.35s cubic-bezier(.25,1,.5,1), opacity 0.25s ease',
+                                        }}>
+                                            <p style={{ margin: '12px 0 0', fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#666', lineHeight: 1.6 }}>
+                                                This app is a tool to help you forecast your future bank balance based on the figures you provide. We provide <strong>guidance</strong>, not <strong>financial advice</strong>.
+                                            </p>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 10 }}>
+                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#666', lineHeight: 1.5 }}>1. We do not recommend specific financial products.</p>
+                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#666', lineHeight: 1.5 }}>2. The forecast is a mathematical projection, not a guarantee of your future financial position.</p>
+                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#666', lineHeight: 1.5 }}>3. We are not regulated by the FCA.</p>
+                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#666', lineHeight: 1.5 }}>4. You should consult a qualified professional before making significant financial decisions.</p>
+                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#666', lineHeight: 1.5 }}>5. We are not responsible for financial decisions you make based on these charts.</p>
+                                            </div>
+                                        </div>
+                                    </div>
 
                                     {/* Will I run out? */}
                                     {(() => {
@@ -4258,11 +4288,81 @@ export default function Dashboard() {
             {editingEvent && (() => {
                 const isIncome = editingEvent.type === 'income'
                 const color = isIncome ? '#147b75' : '#e06470'
-                const w = 140
-                const h = editingEvent.removed ? 60 : 80
-                const left = Math.max(8, Math.min(editingEvent.clickX - w / 2, window.innerWidth - w - 8))
-                const showBelow = editingEvent.clickY < h + 10
-                const top = showBelow ? editingEvent.clickY + 2 : editingEvent.clickY - h - 2
+                const skipMonth = editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' }) : ''
+                const handleSave = () => {
+                    const val = editAmount.replace(/[^0-9.]/g, '')
+                    if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
+                        const newVal = parseFloat(val) || 0
+                        const oldVal = editingEvent.amount || 0
+                        const oldTotal = parseFloat(String(formData.loanAmount || '0').replace(/,/g, '')) || 0
+                        const newTotal = Math.round((oldTotal - oldVal + newVal) * 100) / 100
+                        setFormData(prev => ({
+                            ...prev,
+                            instalmentAmounts: { ...(prev.instalmentAmounts || {}), [editingEvent.editMonth]: val },
+                            loanAmount: String(newTotal),
+                        }))
+                    } else if (editingEvent.editType === 'bursary' && editingEvent.editMonth) {
+                        const newVal = parseFloat(val) || 0
+                        const oldVal = editingEvent.amount || 0
+                        const oldTotal = parseFloat(String(formData.bursaryAmount || '0').replace(/,/g, '')) || 0
+                        const newTotal = Math.round((oldTotal - oldVal + newVal) * 100) / 100
+                        setFormData(prev => ({
+                            ...prev,
+                            bursaryInstalmentAmounts: { ...(prev.bursaryInstalmentAmounts || {}), [editingEvent.editMonth]: val },
+                            bursaryAmount: String(newTotal),
+                        }))
+                    } else {
+                        const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
+                        updateField('amountOverrides', { ...(formData.amountOverrides || {}), [overrideKey]: val })
+                    }
+                    analytics.track(DASHBOARD_EVENTS.EVENT_EDITED, { edit_type: editingEvent.editType, event_type: editingEvent.type })
+                    setEditingEvent(null)
+                }
+                const handleSkip = () => {
+                    const isLoan = editingEvent.editType === 'loan' && editingEvent.editMonth
+                    const isBursary = editingEvent.editType === 'bursary' && editingEvent.editMonth
+                    if (isLoan || isBursary) {
+                        const month = editingEvent.editMonth
+                        const monthsKey = isLoan ? 'loanMonths' : 'bursaryMonths'
+                        const amountKey = isLoan ? 'loanAmount' : 'bursaryAmount'
+                        const defaultMonths = isLoan ? DEFAULT_LOAN_MONTHS : ['october', 'february', 'march']
+                        const instKey = isLoan ? 'instalmentAmounts' : 'bursaryInstalmentAmounts'
+                        const datesKey = isLoan ? 'loanDates' : 'bursaryDates'
+                        setFormData(prev => {
+                            const newMonths = (prev[monthsKey] || defaultMonths).filter(m => m !== month)
+                            const newDates = { ...(prev[datesKey] || {}) }; delete newDates[month]
+                            const total = parseFloat(String(prev[amountKey] || '0').replace(/,/g, ''))
+                            const newInst = {}
+                            if (total > 0 && newMonths.length > 0) {
+                                const base = Math.floor(total * 100 / newMonths.length) / 100
+                                const remainder = Math.round((total - base * newMonths.length) * 100)
+                                newMonths.forEach((m, i) => { newInst[m] = String(Math.round((base + (i < remainder ? 0.01 : 0)) * 100) / 100) })
+                            }
+                            return { ...prev, [monthsKey]: newMonths, [instKey]: newInst, [datesKey]: newDates }
+                        })
+                    } else if (editingEvent.editType === 'oneOffIncome' || editingEvent.editType === 'oneOffExpense') {
+                        const dir = editingEvent.editType === 'oneOffIncome' ? 'in' : 'out'
+                        const updated = (formData.oneOffItems || []).filter(item => {
+                            const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
+                            return !(item.date === editingEvent.date && (item.direction || 'out') === dir && amt === editingEvent.amount)
+                        })
+                        updateField('oneOffItems', updated.length > 0 ? updated : [{ name: '', amount: '', date: '', direction: 'out' }])
+                    } else if (editingEvent.editType?.startsWith('flex_') && formData.flexSourceData?.[editingEvent.editType]?.frequency === 'one-off') {
+                        const srcId = editingEvent.editType
+                        setFormData(prev => {
+                            const isExp = (prev.flexExpenseSources || []).includes(srcId)
+                            const key = isExp ? 'flexExpenseSources' : 'flexIncomeSources'
+                            return { ...prev, [key]: (prev[key] || []).filter(s => s !== srcId), flexSourceData: { ...prev.flexSourceData, [srcId]: undefined } }
+                        })
+                    } else {
+                        const key = `${editingEvent.editType}:${editingEvent.date}`
+                        updateField('removedEvents', [...(formData.removedEvents || []), key])
+                    }
+                    setEditingEvent(null)
+                }
+                const isLoan = editingEvent.editType === 'loan' && editingEvent.editMonth
+                const isBursary = editingEvent.editType === 'bursary' && editingEvent.editMonth
+                const canSkip = (isLoan || isBursary) ? (formData[isLoan ? 'loanMonths' : 'bursaryMonths'] || (isLoan ? DEFAULT_LOAN_MONTHS : ['october', 'february', 'march'])).length > 1 : true
                 return (
                     <>
                         <div
@@ -4271,36 +4371,38 @@ export default function Dashboard() {
                         />
                         <div style={{
                             position: 'fixed',
-                            left, top,
-                            width: w,
+                            top: 0, left: 0, right: 0,
                             background: '#fff',
-                            borderRadius: 8,
+                            borderRadius: '0 0 14px 14px',
                             zIndex: 101,
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                            padding: '5px 4px 4px',
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+                            padding: 'calc(env(safe-area-inset-top, 0px) + 10px) 14px 14px',
                         }}>
-                            <span style={{
-                                fontSize: 8, fontWeight: 600,
-                                fontFamily: 'Nunito, sans-serif',
-                                color: '#999',
-                                padding: '0 3px',
-                                display: 'block',
-                                marginBottom: 1,
-                            }}>
-                                {editingEvent.label}{editingEvent.sublabel ? ` · ${editingEvent.sublabel}` : ''}{editingEvent.date ? ` · ${new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}
-                            </span>
-                            {!editingEvent.removed && editingEvent.balanceAfter != null && (
-                                <span style={{
-                                    fontSize: 7, fontWeight: 700,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: editingEvent.balanceAfter >= 0 ? '#147b75' : '#e06470',
-                                    padding: '0 3px',
-                                    display: 'block',
-                                    marginBottom: 3,
-                                }}>
-                                    New projected balance: {getCurrencySymbol()}{Math.round(editingEvent.balanceAfter).toLocaleString()}
-                                </span>
-                            )}
+                            {/* Header: title + date + close */}
+                            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
+                                <div>
+                                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222' }}>
+                                        {editingEvent.label || editingEvent.sublabel}
+                                    </div>
+                                    <div style={{ fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 1 }}>
+                                        {editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                                    </div>
+                                </div>
+                                <div
+                                    onClick={() => setEditingEvent(null)}
+                                    style={{
+                                        width: 28, height: 28, borderRadius: '50%',
+                                        background: '#f0f0f0',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer', flexShrink: 0,
+                                    }}
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2.5" strokeLinecap="round">
+                                        <path d="M18 6L6 18M6 6l12 12" />
+                                    </svg>
+                                </div>
+                            </div>
+
                             {editingEvent.removed ? (
                                 <button
                                     onClick={() => {
@@ -4309,184 +4411,78 @@ export default function Dashboard() {
                                         setEditingEvent(null)
                                     }}
                                     style={{
-                                        width: '100%', height: 20, border: 'none', borderRadius: 5,
-                                        background: color, padding: '0 6px',
+                                        width: '100%', height: 40, border: 'none', borderRadius: 10,
+                                        background: color,
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        cursor: 'pointer', gap: 3,
+                                        cursor: 'pointer',
                                     }}
                                 >
-                                    <span style={{ fontSize: 9, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Restore</span>
+                                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Restore payment</span>
                                 </button>
-                            ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                            ) : (<>
+                                {/* Balance after row — live updated */}
+                                {editingEvent.balanceAfter != null && (() => {
+                                    const origAmt = editingEvent.amount || 0
+                                    const newAmt = parseFloat(editAmount.replace(/[^0-9.]/g, '')) || 0
+                                    const diff = editingEvent.type === 'income' ? (newAmt - origAmt) : (origAmt - newAmt)
+                                    const liveBalance = editingEvent.balanceAfter + diff
+                                    const balColor = liveBalance >= 0 ? '#147b75' : '#e06470'
+                                    const balBg = liveBalance >= 0 ? 'rgba(20,123,117,0.06)' : 'rgba(224,100,112,0.06)'
+                                    return (
                                         <div style={{
-                                            display: 'flex', alignItems: 'center', flex: 1,
-                                            background: '#f5f7f7', borderRadius: 5,
-                                            padding: '0 6px', height: 24, gap: 2,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                            background: balBg, borderRadius: 10, padding: '7px 12px', marginBottom: 8,
                                         }}>
-                                            <span style={{
-                                                fontSize: 11, fontWeight: 600,
-                                                color: '#aaa', fontFamily: 'Nunito, sans-serif',
-                                            }}>{getCurrencySymbol()}</span>
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={formatDisplay(editAmount)}
-                                                onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                                                ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
-                                                style={{
-                                                    flex: 1, border: 'none',
-                                                    background: 'transparent',
-                                                    fontSize: 11, fontWeight: 700,
-                                                    fontFamily: 'Nunito, sans-serif',
-                                                    color: '#000', outline: 'none', padding: 0,
-                                                    width: 0, minWidth: 0,
-                                                }}
-                                            />
+                                            <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>Balance after</span>
+                                            <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: balColor }}>
+                                                {liveBalance < 0 ? '-' : ''}{getCurrencySymbol()}{Math.abs(Math.round(liveBalance)).toLocaleString()}
+                                            </span>
                                         </div>
-                                        <button
-                                            onClick={() => {
-                                                const val = editAmount.replace(/[^0-9.]/g, '')
-                                                if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
-                                                    const newVal = parseFloat(val) || 0
-                                                    const oldVal = editingEvent.amount || 0
-                                                    const oldTotal = parseFloat(String(formData.loanAmount || '0').replace(/,/g, '')) || 0
-                                                    const newTotal = Math.round((oldTotal - oldVal + newVal) * 100) / 100
-                                                    setFormData(prev => ({
-                                                        ...prev,
-                                                        instalmentAmounts: { ...(prev.instalmentAmounts || {}), [editingEvent.editMonth]: val },
-                                                        loanAmount: String(newTotal),
-                                                    }))
-                                                } else if (editingEvent.editType === 'bursary' && editingEvent.editMonth) {
-                                                    const newVal = parseFloat(val) || 0
-                                                    const oldVal = editingEvent.amount || 0
-                                                    const oldTotal = parseFloat(String(formData.bursaryAmount || '0').replace(/,/g, '')) || 0
-                                                    const newTotal = Math.round((oldTotal - oldVal + newVal) * 100) / 100
-                                                    setFormData(prev => ({
-                                                        ...prev,
-                                                        bursaryInstalmentAmounts: { ...(prev.bursaryInstalmentAmounts || {}), [editingEvent.editMonth]: val },
-                                                        bursaryAmount: String(newTotal),
-                                                    }))
-                                                } else {
-                                                    // Per-payment amount override keyed by editType:date
-                                                    const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
-                                                    updateField('amountOverrides', {
-                                                        ...(formData.amountOverrides || {}),
-                                                        [overrideKey]: val,
-                                                    })
-                                                }
-                                                analytics.track(DASHBOARD_EVENTS.EVENT_EDITED, {
-                                                    edit_type: editingEvent.editType,
-                                                    event_type: editingEvent.type,
-                                                })
-                                                setEditingEvent(null)
-                                            }}
+                                    )
+                                })()}
+                                {/* Amount + Save + Skip on one row */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <div style={{
+                                        display: 'flex', alignItems: 'center', flex: 1,
+                                        border: '1px solid #e8e8e8', borderRadius: 10,
+                                        padding: '0 10px', height: 40, gap: 4, background: '#fff',
+                                    }}>
+                                        <span style={{ fontSize: 14, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                        <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            value={formatDisplay(editAmount)}
+                                            onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                                            ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
                                             style={{
-                                                width: 24, height: 24,
-                                                border: 'none', borderRadius: 5,
-                                                background: color,
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                cursor: 'pointer', flexShrink: 0,
+                                                flex: 1, border: 'none', background: 'transparent',
+                                                fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                                color: '#000', outline: 'none', padding: 0,
                                             }}
-                                        >
-                                            <svg width="10" height="7" viewBox="0 0 14 10" fill="none">
-                                                <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                            </svg>
-                                        </button>
+                                        />
                                     </div>
-                                    {(() => {
-                                        const isLoan = editingEvent.editType === 'loan' && editingEvent.editMonth
-                                        const isBursary = editingEvent.editType === 'bursary' && editingEvent.editMonth
-                                        if (isLoan || isBursary) {
-                                            const monthsKey = isLoan ? 'loanMonths' : 'bursaryMonths'
-                                            const amountKey = isLoan ? 'loanAmount' : 'bursaryAmount'
-                                            const defaultMonths = isLoan ? DEFAULT_LOAN_MONTHS : ['october', 'february', 'march']
-                                            const currentMonths = formData[monthsKey] || defaultMonths
-                                            if (currentMonths.length <= 1) return null
-                                            return (
-                                                <button
-                                                    onClick={() => {
-                                                        const month = editingEvent.editMonth
-                                                        const instKey = isLoan ? 'instalmentAmounts' : 'bursaryInstalmentAmounts'
-                                                        const datesKey = isLoan ? 'loanDates' : 'bursaryDates'
-                                                        setFormData(prev => {
-                                                            const newMonths = (prev[monthsKey] || defaultMonths).filter(m => m !== month)
-                                                            const newDates = { ...(prev[datesKey] || {}) }; delete newDates[month]
-                                                            // Redistribute total amount evenly across remaining months
-                                                            const total = parseFloat(String(prev[amountKey] || '0').replace(/,/g, ''))
-                                                            const newInst = {}
-                                                            if (total > 0 && newMonths.length > 0) {
-                                                                const base = Math.floor(total * 100 / newMonths.length) / 100
-                                                                const remainder = Math.round((total - base * newMonths.length) * 100)
-                                                                newMonths.forEach((m, i) => {
-                                                                    newInst[m] = String(Math.round((base + (i < remainder ? 0.01 : 0)) * 100) / 100)
-                                                                })
-                                                            }
-                                                            return { ...prev, [monthsKey]: newMonths, [instKey]: newInst, [datesKey]: newDates }
-                                                        })
-                                                        setEditingEvent(null)
-                                                    }}
-                                                    style={{
-                                                        width: '100%', height: 18, border: 'none', borderRadius: 4,
-                                                        background: '#fee',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        cursor: 'pointer', gap: 4,
-                                                    }}
-                                                >
-                                                    <svg width="9" height="10" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                        <polyline points="3 6 5 6 21 6" />
-                                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                                    </svg>
-                                                    <span style={{ fontSize: 8, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Remove instalment</span>
-                                                </button>
-                                            )
-                                        }
-                                        return (
-                                            <button
-                                                onClick={() => {
-                                                    if (editingEvent.editType === 'oneOffIncome' || editingEvent.editType === 'oneOffExpense') {
-                                                        const dir = editingEvent.editType === 'oneOffIncome' ? 'in' : 'out'
-                                                        const updated = (formData.oneOffItems || []).filter(item => {
-                                                            const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
-                                                            return !(item.date === editingEvent.date && (item.direction || 'out') === dir && amt === editingEvent.amount)
-                                                        })
-                                                        updateField('oneOffItems', updated.length > 0 ? updated : [{ name: '', amount: '', date: '', direction: 'out' }])
-                                                    } else if (editingEvent.editType?.startsWith('flex_') && formData.flexSourceData?.[editingEvent.editType]?.frequency === 'one-off') {
-                                                        // One-off flex: remove the source entirely
-                                                        const srcId = editingEvent.editType
-                                                        setFormData(prev => {
-                                                            const isExp = (prev.flexExpenseSources || []).includes(srcId)
-                                                            const key = isExp ? 'flexExpenseSources' : 'flexIncomeSources'
-                                                            return {
-                                                                ...prev,
-                                                                [key]: (prev[key] || []).filter(s => s !== srcId),
-                                                                flexSourceData: { ...prev.flexSourceData, [srcId]: undefined },
-                                                            }
-                                                        })
-                                                    } else {
-                                                        const key = `${editingEvent.editType}:${editingEvent.date}`
-                                                        updateField('removedEvents', [...(formData.removedEvents || []), key])
-                                                    }
-                                                    setEditingEvent(null)
-                                                }}
-                                                style={{
-                                                    width: '100%', height: 18, border: 'none', borderRadius: 4,
-                                                    background: '#fee',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                    cursor: 'pointer', gap: 4,
-                                                }}
-                                            >
-                                                <svg width="9" height="10" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                    <polyline points="3 6 5 6 21 6" />
-                                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                                </svg>
-                                                <span style={{ fontSize: 8, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Delete payment</span>
-                                            </button>
-                                        )
-                                    })()}
+                                    <button onClick={handleSave} style={{
+                                        height: 40, borderRadius: 10, border: 'none',
+                                        background: color, padding: '0 16px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer', flexShrink: 0,
+                                    }}>
+                                        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
+                                    </button>
+                                    {canSkip && (
+                                        <button onClick={handleSkip} style={{
+                                            height: 40, borderRadius: 10, border: 'none',
+                                            background: '#f5f5f5', padding: '0 10px',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
+                                        }}>
+                                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                                Skip {skipMonth}
+                                            </span>
+                                        </button>
+                                    )}
                                 </div>
-                            )}
+                            </>)}
                         </div>
                     </>
                 )
