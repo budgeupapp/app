@@ -49,7 +49,6 @@ import MoneyAdviceScreen from './screens/MoneyAdviceScreen'
 import SettingsScreen from './screens/SettingsScreen'
 import FeedbackScreen from './screens/FeedbackScreen'
 import NotFound from './screens/NotFound'
-import IntroScreen from './screens/IntroScreen'
 import BottomNav from './components/BottomNav'
 import MoneyAdviceSvg from './assets/money-advice.svg'
 import { saveSignupConsents } from './lib/api'
@@ -63,7 +62,6 @@ export default function App() {
     const [onboardingLoading, setOnboardingLoading] = useState(true)
     const [showLoadingScreen, setShowLoadingScreen] = useState(false)
     const savePromiseRef = useRef(null)
-    const [showIntro, setShowIntro] = useState(() => localStorage.getItem('signup_onboarding_pending') === 'true')
     const [passwordRecovery, setPasswordRecovery] = useState(recoveryPending)
 
     /* ---------------- PRELOAD ASSETS ---------------- */
@@ -259,11 +257,6 @@ export default function App() {
         localStorage.removeItem('budgeup_onboarding_state')
     }
     if (DEV_VIEW === 'onboarding' || hasCompletedOnboarding === false) {
-        if (showIntro && DEV_VIEW !== 'onboarding') {
-            return (
-                <IntroScreen onContinue={() => setShowIntro(false)} />
-            )
-        }
         if (showLoadingScreen) {
             return (
                 <LoadingScreen

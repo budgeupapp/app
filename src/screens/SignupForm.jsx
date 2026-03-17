@@ -107,6 +107,7 @@ export default function SignupForm() {
     e.preventDefault()
     if (loading) return
     if (!email) { setError('Please enter your email'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Please enter a valid email address'); return }
     if (!password) { setError('Please choose a password'); return }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return }
     if (!consentChecked) { setError('Please agree to the Terms and Privacy Policy'); return }
