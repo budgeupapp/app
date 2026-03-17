@@ -1,7 +1,7 @@
 # Budge Up — Claude Instructions
 ## Rules
 - Never push to git unless the user explicitly asks
-- When using setTimeout for scroll-into-view or scroll-to-top, always use 350ms delay (not 100ms) to allow iOS keyboard to settle
+- When using setTimeout for scroll-into-view or scroll-to-top, always use 301ms delay (not 100ms) to allow iOS keyboard to settle
 
 ## Approach
 We are doing a significant UI overhaul. When implementing new screens:

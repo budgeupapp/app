@@ -365,15 +365,14 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                             onClick={addBreak}
                             style={{
                                 width: '100%', height: 36,
-                                background: 'transparent',
-                                border: '1.5px dashed #ddd',
+                                background: 'rgba(136,136,136,0.08)',
+                                border: 'none',
                                 borderRadius: 10,
-                                fontSize: 13, fontWeight: 600,
+                                fontSize: 13, fontWeight: 700,
                                 fontFamily: 'Nunito, sans-serif',
-                                color: '#999', cursor: 'pointer',
+                                color: '#888', cursor: 'pointer',
                                 display: 'flex', alignItems: 'center',
                                 justifyContent: 'center', gap: 4,
-                                transition: 'border-color 0.2s ease, color 0.2s ease',
                             }}
                         >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -567,8 +566,8 @@ export default function TermDatesStep({
                 onClick={addTerm}
                 style={{
                     width: '100%', height: 40,
-                    background: 'transparent',
-                    border: '1.5px dashed #ddd',
+                    background: 'rgba(20,123,117,0.08)',
+                    border: 'none',
                     borderRadius: 14,
                     fontSize: 14, fontWeight: 700,
                     fontFamily: 'Nunito, sans-serif',
@@ -576,7 +575,6 @@ export default function TermDatesStep({
                     display: 'flex', alignItems: 'center',
                     justifyContent: 'center', gap: 6,
                     flexShrink: 0,
-                    transition: 'border-color 0.2s ease',
                 }}
             >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

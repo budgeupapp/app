@@ -57,6 +57,87 @@ function getMonthRange(monthKey) {
     }
 }
 
+function CustomSelect({ value, onChange, options, minWidth = 120, triggerStyle }) {
+    const [open, setOpen] = useState(false)
+    const ref = useRef(null)
+
+    useEffect(() => {
+        if (!open) return
+        const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+        document.addEventListener('pointerdown', close)
+        return () => document.removeEventListener('pointerdown', close)
+    }, [open])
+
+    const selected = options.find(o => o.value === value)
+
+    return (
+        <>
+            {/* Backdrop */}
+            {open && <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />}
+
+            <div ref={ref} style={{ position: 'relative', zIndex: open ? 100 : 'auto' }}>
+                {/* Trigger */}
+                <div
+                    onClick={() => setOpen(!open)}
+                    style={triggerStyle || {
+                        fontSize: 14, fontWeight: 600, color: '#333',
+                        fontFamily: 'Nunito, sans-serif',
+                        background: '#f8f8f8',
+                        padding: '6px 28px 6px 12px', borderRadius: 8,
+                        cursor: 'pointer', whiteSpace: 'nowrap',
+                        minWidth, textAlign: 'center',
+                        display: 'inline-block',
+                    }}
+                >
+                    {selected?.label || value}
+                </div>
+                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{
+                    position: 'absolute', right: 8, top: '50%',
+                    transform: 'translateY(-50%)',
+                    pointerEvents: 'none',
+                }}>
+                    <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+
+                {/* Dropdown */}
+                <div style={{
+                    position: 'absolute', top: 0, right: -8,
+                    background: '#fff',
+                    borderRadius: 14,
+                    boxShadow: '0 2px 20px rgba(0,0,0,0.08)',
+                    transform: open ? 'scale(1) translateY(0)' : 'scale(0.4) translateY(-8px)',
+                    opacity: open ? 1 : 0,
+                    transformOrigin: 'top right',
+                    transition: open
+                        ? 'transform 0.25s cubic-bezier(.175,.885,.32,1.275), opacity 0.12s ease'
+                        : 'transform 0.15s ease, opacity 0.1s ease',
+                    minWidth: Math.max(minWidth + 40, 200),
+                    pointerEvents: open ? 'auto' : 'none',
+                    overflow: 'hidden',
+                }}>
+                    <div style={{ overflowY: 'auto', maxHeight: 220, padding: '6px 0' }}>
+                        {options.map((o, i) => (
+                            <div
+                                key={o.value}
+                                onClick={() => { onChange(o.value); setOpen(false) }}
+                                style={{
+                                    padding: '11px 20px',
+                                    fontSize: 16, fontWeight: 400,
+                                    fontFamily: 'Nunito, sans-serif',
+                                    color: '#333',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                {o.label}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </>
+    )
+}
+
 function Chevron({ open }) {
     return (
         <svg width="18" height="15" viewBox="0 0 18 15" fill="none" style={{
@@ -111,7 +192,17 @@ export default function IncomeExpenseCard({
         setTimeout(() => {
             setNewId(null)
             const el = document.querySelector(`[data-entry-id="${id}"]`)
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            if (el) {
+                const panel = el.closest('.onboarding-panel')
+                if (panel) {
+                    const panelRect = panel.getBoundingClientRect()
+                    const elRect = el.getBoundingClientRect()
+                    const offset = elRect.top - panelRect.top + panel.scrollTop - 10
+                    panel.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
+                } else {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }
+            }
         }, 350)
     }
 
@@ -161,7 +252,7 @@ export default function IncomeExpenseCard({
                     const isNew = entry.id === newId
                     return (
                     <div key={entry.id || idx} data-entry data-entry-id={entry.id} {...{[`data-entry-${idx}`]: ''}} style={{
-                        marginBottom: isCollapsing ? 0 : 10,
+                        marginBottom: isCollapsing ? 0 : 20,
                         ...(isCollapsing ? {
                             maxHeight: 0, opacity: 0, overflow: 'hidden',
                             transition: 'max-height 0.35s ease, margin-bottom 0.35s ease',
@@ -362,8 +453,16 @@ function EntryCard({
                             value={formatDisplay(rawAmount)}
                             onChange={handleAmountChange}
                             onFocus={scrollOnFocus ? (e) => {
-                                const entry = e.target.closest('[data-entry]')
-                                if (entry) setTimeout(() => entry.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
+                                const el = e.target.closest('[data-entry]')
+                                if (el) setTimeout(() => {
+                                    const panel = el.closest('.onboarding-panel')
+                                    if (panel) {
+                                        const panelRect = panel.getBoundingClientRect()
+                                        const elRect = el.getBoundingClientRect()
+                                        const offset = elRect.top - panelRect.top + panel.scrollTop - 10
+                                        panel.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
+                                    }
+                                }, 301)
                             } : undefined}
                             style={{
                                 flex: 1, border: 'none', background: 'transparent',
@@ -373,29 +472,23 @@ function EntryCard({
                         />
                     </div>
                 </div>
-                <div style={{ flexShrink: 0, position: 'relative' }}>
-                    <select
-                        value={frequency}
-                        onChange={(e) => updateField('frequency', e.target.value)}
-                        style={{
-                            height: 44, border: '1px solid #e8e8e8',
-                            borderRadius: 10,
-                            padding: '0 28px 0 12px',
-                            fontSize: 14, fontWeight: 600,
-                            fontFamily: 'Nunito, sans-serif',
-                            color: '#333', background: '#fff',
-                            WebkitAppearance: 'none', appearance: 'none',
-                            cursor: 'pointer', outline: 'none',
-                        }}
-                    >
-                        {frequencyOptions.map(f => (
-                            <option key={f} value={f}>{FREQ_LABELS[f]}</option>
-                        ))}
-                    </select>
-                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                        <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                </div>
+                <CustomSelect
+                    value={frequency}
+                    onChange={(v) => updateField('frequency', v)}
+                    options={frequencyOptions.map(f => ({ value: f, label: FREQ_LABELS[f] }))}
+                    minWidth={100}
+                    triggerStyle={{
+                        width: 130, height: 44, border: '1px solid #e8e8e8',
+                        borderRadius: 10,
+                        padding: '0 28px 0 12px',
+                        fontSize: 14, fontWeight: 600,
+                        fontFamily: 'Nunito, sans-serif',
+                        color: '#333', background: '#fff',
+                        cursor: 'pointer',
+                        display: 'flex', alignItems: 'center',
+                        boxSizing: 'border-box',
+                    }}
+                />
             </div>
 
             {/* === IRREGULAR MODE: month pills + customise === */}
@@ -590,7 +683,7 @@ function EntryCard({
                 </span>
                 <div style={{
                     border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
-                    overflow: 'hidden', marginBottom: 16,
+                    marginBottom: 16,
                 }}>
                     {/* Day of week (weekly/fortnightly) */}
                     {(frequency === 'weekly' || frequency === 'fortnightly') && (
@@ -601,28 +694,11 @@ function EntryCard({
                             <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
                                 Day of week
                             </span>
-                            <div style={{ position: 'relative' }}>
-                                <select
-                                    className="select-center"
-                                    value={entry.dayOfWeek || 'monday'}
-                                    onChange={(e) => updateField('dayOfWeek', e.target.value)}
-                                    style={{
-                                        background: '#f8f8f8', borderRadius: 8,
-                                        padding: '6px 28px 6px 28px', border: 'none',
-                                        fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                        color: '#333', outline: 'none',
-                                        WebkitAppearance: 'none', appearance: 'none',
-                                        cursor: 'pointer', minWidth: 120, textAlign: 'center',
-                                    }}
-                                >
-                                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => (
-                                        <option key={d} value={d.toLowerCase()}>{d}</option>
-                                    ))}
-                                </select>
-                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                                    <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                            </div>
+                            <CustomSelect
+                                value={entry.dayOfWeek || 'monday'}
+                                onChange={(v) => updateField('dayOfWeek', v)}
+                                options={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => ({ value: d.toLowerCase(), label: d }))}
+                            />
                         </div>
                     )}
 
@@ -635,31 +711,18 @@ function EntryCard({
                             <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
                                 Day of month
                             </span>
-                            <div style={{ position: 'relative' }}>
-                                <select
-                                    className="select-center"
-                                    value={entry.dayOfMonth || '1'}
-                                    onChange={(e) => updateField('dayOfMonth', e.target.value)}
-                                    style={{
-                                        background: '#f8f8f8', borderRadius: 8,
-                                        padding: '6px 28px 6px 28px', border: 'none',
-                                        fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                        color: '#333', outline: 'none',
-                                        WebkitAppearance: 'none', appearance: 'none',
-                                        cursor: 'pointer', minWidth: 120, textAlign: 'center',
-                                    }}
-                                >
-                                    {Array.from({ length: 31 }, (_, i) => {
+                            <CustomSelect
+                                value={entry.dayOfMonth || '1'}
+                                onChange={(v) => updateField('dayOfMonth', v)}
+                                options={[
+                                    ...Array.from({ length: 31 }, (_, i) => {
                                         const d = i + 1
                                         const suffix = d === 1 || d === 21 || d === 31 ? 'st' : d === 2 || d === 22 ? 'nd' : d === 3 || d === 23 ? 'rd' : 'th'
-                                        return <option key={d} value={String(d)}>{d}{suffix}</option>
-                                    })}
-                                    <option value="last">Last day</option>
-                                </select>
-                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                                    <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                            </div>
+                                        return { value: String(d), label: `${d}${suffix}` }
+                                    }),
+                                    { value: 'last', label: 'Last day' },
+                                ]}
+                            />
                         </div>
                     )}
 

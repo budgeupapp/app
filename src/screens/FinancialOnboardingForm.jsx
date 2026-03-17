@@ -169,6 +169,7 @@ function buildGraphEvents(formData) {
     const events = []
     const terms = formData.termDates?.terms || []
     const removedSet = new Set(formData.removedEvents || [])
+    const ayEnd = AY_END
 
     // Maintenance loan income events (supports multiple loans)
     if (formData.incomeSources?.includes('maintenance_loan')) {
