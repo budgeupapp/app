@@ -230,15 +230,19 @@ function SpendRulerCard({ label, value, onChange, max, color, variesByTerm, onTo
                 )}
             </div>
 
-            {/* Monthly/yearly summary */}
+            {/* Daily/monthly/yearly summary */}
             <div style={{
-                display: 'flex', justifyContent: 'center', gap: 8,
+                display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8,
                 marginBottom: 6,
             }}>
                 <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
-                    ≈{getCurrencySymbol()}{monthly.toLocaleString()}/mo
+                    ≈{getCurrencySymbol()}{Math.round(value / 7).toLocaleString()}/day
                 </span>
-                <span style={{ fontSize: 11, color: '#ddd' }}>·</span>
+                <span style={{ fontSize: 16, color: '#ccc', lineHeight: 1 }}>·</span>
+                <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                    {getCurrencySymbol()}{monthly.toLocaleString()}/mo
+                </span>
+                <span style={{ fontSize: 16, color: '#ccc', lineHeight: 1 }}>·</span>
                 <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
                     {getCurrencySymbol()}{yearly.toLocaleString()}/yr
                 </span>
@@ -260,7 +264,7 @@ function SpendRulerCard({ label, value, onChange, max, color, variesByTerm, onTo
                     overflow: 'hidden',
                     transition: 'max-height 0.3s ease, opacity 0.2s ease',
                 }}>
-                    <div style={{ paddingTop: 12, borderTop: '1px solid #f0f0f0', marginTop: 8 }}>
+                    <div style={{ paddingTop: 8 }}>
                         <div style={{ position: 'relative', textAlign: 'center', marginBottom: 2 }}>
                             <span style={{
                                 fontSize: 28, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
@@ -286,7 +290,7 @@ function SpendRulerCard({ label, value, onChange, max, color, variesByTerm, onTo
                             <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
                                 ≈{getCurrencySymbol()}{nonTermMonthly.toLocaleString()}/mo
                             </span>
-                            <span style={{ fontSize: 11, color: '#ddd' }}>·</span>
+                            <span style={{ fontSize: 16, color: '#ccc', lineHeight: 1 }}>·</span>
                             <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
                                 {getCurrencySymbol()}{nonTermYearly.toLocaleString()}/yr
                             </span>
@@ -301,13 +305,13 @@ function SpendRulerCard({ label, value, onChange, max, color, variesByTerm, onTo
                 </div>
             )}
 
-            {/* Toggle row */}
+            {/* Toggle row — always at bottom */}
             {onToggleVaries !== undefined && (
                 <button onClick={onToggleVaries} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     width: '100%', boxSizing: 'border-box',
-                    background: 'none', border: 'none', borderTop: '1px solid #f0f0f0',
-                    cursor: 'pointer', padding: '12px 0', margin: '8px 0 0',
+                    background: 'none', border: 'none',
+                    cursor: 'pointer', padding: '14px 0 6px', margin: 0,
                 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#666' }}>
                         Different amount during holidays

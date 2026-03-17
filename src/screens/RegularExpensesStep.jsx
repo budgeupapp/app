@@ -1,12 +1,4 @@
-import { SOURCE_ICONS } from './Dashboard'
-
-const EXPENSE_SOURCES = [
-    { id: 'rent', label: 'Rent' },
-    { id: 'bills', label: 'Bills & Utilities' },
-    { id: 'uni_fees', label: 'University Fees' },
-    { id: 'savings_investments', label: 'Savings & Investments' },
-    { id: 'other_expense', label: 'Other' },
-]
+import { EXPENSE_CATEGORIES, SOURCE_ICONS } from '../config/categories'
 
 function CheckIcon() {
     return (
@@ -16,7 +8,7 @@ function CheckIcon() {
     )
 }
 
-export default function RegularExpensesStep({ expenseSources = [], updateExpenseSources, heading = 'Expenses', subtitle = 'Include your main regular expenses.' }) {
+export default function RegularExpensesStep({ expenseSources = [], updateExpenseSources }) {
     const toggle = (id) => {
         const next = expenseSources.includes(id)
             ? expenseSources.filter(s => s !== id)
@@ -26,31 +18,21 @@ export default function RegularExpensesStep({ expenseSources = [], updateExpense
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-            <div style={{ padding: '18px 24px 12px', flexShrink: 0 }}>
-                <h2 style={{
-                    fontSize: 25, fontWeight: 700,
-                    fontFamily: 'Nunito, sans-serif',
-                    color: '#000', margin: '0 0 8px', lineHeight: 1.3,
-                }}>
-                    {heading}
-                </h2>
+            <div style={{ padding: '0 24px 6px', flexShrink: 0 }}>
                 <p style={{
-                    fontSize: 15, fontFamily: 'Nunito, sans-serif',
-                    color: '#444', margin: 0, lineHeight: 1.5,
+                    fontSize: 14, fontFamily: 'Nunito, sans-serif',
+                    color: '#555', margin: 0, lineHeight: 1.5,
                 }}>
-                    {subtitle}
+                    These are just all the predictable things! Everything else we'll lump into your average day-to-day spending.
                 </p>
             </div>
-
             <div style={{
                 flex: 1, overflowY: 'auto',
                 padding: '12px 19px 16px',
                 display: 'flex', flexDirection: 'column', gap: 6,
             }}>
-                {EXPENSE_SOURCES.map(({ id, label }) => {
+                {EXPENSE_CATEGORIES.map(({ id, label, Icon, color }) => {
                     const selected = expenseSources.includes(id)
-                    const sourceIcon = SOURCE_ICONS[id]
-                    const IconComponent = sourceIcon?.Icon
                     return (
                         <div
                             key={id}
@@ -65,17 +47,14 @@ export default function RegularExpensesStep({ expenseSources = [], updateExpense
                                 background: '#fff',
                             }}
                         >
-                            {/* Icon in circle */}
                             <div style={{
                                 width: 36, height: 36, borderRadius: '50%',
                                 background: 'rgba(224, 100, 112, 0.08)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 flexShrink: 0,
                             }}>
-                                {IconComponent && <IconComponent size={20} color="#e06470" />}
+                                {Icon && <Icon size={20} color="#e06470" />}
                             </div>
-
-                            {/* Label */}
                             <span style={{
                                 flex: 1, fontSize: 14, fontWeight: 600,
                                 fontFamily: 'Nunito, sans-serif',
@@ -83,8 +62,6 @@ export default function RegularExpensesStep({ expenseSources = [], updateExpense
                             }}>
                                 {label}
                             </span>
-
-                            {/* Checkbox */}
                             <div style={{
                                 width: 25, height: 25, borderRadius: 5,
                                 border: selected ? '1.5px solid #e06470' : '1.5px solid #ddd',

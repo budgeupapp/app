@@ -14,47 +14,80 @@ const RATING_BGS = ['#fdf0f1', 'rgba(236,140,23,0.1)', 'rgba(212,180,74,0.1)', '
 function RatingQuestion({ question, value, onChange }) {
     const scale = question.scale || 5
     const options = Array.from({ length: scale }, (_, i) => i + 1)
+    const useIcons = scale === 5 && question.display !== 'number'
 
     return (
         <div>
             <p style={{
                 fontSize: 14, fontWeight: 600,
                 fontFamily: 'Nunito, sans-serif',
-                color: '#1a1a1a', margin: '0 0 12px',
+                color: '#1a1a1a', margin: '0 0 8px',
             }}>{question.question}</p>
+            {question.description && (
+                <p style={{ fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', margin: '0 0 8px' }}>{question.description}</p>
+            )}
             <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                gap: 6,
+                gap: useIcons ? 6 : 4,
             }}>
                 {options.map(num => {
                     const selected = value === num
-                    const Icon = RATING_ICONS[num - 1]
-                    const color = RATING_COLORS[num - 1]
-                    const bg = RATING_BGS[num - 1]
+                    if (useIcons) {
+                        const Icon = RATING_ICONS[num - 1]
+                        const color = RATING_COLORS[num - 1]
+                        const bg = RATING_BGS[num - 1]
+                        return (
+                            <button
+                                key={num}
+                                onClick={() => onChange(value === num ? null : num)}
+                                style={{
+                                    display: 'flex', flexDirection: 'column',
+                                    alignItems: 'center', justifyContent: 'center',
+                                    background: selected ? bg : '#fff',
+                                    border: `2px solid ${selected ? color : '#e8e8e8'}`,
+                                    borderRadius: 12,
+                                    padding: '10px 8px',
+                                    cursor: 'pointer',
+                                    transition: 'background 0.2s ease, border 0.2s ease',
+                                    flex: 1,
+                                }}
+                            >
+                                {Icon && (
+                                    <Icon size={18} color={selected ? color : '#999'} style={{ transition: 'color 0.2s ease' }} />
+                                )}
+                            </button>
+                        )
+                    }
                     return (
                         <button
                             key={num}
                             onClick={() => onChange(value === num ? null : num)}
                             style={{
-                                display: 'flex', flexDirection: 'column',
-                                alignItems: 'center', justifyContent: 'center',
-                                background: selected ? bg : '#fff',
-                                border: `2px solid ${selected ? color : '#e8e8e8'}`,
-                                borderRadius: 12,
-                                padding: '10px 8px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                background: selected ? '#f0faf9' : '#fff',
+                                border: `2px solid ${selected ? '#147b75' : '#e8e8e8'}`,
+                                borderRadius: 10,
+                                padding: '8px 0',
                                 cursor: 'pointer',
                                 transition: 'background 0.2s ease, border 0.2s ease',
-                                flex: 1,
+                                flex: 1, minWidth: 0,
+                                fontSize: 13, fontWeight: 700,
+                                fontFamily: 'Nunito, sans-serif',
+                                color: selected ? '#147b75' : '#888',
                             }}
                         >
-                            {Icon && (
-                                <Icon size={18} color={selected ? color : '#999'} style={{ transition: 'color 0.2s ease' }} />
-                            )}
+                            {num}
                         </button>
                     )
                 })}
             </div>
+            {(question.lowerBoundLabel || question.upperBoundLabel) && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>{question.lowerBoundLabel}</span>
+                    <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>{question.upperBoundLabel}</span>
+                </div>
+            )}
         </div>
     )
 }
@@ -181,7 +214,6 @@ export default function FeedbackScreen() {
     const [responses, setResponses] = useState({})
     const [submitted, setSubmitted] = useState(false)
     const [submitting, setSubmitting] = useState(false)
-    const [formLoaded, setFormLoaded] = useState(false)
     const scrollRef = useRef(null)
 
     useEffect(() => {
@@ -245,9 +277,11 @@ export default function FeedbackScreen() {
         setSubmitted(false)
     }
 
-    const renderQuestion = (question, index) => {
-        const value = responses[index]
-        const onChange = (val) => setResponse(index, val)
+    const renderQuestion = (question, index, customResponses, customSetResponse) => {
+        const resp = customResponses || responses
+        const setter = customSetResponse || ((idx, val) => setResponse(idx, val))
+        const value = resp[index]
+        const onChange = (val) => setter(index, val)
 
         switch (question.type) {
             case 'rating':
@@ -427,52 +461,74 @@ export default function FeedbackScreen() {
                     </div>
                 )}
 
-                {/* Quick Post-Setup Survey */}
-                <div style={{
-                    borderRadius: 14,
-                    overflow: 'hidden',
-                    marginBottom: 12,
-                    background: '#f0f4f4',
-                    position: 'relative',
-                }}>
-                    <div style={{ padding: '18px 18px 0' }}>
-                        <p style={{
-                            fontSize: 16, fontWeight: 700,
-                            fontFamily: 'Nunito, sans-serif',
-                            color: '#1a1a1a', margin: 0,
-                        }}>Quick Survey</p>
-                        <p style={{
-                            fontSize: 13, fontWeight: 500,
-                            fontFamily: 'Nunito, sans-serif',
-                            color: '#888', margin: '4px 0 0',
-                            lineHeight: 1.4,
-                        }}>A few quick questions to help us understand your needs</p>
-                    </div>
-                    <div style={{ height: 8 }} />
-                    {!formLoaded && (
-                        <div style={{
-                            padding: '20px 18px',
-                            display: 'flex', flexDirection: 'column', gap: 16,
-                        }}>
-                            <div style={{ width: '60%', height: 14, borderRadius: 7, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite' }} />
-                            <div style={{ width: '100%', height: 40, borderRadius: 10, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.1s' }} />
-                            <div style={{ width: '45%', height: 14, borderRadius: 7, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.2s' }} />
-                            <div style={{ width: '100%', height: 80, borderRadius: 10, background: '#e8e8e8', animation: 'skeleton-pulse 1.2s ease-in-out infinite', animationDelay: '0.3s' }} />
+                {/* Quick Survey (PostHog) */}
+                {(() => {
+                    const QUICK_SURVEY_ID = '019cf78b-c626-0000-535f-e578d85fbcd5'
+                    const quickSurveyQuestions = [
+                        { id: 'ec6c53c0', type: 'open', question: '1/10 How did you feel when you saw your graph (1-2 words)?', optional: true },
+                        { id: 'ddaa270f', type: 'rating', scale: 7, display: 'number', question: '2/10 "I understood what the graph was showing me"', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
+                        { id: '38fa75fa', type: 'rating', scale: 7, display: 'number', question: '3/10 "Seeing this graph made me feel more in control of my finances"', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
+                        { id: '069edb2e', type: 'rating', scale: 7, display: 'number', question: '4/10 "Budge Up made me feel less stressed about money"', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
+                        { id: '2ade3440', type: 'rating', scale: 7, display: 'number', question: '5/10 "Budge Up has made me want to change my behaviour (i.e. spending or earning)"', description: 'Half way there!', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
+                        { id: '247f3fed', type: 'rating', scale: 7, display: 'number', question: '6/10 "Budge Up has made me more likely to reach out for help (i.e. family or uni)"', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
+                        { id: '9c551822', type: 'rating', scale: 7, display: 'number', question: '7/10 How much value do you see in checking Budge Up again next week?', lowerBoundLabel: 'No value at all', upperBoundLabel: 'A lot of value', optional: true },
+                        { id: '29860090', type: 'rating', scale: 7, display: 'number', question: '8/10 "I would only use Budge Up if it connected directly to my bank account (Open Banking)"', lowerBoundLabel: 'Unlikely', upperBoundLabel: 'Very likely', optional: true },
+                        { id: 'd16e38aa', type: 'rating', scale: 7, display: 'number', question: '9/10 In day-to-day life, how stressed do you feel about money?', lowerBoundLabel: 'Very relaxed', upperBoundLabel: 'Very stressed', optional: true },
+                        { id: '69fdbacd', type: 'rating', scale: 10, display: 'number', question: '10/10 How likely are you to recommend Budge Up to a friend?', lowerBoundLabel: 'Very unlikely', upperBoundLabel: 'Very likely', optional: false },
+                    ]
+                    const storageKey = 'budgeup_quick_survey_submitted'
+                    const [quickResponses, setQuickResponses] = useState({})
+                    const [quickSubmitted, setQuickSubmitted] = useState(() => localStorage.getItem(storageKey) === 'true')
+                    const [quickSubmitting, setQuickSubmitting] = useState(false)
+                    const hasAny = Object.values(quickResponses).some(v => v !== undefined && v !== null && v !== '')
+                    const handleQuickSubmit = () => {
+                        setQuickSubmitting(true)
+                        const payload = { $survey_id: QUICK_SURVEY_ID }
+                        quickSurveyQuestions.forEach((_, i) => {
+                            const key = i === 0 ? '$survey_response' : `$survey_response_${i}`
+                            const val = quickResponses[i]
+                            if (val !== undefined && val !== null && val !== '') payload[key] = val
+                        })
+                        posthog.capture('survey sent', payload)
+                        analytics.track(FEEDBACK_EVENTS.QUICK_SUBMITTED, { question_count: 10, responses_given: Object.keys(quickResponses).length })
+                        setTimeout(() => {
+                            setQuickSubmitting(false)
+                            setQuickSubmitted(true)
+                            localStorage.setItem(storageKey, 'true')
+                        }, 400)
+                    }
+                    if (quickSubmitted) {
+                        return (
+                            <div style={{ background: '#f0f4f4', borderRadius: 14, padding: '24px 18px', marginBottom: 12, textAlign: 'center' }}>
+                                <div style={{ width: 44, height: 44, borderRadius: 22, background: '#147B75', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                                    <Check size={22} color="#fff" strokeWidth={3} />
+                                </div>
+                                <p style={{ fontSize: 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: '0 0 4px' }}>Thanks for completing the survey!</p>
+                                <p style={{ fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#888', margin: 0 }}>Your responses help us improve Budge Up</p>
+                            </div>
+                        )
+                    }
+                    return (
+                        <div style={{ background: '#f0f4f4', borderRadius: 14, padding: '20px 18px', marginBottom: 12 }}>
+                            <p style={{ fontSize: 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: '0 0 4px' }}>Quick Survey</p>
+                            <p style={{ fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#888', margin: '0 0 18px', lineHeight: 1.4 }}>10 questions, ~20 seconds</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                                {quickSurveyQuestions.map((q, i) => renderQuestion(q, i, quickResponses, (idx, val) => setQuickResponses(prev => ({ ...prev, [idx]: val }))))}
+                            </div>
+                            <div style={{ maxHeight: hasAny ? 70 : 0, opacity: hasAny ? 1 : 0, overflow: 'hidden', transition: 'max-height 0.3s ease, opacity 0.25s ease' }}>
+                                <button onClick={handleQuickSubmit} disabled={quickSubmitting} style={{
+                                    width: '100%', marginTop: 18, padding: '13px', borderRadius: 12, border: 'none',
+                                    background: '#147B75', color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                    cursor: quickSubmitting ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                    opacity: quickSubmitting ? 0.7 : 1, transition: 'opacity 0.2s ease',
+                                }}>
+                                    <Send size={16} />
+                                    {quickSubmitting ? 'Sending...' : 'Submit survey'}
+                                </button>
+                            </div>
                         </div>
-                    )}
-                    <iframe
-                        src="https://docs.google.com/forms/d/e/1FAIpQLSdOCeCs4tTbidXiCCQnJdb-34MgybgseESE1OX-Y-H5iiNfQg/viewform?embedded=true"
-                        onLoad={() => setFormLoaded(true)}
-                        style={{
-                            width: '100%', height: 560,
-                            border: 'none',
-                            borderRadius: 14,
-                            opacity: formLoaded ? 1 : 0,
-                            transition: 'opacity 0.3s ease',
-                        }}
-                        title="Quick post-setup survey"
-                    />
-                </div>
+                    )
+                })()}
 
             </div>
 

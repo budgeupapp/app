@@ -1,5 +1,6 @@
 import { getCurrencySymbol } from '../lib/settings'
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { ALL_MONTH_KEYS, MONTH_LABELS } from '../config/onboardingConfig'
 import { fmt } from './TermGraph'
 
@@ -59,14 +60,34 @@ function getMonthRange(monthKey) {
 
 function CustomSelect({ value, onChange, options, minWidth = 120, triggerStyle }) {
     const [open, setOpen] = useState(false)
+    const [openUp, setOpenUp] = useState(false)
+    const [menuPos, setMenuPos] = useState({ top: 0, right: 0 })
     const ref = useRef(null)
+    const menuRef = useRef(null)
 
     useEffect(() => {
         if (!open) return
-        const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+        const close = (e) => {
+            if (ref.current && !ref.current.contains(e.target) && menuRef.current && !menuRef.current.contains(e.target)) setOpen(false)
+        }
         document.addEventListener('pointerdown', close)
         return () => document.removeEventListener('pointerdown', close)
     }, [open])
+
+    const handleOpen = () => {
+        if (!open && ref.current) {
+            const rect = ref.current.getBoundingClientRect()
+            const spaceBelow = window.innerHeight - rect.bottom
+            const up = spaceBelow < 260
+            setOpenUp(up)
+            setMenuPos({
+                top: up ? undefined : rect.top,
+                bottom: up ? window.innerHeight - rect.bottom : undefined,
+                right: window.innerWidth - rect.right + 8,
+            })
+        }
+        setOpen(!open)
+    }
 
     const selected = options.find(o => o.value === value)
 
@@ -75,10 +96,10 @@ function CustomSelect({ value, onChange, options, minWidth = 120, triggerStyle }
             {/* Backdrop */}
             {open && <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />}
 
-            <div ref={ref} style={{ position: 'relative', zIndex: open ? 100 : 'auto' }}>
+            <div ref={ref} style={{ position: 'relative', zIndex: open ? 9999 : 'auto' }}>
                 {/* Trigger */}
                 <div
-                    onClick={() => setOpen(!open)}
+                    onClick={handleOpen}
                     style={triggerStyle || {
                         fontSize: 14, fontWeight: 600, color: '#333',
                         fontFamily: 'Nunito, sans-serif',
@@ -99,41 +120,63 @@ function CustomSelect({ value, onChange, options, minWidth = 120, triggerStyle }
                     <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
 
-                {/* Dropdown */}
-                <div style={{
-                    position: 'absolute', top: 0, right: -8,
-                    background: '#fff',
-                    borderRadius: 14,
-                    boxShadow: '0 2px 20px rgba(0,0,0,0.08)',
-                    transform: open ? 'scale(1) translateY(0)' : 'scale(0.4) translateY(-8px)',
-                    opacity: open ? 1 : 0,
-                    transformOrigin: 'top right',
-                    transition: open
-                        ? 'transform 0.25s cubic-bezier(.175,.885,.32,1.275), opacity 0.12s ease'
-                        : 'transform 0.15s ease, opacity 0.1s ease',
-                    minWidth: Math.max(minWidth + 40, 200),
-                    pointerEvents: open ? 'auto' : 'none',
-                    overflow: 'hidden',
-                }}>
-                    <div style={{ overflowY: 'auto', maxHeight: 220, padding: '6px 0' }}>
-                        {options.map((o, i) => (
-                            <div
-                                key={o.value}
-                                onClick={() => { onChange(o.value); setOpen(false) }}
-                                style={{
-                                    padding: '11px 20px',
-                                    fontSize: 16, fontWeight: 400,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#333',
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                {o.label}
-                            </div>
-                        ))}
-                    </div>
-                </div>
             </div>
+
+            {/* Portal dropdown — rendered at document body to escape stacking contexts */}
+            {createPortal(
+                <>
+                    {open && <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 99999 }} />}
+                    <div ref={menuRef} style={{
+                        position: 'fixed',
+                        ...(openUp
+                            ? { bottom: menuPos.bottom, right: menuPos.right }
+                            : { top: menuPos.top, right: menuPos.right }),
+                        background: '#fff',
+                        borderRadius: 14,
+                        boxShadow: '0 2px 20px rgba(0,0,0,0.08)',
+                        transform: open
+                            ? 'scale(1) translateY(0)'
+                            : openUp ? 'scale(0.85) translateY(4px)' : 'scale(0.85) translateY(-4px)',
+                        opacity: open ? 1 : 0,
+                        transformOrigin: openUp ? 'bottom right' : 'top right',
+                        transition: open
+                            ? 'transform 0.25s cubic-bezier(.175,.885,.32,1.275), opacity 0.15s ease'
+                            : 'transform 0.2s cubic-bezier(.4,0,1,1), opacity 0.15s ease',
+                        minWidth: Math.max(minWidth + 40, 200),
+                        pointerEvents: open ? 'auto' : 'none',
+                        overflow: 'hidden',
+                        zIndex: 100000,
+                    }}>
+                        <div style={{ overflowY: 'auto', maxHeight: 280, padding: '6px 0' }}>
+                            {options.map((o) => {
+                                const isSelected = o.value === value
+                                return (
+                                <div
+                                    key={o.value}
+                                    onClick={() => { onChange(o.value); setOpen(false) }}
+                                    style={{
+                                        padding: '11px 20px',
+                                        fontSize: 16, fontWeight: isSelected ? 600 : 400,
+                                        fontFamily: 'Nunito, sans-serif',
+                                        color: isSelected ? '#147b75' : '#333',
+                                        cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                    }}
+                                >
+                                    {o.label}
+                                    {isSelected && (
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#147b75" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M20 6L9 17l-5-5" />
+                                        </svg>
+                                    )}
+                                </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                </>,
+                document.body
+            )}
         </>
     )
 }
@@ -152,12 +195,20 @@ function Chevron({ open }) {
 }
 
 const FREQ_LABELS = {
+    weekly: 'Per week',
+    fortnightly: 'Per fortnight',
+    monthly: 'Per month',
+    yearly: 'Per year',
+    irregular: 'Irregular',
+    'one-off': 'One-off',
+}
+
+const SCHEDULE_FREQ_LABELS = {
     weekly: 'Weekly',
     fortnightly: 'Fortnightly',
     monthly: 'Monthly',
     yearly: 'Yearly',
-    irregular: 'Per instalment',
-    'one-off': 'One-off',
+    irregular: 'Irregular',
 }
 
 /* ==========================================================================
@@ -175,6 +226,9 @@ export default function IncomeExpenseCard({
     defaultMonths = [],           // for irregular mode
     defaultDates = {},            // for irregular mode
     isExpense = false,
+    icon: IconComponent = null,   // Phosphor icon component
+    iconColor = null,             // icon tint (defaults to accent)
+    nameEditable = false,         // show name input per entry
 }) {
     const [newId, setNewId] = useState(null)
     const addEntry = () => {
@@ -189,41 +243,12 @@ export default function IncomeExpenseCard({
             dates: { ...defaultDates },
             instalmentAmounts: {},
         }])
-        setTimeout(() => {
-            setNewId(null)
-            const el = document.querySelector(`[data-entry-id="${id}"]`)
-            if (el) {
-                const panel = el.closest('.onboarding-panel')
-                if (panel) {
-                    const panelRect = panel.getBoundingClientRect()
-                    const elRect = el.getBoundingClientRect()
-                    const offset = elRect.top - panelRect.top + panel.scrollTop - 10
-                    panel.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
-                } else {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                }
-            }
-        }, 350)
+        setTimeout(() => setNewId(null), 350)
     }
-
-    const [removingIdx, setRemovingIdx] = useState(null)
-    const [collapsingIdx, setCollapsingIdx] = useState(null)
-    const heights = useRef({})
 
     const removeEntry = (idx) => {
         if (entries.length <= 1) return
-        const el = document.querySelector(`[data-entry-${idx}]`)
-        if (el) heights.current[idx] = el.offsetHeight
-        setRemovingIdx(idx)
-        setTimeout(() => {
-            setCollapsingIdx(idx)
-            setTimeout(() => {
-                setRemovingIdx(null)
-                setCollapsingIdx(null)
-                delete heights.current[idx]
-                updateEntries(prev => prev.filter((_, i) => i !== idx))
-            }, 350)
-        }, 200)
+        updateEntries(prev => prev.filter((_, i) => i !== idx))
     }
 
     const updateEntry = (idx, field, value) => {
@@ -247,31 +272,18 @@ export default function IncomeExpenseCard({
                 minHeight: 0,
             }}>
                 {entries.map((entry, idx) => {
-                    const isRemoving = removingIdx === idx
-                    const isCollapsing = collapsingIdx === idx
                     const isNew = entry.id === newId
                     return (
-                    <div key={entry.id || idx} data-entry data-entry-id={entry.id} {...{[`data-entry-${idx}`]: ''}} style={{
-                        marginBottom: isCollapsing ? 0 : 20,
-                        ...(isCollapsing ? {
-                            maxHeight: 0, opacity: 0, overflow: 'hidden',
-                            transition: 'max-height 0.35s ease, margin-bottom 0.35s ease',
-                        } : isRemoving ? {
-                            maxHeight: (heights.current[idx] || 500) + 2,
-                            opacity: 0, overflow: 'hidden', transform: 'scale(0.97)',
-                            transition: 'opacity 0.2s ease, transform 0.2s ease',
-                        } : isNew ? {
+                    <div key={entry.id || idx} data-entry data-entry-id={entry.id} style={{
+                        marginBottom: 20,
+                        ...(isNew ? {
                             animation: 'loanFadeIn 0.35s ease',
                         } : {}),
                     }}>
-                        {(entries.length > 1 || removingIdx !== null) && (
+                        {entries.length > 1 && (
                             <div style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                 margin: idx === 0 ? '0 0 8px' : '16px 0 8px',
-                                maxHeight: (entries.length > 1 && !(removingIdx !== null && entries.length === 2)) ? 30 : 0,
-                                opacity: (entries.length > 1 && !(removingIdx !== null && entries.length === 2)) ? 1 : 0,
-                                overflow: 'hidden',
-                                transition: 'max-height 0.35s ease, opacity 0.25s ease',
                             }}>
                                 <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
                                     {entryLabel} {idx + 1}
@@ -280,6 +292,26 @@ export default function IncomeExpenseCard({
                                     background: 'none', border: 'none', cursor: 'pointer',
                                     fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#d4566a',
                                 }}>Remove</button>
+                            </div>
+                        )}
+                        {nameEditable && (
+                            <div style={{ marginBottom: 10 }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                                    Name
+                                </span>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Birthday money"
+                                    value={entry.label || ''}
+                                    onChange={(e) => updateEntry(idx, 'label', e.target.value)}
+                                    style={{
+                                        width: '100%', border: '1px solid #e8e8e8', borderRadius: 10,
+                                        padding: '0 14px', height: 44, fontSize: 14, fontWeight: 500,
+                                        fontFamily: 'Nunito, sans-serif', color: '#000',
+                                        outline: 'none', boxSizing: 'border-box',
+                                        background: '#fff',
+                                    }}
+                                />
                             </div>
                         )}
                         <EntryCard
@@ -378,6 +410,8 @@ function EntryCard({
         () => Object.values(instalmentAmounts || {}).some(v => parseFloat(String(v || '0').replace(/,/g, '')) > 0)
     )
     const dateActiveRef = useRef(false)
+    const [showFreqPicker, setShowFreqPicker] = useState(frequency === 'yearly')
+    const [scheduleFreq, setScheduleFreq] = useState(entry.scheduleFrequency || 'monthly')
 
     const isIrregular = frequency === 'irregular'
     const months = (monthsProp || defaultMonths)
@@ -429,6 +463,9 @@ function EntryCard({
         }
     }
 
+    // When yearly is selected and user picks a sub-frequency in Schedule card
+    const sf = showFreqPicker ? scheduleFreq : frequency
+
     return (
         <div>
             {/* Amount + frequency */}
@@ -474,11 +511,14 @@ function EntryCard({
                 </div>
                 <CustomSelect
                     value={frequency}
-                    onChange={(v) => updateField('frequency', v)}
+                    onChange={(v) => {
+                        updateField('frequency', v)
+                        setShowFreqPicker(v === 'yearly')
+                    }}
                     options={frequencyOptions.map(f => ({ value: f, label: FREQ_LABELS[f] }))}
                     minWidth={100}
                     triggerStyle={{
-                        width: 130, height: 44, border: '1px solid #e8e8e8',
+                        width: 150, height: 44, border: '1px solid #e8e8e8',
                         borderRadius: 10,
                         padding: '0 28px 0 12px',
                         fontSize: 14, fontWeight: 600,
@@ -491,33 +531,262 @@ function EntryCard({
                 />
             </div>
 
+            {/* === ONE-OFF MODE: just a date picker === */}
+            {frequency === 'one-off' && (<>
+                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                    Schedule
+                </span>
+                <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
+                    padding: '12px 14px', marginBottom: 16,
+                }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                        Date
+                    </span>
+                    <div style={{ position: 'relative' }}>
+                        <span style={{
+                            fontSize: 14, fontWeight: 600, color: '#888',
+                            fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
+                            background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
+                            display: 'inline-block', whiteSpace: 'nowrap',
+                            minWidth: 120, textAlign: 'center',
+                        }}>
+                            {nextDate ? fmt(nextDate) : 'Select date'}
+                        </span>
+                        <input
+                            type="date"
+                            value={nextDate || ''}
+                            onFocus={() => { dateActiveRef.current = true }}
+                            onBlur={() => { dateActiveRef.current = false }}
+                            onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
+                            style={{
+                                position: 'absolute', inset: 0,
+                                opacity: 0, width: '100%', height: '100%',
+                                cursor: 'pointer', fontSize: 16,
+                            }}
+                        />
+                    </div>
+                </div>
+            </>)}
+
+            {/* === WEEKLY/FORTNIGHTLY/MONTHLY/YEARLY: schedule card === */}
+            {(frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly' || frequency === 'yearly' || showFreqPicker) && frequency !== 'irregular' && frequency !== 'one-off' && (<>
+                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                    Schedule
+                </span>
+                <div style={{
+                    border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
+                    marginBottom: 16,
+                }}>
+                    {/* Frequency row (shown when entered via yearly) */}
+                    {showFreqPicker && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '12px 14px',
+                        }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                Payment frequency
+                            </span>
+                            <CustomSelect
+                                value={scheduleFreq}
+                                onChange={(v) => {
+                                    setScheduleFreq(v)
+                                    updateField('scheduleFrequency', v)
+                                }}
+                                options={frequencyOptions.filter(f => f !== 'one-off').map(f => ({ value: f, label: SCHEDULE_FREQ_LABELS[f] || FREQ_LABELS[f] }))}
+                                triggerStyle={{
+                                    fontSize: 14, fontWeight: 600, color: '#888',
+                                    fontFamily: 'Nunito, sans-serif',
+                                    background: '#f8f8f8',
+                                    padding: '6px 28px 6px 12px', borderRadius: 8,
+                                    cursor: 'pointer', whiteSpace: 'nowrap',
+                                    minWidth: 120, textAlign: 'center',
+                                    display: 'inline-block',
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Day of week (weekly/fortnightly) */}
+                    {(sf === 'weekly' || sf === 'fortnightly') && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '12px 14px', borderTop: '1px solid #f3f3f3',
+                        }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                Day of week
+                            </span>
+                            <CustomSelect
+                                value={entry.dayOfWeek || 'monday'}
+                                onChange={(v) => updateField('dayOfWeek', v)}
+                                options={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => ({ value: d.toLowerCase(), label: d }))}
+                                triggerStyle={{
+                                    fontSize: 14, fontWeight: 600, color: '#888',
+                                    fontFamily: 'Nunito, sans-serif',
+                                    background: '#f8f8f8',
+                                    padding: '6px 28px 6px 12px', borderRadius: 8,
+                                    cursor: 'pointer', whiteSpace: 'nowrap',
+                                    minWidth: 120, textAlign: 'center',
+                                    display: 'inline-block',
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Day of month (monthly) */}
+                    {sf === 'monthly' && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '12px 14px', borderTop: '1px solid #f3f3f3',
+                        }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                Day of month
+                            </span>
+                            <CustomSelect
+                                value={entry.dayOfMonth || '1'}
+                                onChange={(v) => updateField('dayOfMonth', v)}
+                                options={[
+                                    ...Array.from({ length: 31 }, (_, i) => {
+                                        const d = i + 1
+                                        const suffix = d === 1 || d === 21 || d === 31 ? 'st' : d === 2 || d === 22 ? 'nd' : d === 3 || d === 23 ? 'rd' : 'th'
+                                        return { value: String(d), label: `${d}${suffix}` }
+                                    }),
+                                    { value: 'last', label: 'Last day' },
+                                ]}
+                                triggerStyle={{
+                                    fontSize: 14, fontWeight: 600, color: '#888',
+                                    fontFamily: 'Nunito, sans-serif',
+                                    background: '#f8f8f8',
+                                    padding: '6px 28px 6px 12px', borderRadius: 8,
+                                    cursor: 'pointer', whiteSpace: 'nowrap',
+                                    minWidth: 120, textAlign: 'center',
+                                    display: 'inline-block',
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Date (yearly) */}
+                    {sf === 'yearly' && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '12px 14px', borderTop: '1px solid #f3f3f3',
+                        }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                Date
+                            </span>
+                            <div style={{ position: 'relative' }}>
+                                <span style={{
+                                    fontSize: 14, fontWeight: 600, color: '#888',
+                                    fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
+                                    background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
+                                    display: 'inline-block', whiteSpace: 'nowrap',
+                                    minWidth: 120, textAlign: 'center',
+                                }}>
+                                    {nextDate ? fmt(nextDate) : 'Select date'}
+                                </span>
+                                <input
+                                    type="date"
+                                    value={nextDate || ''}
+                                    onFocus={() => { dateActiveRef.current = true }}
+                                    onBlur={() => { dateActiveRef.current = false }}
+                                    onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
+                                    style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Start date (weekly/fortnightly/monthly) */}
+                    {(sf === 'weekly' || sf === 'fortnightly' || sf === 'monthly') && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '12px 14px', borderTop: '1px solid #f3f3f3',
+                        }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                Start date <span style={{ fontWeight: 500, color: '#bbb' }}>(optional)</span>
+                            </span>
+                            <div style={{ position: 'relative' }}>
+                                <span style={{
+                                    fontSize: 14, fontWeight: 600, color: '#888',
+                                    fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
+                                    background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
+                                    display: 'inline-block', whiteSpace: 'nowrap',
+                                    minWidth: 120, textAlign: 'center',
+                                }}>
+                                    {nextDate ? fmt(nextDate) : 'Select date'}
+                                </span>
+                                <input
+                                    type="date"
+                                    value={nextDate || ''}
+                                    onFocus={() => { dateActiveRef.current = true }}
+                                    onBlur={() => { dateActiveRef.current = false }}
+                                    onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
+                                    style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* End date (weekly/fortnightly/monthly) */}
+                    {(sf === 'weekly' || sf === 'fortnightly' || sf === 'monthly') && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '12px 14px', borderTop: '1px solid #f3f3f3',
+                        }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                End date <span style={{ fontWeight: 500, color: '#bbb' }}>(optional)</span>
+                            </span>
+                            <div style={{ position: 'relative' }}>
+                                <span style={{
+                                    fontSize: 14, fontWeight: 600, color: '#888',
+                                    fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
+                                    background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
+                                    display: 'inline-block', whiteSpace: 'nowrap',
+                                    minWidth: 120, textAlign: 'center',
+                                }}>
+                                    {entry.endDate ? fmt(entry.endDate) : 'Select date'}
+                                </span>
+                                <input
+                                    type="date"
+                                    value={entry.endDate || ''}
+                                    onFocus={() => { dateActiveRef.current = true }}
+                                    onBlur={() => { dateActiveRef.current = false }}
+                                    onChange={(e) => e.target.value && updateField('endDate', e.target.value)}
+                                    style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            </>)}
+
             {/* === IRREGULAR MODE: month pills + customise === */}
-            {isIrregular && (
+            {(isIrregular || sf === 'irregular') && (
                 <>
-                    <p style={{
-                        fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                        color: '#000', margin: '0 0 10px',
-                    }}>
-                        Which months do you receive payments?
-                    </p>
+                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                        Payment months
+                    </span>
                     <div style={{
-                        border: '1px solid #e8e8e8', borderRadius: 10, background: '#fff',
+                        border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
                         overflow: 'hidden', marginBottom: 16,
                     }}>
                         <div style={{
-                            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
-                            padding: '14px 12px',
+                            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6,
+                            padding: '12px',
                         }}>
                             {ALL_MONTH_KEYS.map(m => {
                                 const selected = months.includes(m)
                                 return (
                                     <button key={m} onClick={() => toggleMonth(m)} style={{
-                                        background: selected ? accent : '#fff',
-                                        color: selected ? '#fff' : '#666',
-                                        border: selected ? `1.5px solid ${accent}` : '1.5px solid #ddd',
-                                        borderRadius: 50, padding: '8px 0',
-                                        fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                                        cursor: 'pointer', transition: 'all 0.2s ease', boxShadow: 'none',
+                                        background: selected ? accent : '#f8f8f8',
+                                        color: selected ? '#fff' : '#888',
+                                        border: 'none',
+                                        borderRadius: 8, padding: '7px 0',
+                                        fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                        cursor: 'pointer', transition: 'all 0.2s ease',
                                     }}>
                                         {SHORT_MONTH[m]}
                                     </button>
@@ -544,14 +813,14 @@ function EntryCard({
                                 }}
                                 style={{
                                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                    cursor: 'pointer', padding: '12px 14px', borderTop: '1px solid #eee',
+                                    cursor: 'pointer', padding: '12px 14px', borderTop: '1px solid #f0f0f0',
                                 }}
                             >
                                 <div>
-                                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
                                         Customise amounts & dates
                                     </span>
-                                    <p style={{ fontSize: 11, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', margin: '2px 0 0' }}>
+                                    <p style={{ fontSize: 11, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#aaa', margin: '2px 0 0' }}>
                                         Optional — set exact amount and date per payment
                                     </p>
                                 </div>
@@ -565,31 +834,35 @@ function EntryCard({
                                 transition: 'max-height 0.35s cubic-bezier(.25,1,.5,1), opacity 0.25s ease',
                             }}>
                                 {months.map((m) => (
-                                    <div key={m}>
+                                    <div key={m} data-month-row style={{ scrollMarginTop: 10 }}>
                                         <div style={{
                                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                            padding: '10px 14px', borderTop: '1px solid #f3f3f3',
+                                            padding: '10px 14px',
                                         }}>
-                                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', minWidth: 70 }}>
+                                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333', minWidth: 70 }}>
                                                 {MONTH_LABELS[m]}
                                             </span>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginRight: -5 }}>
                                                 <div style={{
                                                     display: 'flex', alignItems: 'center', gap: 2,
                                                     background: '#f8f8f8', borderRadius: 8,
                                                     padding: '4px 8px', width: 80, boxSizing: 'border-box',
                                                 }}>
-                                                    <span style={{ fontSize: 14, fontWeight: 600, color: '#999', fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>
+                                                    <span style={{ fontSize: 14, fontWeight: 600, color: '#888', fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>
                                                         {getCurrencySymbol()}
                                                     </span>
                                                     <input
                                                         type="text" inputMode="decimal" placeholder="0.00"
                                                         value={formatDisplay(rawInstalments[m] || '')}
                                                         onChange={(e) => handleInstalmentChange(m, e)}
+                                                        onFocus={(e) => {
+                                                            const row = e.target.closest('[data-month-row]')
+                                                            if (row) setTimeout(() => row.scrollIntoView({ behavior: 'smooth', block: 'start' }), 301)
+                                                        }}
                                                         style={{
                                                             flex: 1, border: 'none', background: 'transparent',
                                                             fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                                            color: '#000', outline: 'none', padding: 0, textAlign: 'left',
+                                                            color: '#888', outline: 'none', padding: 0, textAlign: 'left',
                                                         }}
                                                     />
                                                 </div>
@@ -623,7 +896,7 @@ function EntryCard({
                                                     style={{
                                                         background: 'none', border: 'none', cursor: 'pointer',
                                                         padding: 4, display: 'flex', alignItems: 'center',
-                                                        opacity: months.length > 1 ? 0.4 : 0.15,
+                                                        opacity: months.length > 1 ? 1 : 0.25,
                                                     }}
                                                 >
                                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -638,185 +911,6 @@ function EntryCard({
                         </>)}
                     </div>
                 </>
-            )}
-
-            {/* === ONE-OFF MODE: just a date picker === */}
-            {frequency === 'one-off' && (
-                <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
-                    padding: '12px 14px', marginBottom: 16,
-                }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                        Date
-                    </span>
-                    <div style={{ position: 'relative' }}>
-                        <span style={{
-                            fontSize: 14, fontWeight: 600, color: '#888',
-                            fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                            background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
-                            display: 'inline-block', whiteSpace: 'nowrap',
-                            minWidth: 120, textAlign: 'center',
-                        }}>
-                            {nextDate ? fmt(nextDate) : 'Select date'}
-                        </span>
-                        <input
-                            type="date"
-                            value={nextDate || ''}
-                            onFocus={() => { dateActiveRef.current = true }}
-                            onBlur={() => { dateActiveRef.current = false }}
-                            onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
-                            style={{
-                                position: 'absolute', inset: 0,
-                                opacity: 0, width: '100%', height: '100%',
-                                cursor: 'pointer', fontSize: 16,
-                            }}
-                        />
-                    </div>
-                </div>
-            )}
-
-            {/* === WEEKLY/FORTNIGHTLY/MONTHLY: day + start/end in one card === */}
-            {(frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly') && (<>
-                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
-                    Schedule
-                </span>
-                <div style={{
-                    border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
-                    marginBottom: 16,
-                }}>
-                    {/* Day of week (weekly/fortnightly) */}
-                    {(frequency === 'weekly' || frequency === 'fortnightly') && (
-                        <div style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '12px 14px',
-                        }}>
-                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                                Day of week
-                            </span>
-                            <CustomSelect
-                                value={entry.dayOfWeek || 'monday'}
-                                onChange={(v) => updateField('dayOfWeek', v)}
-                                options={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => ({ value: d.toLowerCase(), label: d }))}
-                            />
-                        </div>
-                    )}
-
-                    {/* Day of month (monthly) */}
-                    {frequency === 'monthly' && (
-                        <div style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                            padding: '12px 14px',
-                        }}>
-                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                                Day of month
-                            </span>
-                            <CustomSelect
-                                value={entry.dayOfMonth || '1'}
-                                onChange={(v) => updateField('dayOfMonth', v)}
-                                options={[
-                                    ...Array.from({ length: 31 }, (_, i) => {
-                                        const d = i + 1
-                                        const suffix = d === 1 || d === 21 || d === 31 ? 'st' : d === 2 || d === 22 ? 'nd' : d === 3 || d === 23 ? 'rd' : 'th'
-                                        return { value: String(d), label: `${d}${suffix}` }
-                                    }),
-                                    { value: 'last', label: 'Last day' },
-                                ]}
-                            />
-                        </div>
-                    )}
-
-                    {/* Start date */}
-                    <div style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '12px 14px', borderTop: '1px solid #f3f3f3',
-                    }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                            Start date <span style={{ fontWeight: 500, color: '#bbb' }}>(optional)</span>
-                        </span>
-                        <div style={{ position: 'relative' }}>
-                            <span style={{
-                                fontSize: 14, fontWeight: 600, color: '#888',
-                                fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                                background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
-                                display: 'inline-block', whiteSpace: 'nowrap',
-                                minWidth: 120, textAlign: 'center',
-                            }}>
-                                {nextDate ? fmt(nextDate) : 'Select date'}
-                            </span>
-                            <input
-                                type="date"
-                                value={nextDate || ''}
-                                onFocus={() => { dateActiveRef.current = true }}
-                                onBlur={() => { dateActiveRef.current = false }}
-                                onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
-                                style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
-                            />
-                        </div>
-                    </div>
-
-                    {/* End date */}
-                    <div style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '12px 14px', borderTop: '1px solid #f3f3f3',
-                    }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                            End date <span style={{ fontWeight: 500, color: '#bbb' }}>(optional)</span>
-                        </span>
-                        <div style={{ position: 'relative' }}>
-                            <span style={{
-                                fontSize: 14, fontWeight: 600, color: '#888',
-                                fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                                background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
-                                display: 'inline-block', whiteSpace: 'nowrap',
-                                minWidth: 120, textAlign: 'center',
-                            }}>
-                                {entry.endDate ? fmt(entry.endDate) : 'Select date'}
-                            </span>
-                            <input
-                                type="date"
-                                value={entry.endDate || ''}
-                                onFocus={() => { dateActiveRef.current = true }}
-                                onBlur={() => { dateActiveRef.current = false }}
-                                onChange={(e) => e.target.value && updateField('endDate', e.target.value)}
-                                style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
-                            />
-                        </div>
-                    </div>
-
-                </div>
-            </>)}
-
-            {/* === YEARLY: next date === */}
-            {frequency === 'yearly' && (
-                <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
-                    padding: '12px 14px', marginBottom: 16,
-                }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
-                        Date
-                    </span>
-                    <div style={{ position: 'relative' }}>
-                        <span style={{
-                            fontSize: 14, fontWeight: 600, color: '#888',
-                            fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                            background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
-                            display: 'inline-block', whiteSpace: 'nowrap',
-                            minWidth: 120, textAlign: 'center',
-                        }}>
-                            {nextDate ? fmt(nextDate) : 'Select date'}
-                        </span>
-                        <input
-                            type="date"
-                            value={nextDate || ''}
-                            onFocus={() => { dateActiveRef.current = true }}
-                            onBlur={() => { dateActiveRef.current = false }}
-                            onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
-                            style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
-                        />
-                    </div>
-                </div>
             )}
         </div>
     )

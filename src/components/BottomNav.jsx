@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, TrendingDown, TrendingUp } from 'react-feather'
-import { PiHouse, PiHouseFill, PiQuestion, PiQuestionFill, PiChatCircle, PiChatCircleFill, PiGear, PiGearFill, PiCalendarBlank, PiArrowLeft, PiArrowLeftBold, PiGraduationCap, PiHandCoins, PiUsers, PiBriefcase, PiDotsThree, PiLightningFill, PiBank, PiPiggyBank, PiRepeat, PiIdentificationCard, PiAirplaneTilt, PiMusicNotes, PiGift, PiDeviceMobile, PiTShirt, PiHeartbeat, PiBookOpen, PiBookOpenFill, PiStorefront, PiLifebuoy, PiLaptop, PiShuffle } from 'react-icons/pi'
+import { PiHouse, PiHouseFill, PiChatCircle, PiChatCircleFill, PiGear, PiGearFill, PiArrowLeftBold, PiGraduationCap, PiHandCoins, PiUsers, PiBriefcase, PiDotsThree, PiLightningFill, PiBank, PiPiggyBank, PiRepeat, PiIdentificationCard, PiAirplaneTilt, PiMusicNotes, PiGift, PiDeviceMobile, PiTShirt, PiHeartbeat, PiBookOpen, PiBookOpenFill, PiStorefront, PiLifebuoy, PiLaptop } from 'react-icons/pi'
 import { analytics, MONEY_ADVICE_EVENTS } from '../lib/analytics/index.js'
 import { getCurrencySymbol } from '../lib/settings'
 import './BottomNav.css'
@@ -11,7 +11,6 @@ export default function BottomNav() {
     const location = useLocation()
     const [fabOpen, setFabOpen] = useState(false)
     const [fabBalanceActive, setFabBalanceActive] = useState(false)
-    const [fabSubMenu, setFabSubMenu] = useState(null)
     const [fabSourcePicker, setFabSourcePicker] = useState(null)
     const [pickerClosing, setPickerClosing] = useState(false)
     const fabRef = useRef(null)
@@ -152,7 +151,6 @@ export default function BottomNav() {
         // After exit animation, clear everything
         setTimeout(() => {
             setFabSourcePicker(null)
-            setFabSubMenu(null)
             setFabOpen(false)
             setTimeout(() => {
                 fabClosingRef.current = false
@@ -231,7 +229,6 @@ export default function BottomNav() {
             setFabOpen(false)
             setTimeout(() => {
                 setPickerClosing(false)
-                setFabSubMenu(null)
                 setFabSourcePicker(null)
                 dispatchAction(action)
             }, 200)
@@ -278,25 +275,19 @@ export default function BottomNav() {
         )
     }
 
-    const showSub = fabSubMenu !== null
-    const isIncome = fabSubMenu === 'income'
-    const isExpense = fabSubMenu === 'expense'
     const showPicker = fabSourcePicker !== null
-    const mainVisible = fabOpen && !showSub && !fabClosing
+    const mainVisible = fabOpen && !showPicker && !fabClosing
     const t = '0.4s cubic-bezier(0.22, 1, 0.36, 1)'
     const tOut = '0.25s cubic-bezier(0.4, 0, 0.2, 1)'
 
-    const isFlexPicker = fabSourcePicker === 'flex-income' || fabSourcePicker === 'flex-expense'
+    const allIncomeSources = [...incomeSources, ...flexIncomeSources]
+    const allExpenseSources = [...expenseSources, ...flexExpenseSources]
     const accentColor = fabSourcePicker === 'income' ? '#147b75'
-        : fabSourcePicker === 'flex-income' ? '#1a9e97'
-            : fabSourcePicker === 'expense' ? '#d4566a'
-                : fabSourcePicker === 'flex-expense' ? '#e8838e'
-                    : '#147b75'
-    const sources = fabSourcePicker === 'income' ? incomeSources
-        : fabSourcePicker === 'expense' ? expenseSources
-            : fabSourcePicker === 'flex-income' ? flexIncomeSources
-                : fabSourcePicker === 'flex-expense' ? flexExpenseSources
-                    : []
+        : fabSourcePicker === 'expense' ? '#d4566a'
+            : '#147b75'
+    const sources = fabSourcePicker === 'income' ? allIncomeSources
+        : fabSourcePicker === 'expense' ? allExpenseSources
+            : []
 
     // Helper for consistent button style
 
@@ -352,8 +343,7 @@ export default function BottomNav() {
                 {/* L1 + L2 buttons (hidden when L3 picker is showing) */}
                 <div style={{
                     display: 'flex',
-                    alignItems: 'flex-end', justifyContent: showSub ? 'center' : 'space-between',
-                    gap: showSub ? 0 : 0,
+                    alignItems: 'flex-end', justifyContent: 'space-between',
                     width: '100%', maxWidth: 400, padding: '0 30px',
                     position: 'relative',
                     opacity: showPicker ? 0 : 1,
@@ -366,31 +356,17 @@ export default function BottomNav() {
 
                     {/* LEFT SLOT */}
                     <div style={{ width: 110, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative', flexShrink: 0 }}>
-                        {fabBtn(mainVisible, 'translateY(0) scale(1)', showSub ? 'translateY(8px) scale(0.5)' : 'translateY(30px) scale(0.4)', '0s',
-                            () => { if (mainVisible) setFabSubMenu('expense') },
+                        {fabBtn(mainVisible, 'translateY(0) scale(1)', 'translateY(30px) scale(0.4)', '0s',
+                            () => { if (mainVisible) setFabSourcePicker('expense') },
                             '#e06470', <TrendingDown size={24} color="#fff" strokeWidth={2.2} />, 'ADD EXPENSE',
                             '0 4px 16px rgba(224,100,112,0.35), 0 -8px 40px 10px rgba(246,246,246,0.95)',
                             mainVisible && !fabOpen ? `all ${tOut}` : (mainVisible ? `opacity 0.25s ease, transform 0.25s ease` : undefined)
                         )}
-                        {/* Expense: REGULAR on left */}
-                        {fabBtn(isExpense && !fabClosing, 'translateX(0) scale(1)', fabClosing ? 'translateY(30px) scale(0.4)' : 'translateY(0) scale(0.85)', '0s',
-                            () => setFabSourcePicker('expense'),
-                            '#d4566a', <PiCalendarBlank size={22} color="#fff" />, 'REGULAR',
-                            '0 4px 16px rgba(212,86,106,0.35)',
-                            (isExpense && !fabClosing) ? `opacity 0.25s ease, transform 0.25s ease` : `opacity 0.2s ease, transform 0.2s ease`
-                        )}
-                        {/* Income: REGULAR on left */}
-                        {fabBtn(isIncome && !fabClosing, 'translateX(0) scale(1)', fabClosing ? 'translateY(30px) scale(0.4)' : 'translateY(0) scale(0.85)', '0s',
-                            () => setFabSourcePicker('income'),
-                            '#147b75', <PiCalendarBlank size={22} color="#fff" />, 'REGULAR',
-                            '0 4px 16px rgba(20,123,117,0.35)',
-                            (isIncome && !fabClosing) ? `opacity 0.25s ease, transform 0.25s ease` : `opacity 0.2s ease, transform 0.2s ease`
-                        )}
                     </div>
 
-                    {/* CENTER SLOT — collapses when in sub-menu */}
-                    <div style={{ width: showSub ? 0 : 110, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative', flexShrink: 0, overflow: 'visible', transition: 'width 0.2s ease' }}>
-                        {fabBtn(mainVisible, 'translateY(0) scale(1)', showSub ? 'translateY(8px) scale(0.5)' : 'translateY(30px) scale(0.4)', '0s',
+                    {/* CENTER SLOT */}
+                    <div style={{ width: 110, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative', flexShrink: 0, overflow: 'visible' }}>
+                        {fabBtn(mainVisible, 'translateY(0) scale(1)', 'translateY(30px) scale(0.4)', '0s',
                             () => { if (mainVisible) handleAction('update-balance') },
                             '#EC8C17',
                             <span style={{ fontSize: 24, fontWeight: 800, color: '#fff', fontFamily: 'Nunito, sans-serif', lineHeight: 1 }}>{getCurrencySymbol()}</span>,
@@ -402,25 +378,11 @@ export default function BottomNav() {
 
                     {/* RIGHT SLOT */}
                     <div style={{ width: 110, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative', flexShrink: 0 }}>
-                        {fabBtn(mainVisible, 'translateY(0) scale(1)', showSub ? 'translateY(8px) scale(0.5)' : 'translateY(30px) scale(0.4)', '0s',
-                            () => { if (mainVisible) setFabSubMenu('income') },
+                        {fabBtn(mainVisible, 'translateY(0) scale(1)', 'translateY(30px) scale(0.4)', '0s',
+                            () => { if (mainVisible) setFabSourcePicker('income') },
                             '#147b75', <TrendingUp size={24} color="#fff" strokeWidth={2.2} />, 'ADD INCOME',
                             '0 4px 16px rgba(20,123,117,0.35), 0 -8px 40px 10px rgba(246,246,246,0.95)',
                             mainVisible && !fabOpen ? `all ${tOut}` : (mainVisible ? `opacity 0.25s ease, transform 0.25s ease` : undefined)
-                        )}
-                        {/* Expense: FLEXIBLE on right */}
-                        {fabBtn(isExpense && !fabClosing, 'translateX(0) scale(1)', fabClosing ? 'translateY(30px) scale(0.4)' : 'translateY(0) scale(0.85)', '0s',
-                            () => setFabSourcePicker('flex-expense'),
-                            '#e8838e', <PiShuffle size={22} color="#fff" />, 'FLEXIBLE',
-                            '0 4px 16px rgba(232,131,142,0.35)',
-                            (isExpense && !fabClosing) ? `opacity 0.25s ease, transform 0.25s ease` : `opacity 0.2s ease, transform 0.2s ease`
-                        )}
-                        {/* Income: FLEXIBLE on right */}
-                        {fabBtn(isIncome && !fabClosing, 'translateX(0) scale(1)', fabClosing ? 'translateY(30px) scale(0.4)' : 'translateY(0) scale(0.85)', '0s',
-                            () => setFabSourcePicker('flex-income'),
-                            '#1a9e97', <PiShuffle size={22} color="#fff" />, 'FLEXIBLE',
-                            '0 4px 16px rgba(26,158,151,0.35)',
-                            (isIncome && !fabClosing) ? `opacity 0.25s ease, transform 0.25s ease` : `opacity 0.2s ease, transform 0.2s ease`
                         )}
                     </div>
                 </div>
@@ -488,7 +450,8 @@ export default function BottomNav() {
                                         el.style.transform = 'scale(1.1)'
                                         el.style.opacity = '0'
                                         setTimeout(() => {
-                                            handleAction(isFlexPicker ? `add-flex:${src.id}:${fabSourcePicker === 'flex-income' ? 'income' : 'expense'}` : `add-source:${src.id}:${fabSourcePicker}`)
+                                            const isFlex = src.id.startsWith('flex_')
+                                            handleAction(isFlex ? `add-flex:${src.id}:${fabSourcePicker}` : `add-source:${src.id}:${fabSourcePicker}`)
                                         }, 150)
                                     }, 120)
                                 }}
@@ -528,11 +491,9 @@ export default function BottomNav() {
                             }
                             if (!fabOpen) {
                                 if (location.pathname !== '/dashboard') navigate('/dashboard')
-                                setFabSubMenu(null); setFabSourcePicker(null); setFabOpen(true)
+                                setFabSourcePicker(null); setFabOpen(true)
                             } else if (showPicker) {
                                 setFabSourcePicker(null)
-                            } else if (showSub) {
-                                setFabSubMenu(null)
                             } else {
                                 closeFab()
                             }
@@ -554,15 +515,15 @@ export default function BottomNav() {
                             }}>{getCurrencySymbol()}</span>
                             <PiArrowLeftBold size={26} color="#555" style={{
                                 position: 'absolute',
-                                opacity: (showPicker || showSub) && !fabClosing && !fabBalanceActive ? 1 : 0,
-                                transform: (showPicker || showSub) && !fabClosing && !fabBalanceActive ? 'rotate(0deg) scale(1)' : 'rotate(90deg) scale(0)',
-                                transition: (showPicker || showSub) && !fabClosing
+                                opacity: showPicker && !fabClosing && !fabBalanceActive ? 1 : 0,
+                                transform: showPicker && !fabClosing && !fabBalanceActive ? 'rotate(0deg) scale(1)' : 'rotate(90deg) scale(0)',
+                                transition: showPicker && !fabClosing
                                     ? 'opacity 0.2s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
                                     : 'opacity 0.15s ease, transform 0.2s ease',
                             }} />
                             <Plus size={26} color={(fabOpen && !fabClosing) ? '#555' : '#fff'} strokeWidth={2.5} style={{
-                                opacity: fabBalanceActive ? 0 : ((showPicker || showSub) && !fabClosing ? 0 : 1),
-                                transform: fabBalanceActive ? 'scale(0)' : ((showPicker || showSub) && !fabClosing ? 'rotate(-90deg) scale(0)' : (fabOpen && !fabClosing) ? 'rotate(225deg) scale(1)' : 'rotate(0deg) scale(1)'),
+                                opacity: fabBalanceActive ? 0 : (showPicker && !fabClosing ? 0 : 1),
+                                transform: fabBalanceActive ? 'scale(0)' : (showPicker && !fabClosing ? 'rotate(-90deg) scale(0)' : (fabOpen && !fabClosing) ? 'rotate(225deg) scale(1)' : 'rotate(0deg) scale(1)'),
                                 transition: (fabOpen && !fabClosing)
                                     ? 'opacity 0.2s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.5s ease'
                                     : 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s ease, opacity 0.15s ease',

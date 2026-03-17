@@ -21,61 +21,36 @@ export const STEPS = [
         heading: 'Where do you regularly receive money from?',
         subtitle: "Enter any income that you're almost certain you're going to receive."
     },
-    {
-        id: 'maintenanceLoan',
-        heading: 'How much is your maintenance loan?',
-        subtitle: "Enter the loan you're given for rent and living costs."
-    },
-    {
-        id: 'bursary',
-        heading: 'Do you receive any bursaries?',
-        subtitle: 'Include university bursaries or grants.'
-    },
-    {
-        id: 'familyFriends',
-        heading: 'How much do you receive from family and friends?',
-        subtitle: 'Include any regular financial support from family or friends.'
-    },
-    {
-        id: 'work',
-        heading: 'How much do you earn from work?',
-        subtitle: 'Include part-time jobs, freelancing, or any paid work.'
-    },
-    {
-        id: 'otherIncome',
-        heading: 'What other income do you receive?',
-        subtitle: 'Include any other regular income not listed above.'
-    },
-    {
-        id: 'rent',
-        heading: 'How much is your accommodation rent?',
-        subtitle: 'Include your total rent amount — we\'ll work out the rest.'
-    },
+    // ── Income category steps (shown if selected) ──
+    { id: 'studentFinance', heading: 'Student Finance', subtitle: 'Maintenance loans or grants (usually paid in three big chunks).' },
+    { id: 'bursary', heading: 'Bursaries', subtitle: 'Extra grants or "free" money from the uni.' },
+    { id: 'job', heading: 'Job', subtitle: 'Wages from part-time work, shifts, or "gig" roles.' },
+    { id: 'familySupport', heading: 'Family Support', subtitle: 'Regular help or one-off gifts from family.' },
+    { id: 'savingsIncome', heading: 'Savings', subtitle: 'Money moved over from a separate savings pot.' },
+    { id: 'sideHustles', heading: 'Side Hustles', subtitle: 'Selling clothes online, tutoring, or freelance projects.' },
+    { id: 'benefits', heading: 'Benefits', subtitle: 'Universal Credit, PIP, or Child Benefit.' },
+    { id: 'otherIncome', heading: 'Other Income', subtitle: 'Any other income you want to add!' },
     {
         id: 'regularExpenses',
         heading: 'What regular expenses do you have?',
         subtitle: 'Select any expenses you pay regularly.'
     },
-    {
-        id: 'bills',
-        heading: 'How much do you spend on bills?',
-        subtitle: 'Include phone, internet, energy, water, and any other regular bills.'
-    },
-    {
-        id: 'uniFees',
-        heading: 'How much are your university fees?',
-        subtitle: 'Most UK students pay £9,250 per year.'
-    },
-    {
-        id: 'savingsInvestments',
-        heading: 'How much do you save or invest?',
-        subtitle: 'Include any regular contributions to savings or investments.'
-    },
-    {
-        id: 'otherExpense',
-        heading: 'What other expenses do you have?',
-        subtitle: 'Include any other regular expenses not listed above.'
-    },
+    // ── Expense category steps (shown if selected) ──
+    { id: 'uniFees', heading: 'University Fees', subtitle: 'Only put these down if the money comes out of your bank account.' },
+    { id: 'rent', heading: 'Rent / Mortgage', subtitle: 'Halls, private landlords, or home payments.' },
+    { id: 'bills', heading: 'Bills', subtitle: 'Gas, electric, water, and Wi-Fi!' },
+    { id: 'phoneSubscriptions', heading: 'Phone & Subscriptions', subtitle: 'Monthly mobile bills, Spotify, Netflix, or the gym.' },
+    { id: 'holidayTrips', heading: 'Holiday & Trips', subtitle: 'Estimate how much you plan to spend on any upcoming trips.' },
+    { id: 'savingsGoals', heading: 'Savings Goals', subtitle: "Enter how much money you'd like to put into savings." },
+    { id: 'predictableTravel', heading: 'Predictable Travel', subtitle: "Any travel costs that you know exactly how much you'll pay for." },
+    { id: 'bigGifts', heading: 'Big Gifts', subtitle: "If you know when and how much it'll cost, enter it here." },
+    { id: 'rentalDeposit', heading: 'Rental Deposit', subtitle: "You'll get this back but you need to be aware of it going out!" },
+    { id: 'insurance', heading: 'Insurance', subtitle: 'Protecting your laptop, bike, or car.' },
+    { id: 'sendingMoneyHome', heading: 'Sending Money Home', subtitle: 'Enter any money that you send back to support family.' },
+    { id: 'councilTax', heading: 'Council Tax', subtitle: '(Only if you\'re living with non-students).' },
+    { id: 'loanRepayment', heading: 'Loan Interest & Repayment', subtitle: "Money you're paying back on any debt." },
+    { id: 'graduation', heading: 'Graduation', subtitle: 'Gown hire and graduation tickets (final year!)' },
+    { id: 'otherExpense', heading: 'Other Expenses', subtitle: 'Any other expenses you want to add!' },
     {
         id: 'weeklySpend',
         heading: 'How much do you typically spend each week?',
@@ -342,8 +317,35 @@ export const INITIAL_FORM_DATA = {
     overdraft: '',
     incomeSources: [],
     expenseSources: [],
-    savings: '',
 
+    // ── Category entry arrays (IncomeExpenseCard format) ──
+    // Each entry: { id, amount, frequency, nextDate, endDate, dayOfWeek, dayOfMonth, months, dates, instalmentAmounts }
+    studentFinanceEntries: [],
+    bursaryEntries: [],
+    jobEntries: [],
+    familySupportEntries: [],
+    savingsIncomeEntries: [],
+    sideHustlesEntries: [],
+    benefitsEntries: [],
+    otherIncomeEntries: [],
+
+    uniFeesEntries: [],
+    rentEntries: [],
+    billsEntries: [],
+    phoneSubscriptionsEntries: [],
+    holidayTripsEntries: [],
+    savingsGoalsEntries: [],
+    predictableTravelEntries: [],
+    bigGiftsEntries: [],
+    rentalDepositEntries: [],
+    insuranceEntries: [],
+    sendingMoneyHomeEntries: [],
+    councilTaxEntries: [],
+    loanRepaymentEntries: [],
+    graduationEntries: [],
+    otherExpenseEntries: [],
+
+    // ── Legacy fields (kept for backward compat during migration) ──
     studentLoan: null,
     loanAmount: '',
     loanMonths: [...DEFAULT_LOAN_MONTHS],
@@ -351,6 +353,11 @@ export const INITIAL_FORM_DATA = {
     loanDates: {},
     instalmentDates: [],
     instalmentAmounts: {},
+    maintenanceLoans: [],
+    bursaries: [],
+    familyEntries: [],
+    otherIncomes: [],
+    otherExpenses: [],
 
     rentAmount: '',
     rentAmountPeriod: 'monthly',
@@ -358,60 +365,17 @@ export const INITIAL_FORM_DATA = {
     rentNextDate: '',
     rentTermDates: {},
     rentQuarterlyDates: {},
-    rentVariesByTerm: false,
-    rentNonTermAmount: '',
     rentStartDate: '',
     rentEndDate: '',
 
     billsAmount: '',
     billsAmountPeriod: 'monthly',
     billsFrequency: 'monthly',
-    billsQuarterlyDates: {},
-    billsVariesByTerm: false,
-    billsNonTermAmount: '',
-    billsStartDate: '',
-    billsEndDate: '',
 
     uniFeesAmount: '9250',
     uniFeesAmountPeriod: 'yearly',
     uniFeesFrequency: 'yearly',
     uniFeesNextDate: '2025-10-27',
-    uniFeesTermDates: {},
-    uniFeesQuarterlyDates: {},
-    uniFeesVariesByTerm: false,
-    uniFeesNonTermAmount: '',
-
-    familyNextDate: '',
-    familyAmountPeriod: 'monthly',
-    familyTermDates: {},
-    familyQuarterlyDates: {},
-
-    otherIncomeNextDate: '',
-    otherIncomeAmountPeriod: 'monthly',
-    otherIncomeTermDates: {},
-    otherIncomeQuarterlyDates: {},
-
-    otherIncomes: [],
-    otherExpenses: [],
-
-    savingsInvAmount: '',
-    savingsInvAmountPeriod: 'monthly',
-    savingsInvFrequency: 'monthly',
-    savingsInvNextDate: '',
-    savingsInvTermDates: {},
-    savingsInvQuarterlyDates: {},
-    savingsInvVariesByTerm: false,
-    savingsInvNonTermAmount: '',
-
-    otherExpenseAmount: '',
-    otherExpenseAmountPeriod: 'monthly',
-    otherExpenseFrequency: 'monthly',
-    otherExpenseLabel: '',
-    otherExpenseNextDate: '',
-    otherExpenseTermDates: {},
-    otherExpenseQuarterlyDates: {},
-    otherExpenseVariesByTerm: false,
-    otherExpenseNonTermAmount: '',
 
     bursary: null,
     bursaryAmount: '',

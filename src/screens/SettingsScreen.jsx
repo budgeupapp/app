@@ -1376,11 +1376,30 @@ export default function SettingsScreen() {
           </div>
         </div>
 
+        {/* ABOUT */}
+        <div style={{ marginTop: 24 }}>
+          <div style={{ background: '#f5f7f7', borderRadius: 14, padding: '18px 16px' }}>
+            <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: '0 0 8px' }}>About Budge Up</p>
+            <p style={{ fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#666', margin: 0, lineHeight: 1.6 }}>
+              Budge Up is an early-stage startup founded by current students at the University of Bristol (and the University of Costa Rica!). We realised that traditional budgeting is designed for adults on monthly salaries, not the irregularity of student finances. So, we're building a budgeting app that actually works for students! We're hoping to keep the app free for students by having universities pay for it (hence your feedback is so useful!). If you want to stay in the loop on our progress, you can sign up to our newsletter for behind-the-scenes updates.
+            </p>
+          </div>
+        </div>
+
         {/* APP INFO */}
         <div style={{ textAlign: 'center', marginTop: 24, marginBottom: 20 }}>
           <Text type="secondary" style={{ fontSize: 13 }}>
             Budge Up v0.2.0
           </Text>
+        </div>
+
+        {/* LEGAL FOOTER */}
+        <div style={{ textAlign: 'center', marginBottom: 40, padding: '0 24px' }}>
+          <p style={{ fontSize: 11, color: '#bbb', fontFamily: 'Nunito, sans-serif', fontWeight: 600, lineHeight: 1.6, margin: 0 }}>
+            Budge Up is a trading name of Budge Up Ltd<br />
+            Registered in England and Wales. Company No. 16927101<br />
+            Registered Address: 61 Bridge Street, Kington, HR5 3DJ
+          </p>
         </div>
 
       </div>

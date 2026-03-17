@@ -4,37 +4,19 @@ import { getCurrencySymbol, getGraphStart, setGraphStart } from '../lib/settings
 import { Button, Input, Modal, Radio, Typography, message } from 'antd'
 import StepProgress from '../components/StepProgress'
 import NativeSelect from '../components/NativeSelect'
-import incomeLoan from '../assets/income-loan.svg'
-import incomeFamily from '../assets/income-friends.svg'
-import incomeWork from '../assets/income-work.svg'
-import iconOtherIncome from '../assets/icon-other-income.svg'
-import expenseRent from '../assets/expense-rent.svg'
-import expenseBills from '../assets/expense-bills.svg'
-import expenseUnifees from '../assets/expense-unifees.svg'
-import expenseSavings from '../assets/expense-savings.svg'
-import iconOtherExpense from '../assets/icon-other-expense.svg'
-import incomeBursary from '../assets/income-family.svg'
 import variableWeeklySpend from '../assets/variable-weekly-spend.svg'
 import variableOneOff from '../assets/variable-one-off.svg'
 import TermDatesStep from './TermDatesStep'
 import TermGraph, { refreshAY, AY_START, AY_END } from '../components/TermGraph'
 import BankBalanceStep from './BankBalanceStep'
 import RegularIncomeStep from './RegularIncomeStep'
-import MaintenanceLoanStep from './MaintenanceLoanStep'
-import BursaryStep from './BursaryStep'
-import FamilyFriendsStep from './FamilyFriendsStep'
-import WorkIncomeStep from './WorkIncomeStep'
-import OtherIncomeStep from './OtherIncomeStep'
-import RentStep from './RentStep'
+import CategoryStep from './CategoryStep'
 import RegularExpensesStep from './RegularExpensesStep'
-import BillsStep from './BillsStep'
-import UniFeesStep from './UniFeesStep'
-import SavingsInvestmentsStep from './SavingsInvestmentsStep'
-import OtherExpenseStep from './OtherExpenseStep'
 import OverdraftStep from './OverdraftStep'
 import OneOffItemsStep from './OneOffItemsStep'
 import WeeklySpendStep from './WeeklySpendStep'
-import { SOURCE_ICONS } from './Dashboard'
+import { SOURCE_ICONS } from '../config/categories'
+import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORY_MAP, SOURCE_ICONS as CATEGORY_SOURCE_ICONS } from '../config/categories'
 import { PiShuffle, PiShoppingCart, PiTrendUp, PiTrendDown } from 'react-icons/pi'
 import { supabase } from '../lib/supabaseClient'
 import { saveCashflowForecast, saveUserFinances, saveTermDates, saveBalanceHistory } from '../lib/api'
@@ -171,608 +153,74 @@ function buildGraphEvents(formData) {
     const removedSet = new Set(formData.removedEvents || [])
     const ayEnd = AY_END
 
-    // Maintenance loan income events (supports multiple loans)
-    if (formData.incomeSources?.includes('maintenance_loan')) {
-        const loans = formData.maintenanceLoans || [{
-            amount: formData.loanAmount || '',
-            months: formData.loanMonths || DEFAULT_LOAN_MONTHS,
-            dates: formData.loanDates || {},
-            instalmentAmounts: formData.instalmentAmounts || {},
-        }]
-        for (const loan of loans) {
-            const months = loan.months || DEFAULT_LOAN_MONTHS
-            const totalAmount = parseFloat(String(loan.amount || '0').replace(/,/g, ''))
+    // Generic category events (income + expense)
+    const ALL_CATS = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+    for (const cat of ALL_CATS) {
+        const isIncome = INCOME_CATEGORIES.includes(cat)
+        const sourceList = isIncome ? formData.incomeSources : formData.expenseSources
+        if (!sourceList?.includes(cat.id)) continue
 
-            const loanDateObjs = months.map(m => ({ date: loan.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
-            const loanAmounts = distributeExcludingRemoved(totalAmount, loanDateObjs, 'loan', removedSet)
-            for (let mi = 0; mi < months.length; mi++) {
-                const month = months[mi]
-                const date = loan.dates?.[month] || MONTH_KEY_TO_DATE[month]
-                if (!date) continue
-
-                const instalmentAmt = parseFloat(String(loan.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
-                const amount = instalmentAmt > 0 ? instalmentAmt : (totalAmount > 0 ? loanAmounts[mi] : 0)
-
-                if (amount <= 0) continue
-
-                events.push({
-                    date,
-                    amount,
-                    type: 'income',
-                    label: 'Loan Instalment',
-                    sublabel: `${MONTH_SHORT[month]} loan payment`,
-                    editType: 'loan',
-                    editMonth: month,
-                })
-            }
-        }
-    }
-
-    // Bursary income events (supports multiple bursaries)
-    if (formData.incomeSources?.includes('bursary')) {
-        const DEFAULT_BURSARY_MONTHS = ['october', 'february', 'march']
-        const DEFAULT_BURSARY_DATES = { october: '2025-10-27', february: '2026-02-09', march: '2026-03-30' }
-        const bursaries = formData.bursaries || [{
-            amount: formData.bursaryAmount || '',
-            months: formData.bursaryMonths || DEFAULT_BURSARY_MONTHS,
-            dates: formData.bursaryDates || DEFAULT_BURSARY_DATES,
-            instalmentAmounts: formData.bursaryInstalmentAmounts || {},
-        }]
-        for (const bursary of bursaries) {
-            const months = bursary.months || DEFAULT_BURSARY_MONTHS
-            const totalAmount = parseFloat(String(bursary.amount || '0').replace(/,/g, ''))
-            const bDates = bursary.dates || DEFAULT_BURSARY_DATES
-
-            const bursaryDateObjs = months.map(m => ({ date: bDates[m] || DEFAULT_BURSARY_DATES[m] || MONTH_KEY_TO_DATE[m] }))
-            const bursaryAmounts = distributeExcludingRemoved(totalAmount, bursaryDateObjs, 'bursary', removedSet)
-            for (let mi = 0; mi < months.length; mi++) {
-                const month = months[mi]
-                const date = bDates[month] || DEFAULT_BURSARY_DATES[month] || MONTH_KEY_TO_DATE[month]
-                if (!date) continue
-                const instalmentAmt = parseFloat(String(bursary.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
-                const amount = instalmentAmt > 0 ? instalmentAmt : (totalAmount > 0 ? bursaryAmounts[mi] : 0)
-                if (amount <= 0) continue
-                events.push({
-                    date, amount, type: 'income',
-                    label: 'Bursary',
-                    sublabel: `${MONTH_SHORT[month]} bursary`,
-                    editType: 'bursary', editMonth: month,
-                })
-            }
-        }
-    }
-
-    // Family/friends income events (supports multiple entries)
-    if (formData.incomeSources?.includes('family_friends')) {
-        const familyEntries = formData.familyEntries || [{
-            amount: formData.familyAmount || '',
-            frequency: formData.familyFrequency || 'monthly',
-            nextDate: formData.familyNextDate || '',
-            months: [],
-            dates: {},
-            instalmentAmounts: {},
-        }]
-        for (const entry of familyEntries) {
+        const entries = formData[cat.formKey] || []
+        for (const entry of entries) {
             const amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
             if (amt <= 0) continue
-            const freq = entry.frequency || 'monthly'
+            const type = isIncome ? 'income' : 'expense'
+            const freq = entry.frequency || cat.defaultFrequency
 
             if (freq === 'irregular') {
-                // Irregular: use month pills like maintenance loan
                 const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
+                if (months.length === 0) continue
                 const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
-                const amounts = distributeExcludingRemoved(amt, dateObjs, 'family', removedSet)
+                const amounts = distributeExcludingRemoved(amt, dateObjs, cat.id, removedSet)
                 for (let mi = 0; mi < months.length; mi++) {
                     const month = months[mi]
                     const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
                     if (!date) continue
                     const instAmt = parseFloat(String(entry.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
-                    const amount = instAmt > 0 ? instAmt : (amt > 0 ? amounts[mi] : 0)
+                    const amount = instAmt > 0 ? instAmt : amounts[mi]
                     if (amount <= 0) continue
-                    events.push({ date, amount, type: 'income', label: 'Family/Friends', sublabel: `${MONTH_SHORT[month]} support`, editType: 'family', editMonth: month })
+                    events.push({ date, amount, type, label: cat.label, sublabel: `${MONTH_SHORT[month]} ${cat.label.toLowerCase()}`, editType: cat.id, editMonth: month })
                 }
-            } else if (freq === 'weekly') {
-                let d = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
-                while (d > AY_START) d = new Date(d.getTime() - 7 * 86400000)
-                while (d < AY_START) d = new Date(d.getTime() + 7 * 86400000)
+            } else if (freq === 'one-off') {
+                if (entry.nextDate) {
+                    events.push({ date: entry.nextDate, amount: amt, type, label: cat.label, sublabel: 'One-off', editType: cat.id })
+                }
+            } else if (freq === 'weekly' || freq === 'fortnightly') {
+                const interval = freq === 'weekly' ? 7 : 14
+                const startDate = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
+                let d = new Date(startDate)
+                if (!entry.nextDate) {
+                    while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
+                    while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
+                }
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
-                while (d <= endDate) { events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Weekly support', editType: 'family' }); d = new Date(d.getTime() + 7 * 86400000) }
-            } else if (freq === 'fortnightly') {
-                let d = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
-                while (d > AY_START) d = new Date(d.getTime() - 14 * 86400000)
-                while (d < AY_START) d = new Date(d.getTime() + 14 * 86400000)
-                const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
-                while (d <= endDate) { events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Fortnightly support', editType: 'family' }); d = new Date(d.getTime() + 14 * 86400000) }
+                while (d <= endDate) {
+                    if (d >= AY_START) {
+                        events.push({ date: toLocalDate(d), amount: amt, type, label: cat.label, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${cat.label.toLowerCase()}`, editType: cat.id })
+                    }
+                    d = new Date(d.getTime() + interval * 86400000)
+                }
             } else if (freq === 'monthly') {
                 const domRaw = entry.dayOfMonth || '1'
                 const isLast = domRaw === 'last'
                 const domTarget = isLast ? 31 : parseInt(domRaw) || 1
-                // Generate monthly events, clamping to last day of month for shorter months
+                const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
+                const earliest = startFrom > AY_START ? startFrom : AY_START
+                const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
                 let month = AY_START.getMonth()
                 let year = AY_START.getFullYear()
                 for (let i = 0; i < 13; i++) {
                     const lastDay = new Date(year, month + 1, 0).getDate()
                     const day = Math.min(domTarget, lastDay)
                     const d = new Date(year, month, day)
-                    if (d >= AY_START && d <= ayEnd) {
-                        events.push({ date: toLocalDate(d), amount: amt, type: 'income', label: 'Family/Friends', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} support`, editType: 'family' })
+                    if (d >= earliest && d <= endDate) {
+                        events.push({ date: toLocalDate(d), amount: amt, type, label: cat.label, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${cat.label.toLowerCase()}`, editType: cat.id })
                     }
                     month++
                     if (month > 11) { month = 0; year++ }
                 }
             } else if (freq === 'yearly') {
-                events.push({ date: entry.nextDate || ayStartStr(), amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'Yearly support', editType: 'family' })
-            } else if (freq === 'one-off') {
-                if (entry.nextDate) events.push({ date: entry.nextDate, amount: amt, type: 'income', label: 'Family/Friends', sublabel: 'One-off payment', editType: 'family' })
-            }
-        }
-    }
-
-    // Work events
-    if (formData.incomeSources?.includes('work')) {
-        const workAmt = parseFloat(String(formData.workAmount || '0').replace(/,/g, ''))
-        const freq = formData.workFrequency || 'monthly'
-        const workAmtPeriod = formData.workAmountPeriod || (formData.workEntryMode === 'yearly' ? 'yearly' : freq)
-        const isYearlyWork = workAmtPeriod === 'yearly'
-        const onlyTermTimeWork = isYearlyWork && formData.workVariesByTerm
-
-        if (workAmt > 0 && freq) {
-            const ayStart = AY_START
-            const ayEnd = AY_END
-            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
-            const yearlyWork = workAmt * (YM[workAmtPeriod] || 1)
-
-            if (isYearlyWork) {
-                const allDates = []
-                if (freq === 'weekly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly income' }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (freq === 'monthly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
-                    const dom = d.getDate()
-                    while (d > ayStart) d = addMonths(d, -1, dom)
-                    while (d < ayStart) d = addMonths(d, 1, dom)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income` }); d = addMonths(d, 1, dom) }
-                } else if (freq === 'termly') {
-                    const overrides = formData.workTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} income` }) }
-                } else if (freq === 'quarterly') {
-                    const qDates = formData.workQuarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} income` })
-                } else if (freq === 'yearly') {
-                    allDates.push({ date: formData.workNextDate || ayStartStr(), sublabel: 'Yearly income' })
-                }
-                const dates = onlyTermTimeWork ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
-                if (dates.length > 0) {
-                    const amounts = distributeExcludingRemoved(yearlyWork, dates, 'work', removedSet)
-                    for (let i = 0; i < dates.length; i++) {
-                        events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: 'Work', sublabel: dates[i].sublabel, editType: 'work' })
-                    }
-                }
-            } else {
-                const workNonTermAmt = formData.workVariesByTerm ? parseFloat(String(formData.workNonTermAmount || '0').replace(/,/g, '')) : workAmt
-                const getWorkAmt = (ds) => formData.workVariesByTerm ? (isInTerm(ds, terms) ? workAmt : workNonTermAmt) : workAmt
-                if (freq === 'weekly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: 'Weekly income', editType: 'work' }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (freq === 'monthly') {
-                    let d = formData.workNextDate ? new Date(formData.workNextDate + 'T00:00:00') : new Date(AY_START)
-                    const dom = d.getDate()
-                    while (d > ayStart) d = addMonths(d, -1, dom)
-                    while (d < ayStart) d = addMonths(d, 1, dom)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getWorkAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: 'Work', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} income`, editType: 'work' }); d = addMonths(d, 1, dom) }
-                } else if (freq === 'termly') {
-                    const overrides = formData.workTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: workAmt, type: 'income', label: 'Work', sublabel: `${term.name} income`, editType: 'work' }) }
-                } else if (freq === 'quarterly') {
-                    const qDates = formData.workQuarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getWorkAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: 'Work', sublabel: `Q${i + 1} income`, editType: 'work' }) }
-                } else if (freq === 'yearly') {
-                    if (workAmt > 0) events.push({ date: formData.workNextDate || ayStartStr(), amount: workAmt, type: 'income', label: 'Work', sublabel: 'Yearly income', editType: 'work' })
-                }
-            }
-        }
-    }
-
-
-
-    // Other income events - loop over otherIncomes array
-    for (const inst of (formData.otherIncomes || [])) {
-        const otherAmt = parseFloat(String(inst.amount || '0').replace(/,/g, ''))
-        const freq = inst.frequency || 'monthly'
-        const lbl = inst.label || 'Other Income'
-        const otherAmtPeriod = inst.amountPeriod || freq || 'monthly'
-        const isYearlyOther = otherAmtPeriod === 'yearly'
-        const onlyTermTimeOther = isYearlyOther && inst.variesByTerm
-
-        if (otherAmt > 0) {
-            const ayStart = AY_START
-            const ayEnd = AY_END
-            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
-            const yearlyOther = otherAmt * (YM[otherAmtPeriod] || 1)
-
-            if (isYearlyOther) {
-                const allDates = []
-                if (freq === 'weekly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (freq === 'monthly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    const dom = d.getDate()
-                    while (d > ayStart) d = addMonths(d, -1, dom)
-                    while (d < ayStart) d = addMonths(d, 1, dom)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}` }); d = addMonths(d, 1, dom) }
-                } else if (freq === 'termly') {
-                    const overrides = inst.termDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name}` }) }
-                } else if (freq === 'quarterly') {
-                    const qDates = inst.quarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1}` })
-                } else if (freq === 'yearly') {
-                    allDates.push({ date: inst.nextDate || ayStartStr(), sublabel: 'Yearly income' })
-                }
-                const dates = onlyTermTimeOther ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
-                if (dates.length > 0) {
-                    const amounts = distributeExcludingRemoved(yearlyOther, dates, inst.id, removedSet)
-                    for (let i = 0; i < dates.length; i++) {
-                        events.push({ date: dates[i].date, amount: amounts[i], type: 'income', label: lbl, sublabel: dates[i].sublabel, editType: inst.id })
-                    }
-                }
-            } else {
-                const otherNonTermAmt = inst.variesByTerm ? parseFloat(String(inst.nonTermAmount || '0').replace(/,/g, '')) : otherAmt
-                const getOtherAmt = (ds) => inst.variesByTerm ? (isInTerm(ds, terms) ? otherAmt : otherNonTermAmt) : otherAmt
-                if (freq === 'weekly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (freq === 'monthly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    const dom = d.getDate()
-                    while (d > ayStart) d = addMonths(d, -1, dom)
-                    while (d < ayStart) d = addMonths(d, 1, dom)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'income', label: lbl, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })}`, editType: inst.id }); d = addMonths(d, 1, dom) }
-                } else if (freq === 'termly') {
-                    const overrides = inst.termDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherAmt, type: 'income', label: lbl, sublabel: `${term.name}`, editType: inst.id }) }
-                } else if (freq === 'quarterly') {
-                    const qDates = inst.quarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getOtherAmt(date); if (a > 0) events.push({ date, amount: a, type: 'income', label: lbl, sublabel: `Q${i + 1}`, editType: inst.id }) }
-                } else if (freq === 'yearly') {
-                    if (otherAmt > 0) events.push({ date: inst.nextDate || ayStartStr(), amount: otherAmt, type: 'income', label: lbl, sublabel: 'Yearly income', editType: inst.id })
-                }
-            }
-        }
-    }
-
-    // Rent expense events
-    const rentAmt = parseFloat(String(formData.rentAmount || '0').replace(/,/g, ''))
-    const rentFreq = formData.rentFrequency || 'monthly'
-    if (rentAmt > 0 && formData.expenseSources?.includes('rent')) {
-        const allRentDates = generateRentDates(rentFreq, formData.rentNextDate, formData)
-        const rentDates = allRentDates.filter(d => {
-            if (formData.rentStartDate && d < formData.rentStartDate) return false
-            if (formData.rentEndDate && d > formData.rentEndDate) return false
-            return true
-        })
-        const rentAmtPeriod = formData.rentAmountPeriod || (formData.rentEntryMode === 'yearly' ? 'yearly' : rentFreq)
-        const isYearlyRent = rentAmtPeriod === 'yearly'
-        const onlyTermTimeRent = isYearlyRent && formData.rentVariesByTerm
-        const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
-        const yearlyRent = rentAmt * (YM[rentAmtPeriod] || 1)
-
-        if (isYearlyRent) {
-            const filteredDates = onlyTermTimeRent ? rentDates.filter(d => isInTerm(d, terms)) : rentDates
-            const rentDateObjs = filteredDates.map(d => ({ date: d }))
-            const rentAmounts = distributeExcludingRemoved(yearlyRent, rentDateObjs, 'rent', removedSet)
-            for (let ri = 0; ri < filteredDates.length; ri++) {
-                const date = filteredDates[ri]
-                const dt = new Date(date + 'T00:00:00')
-                const monthName = dt.toLocaleDateString('en-GB', { month: 'long' })
-                events.push({ date, amount: rentAmounts[ri], type: 'expense', label: 'Rent', sublabel: `${monthName} rent`, editType: 'rent' })
-            }
-        } else {
-            const rentNonTermAmt = formData.rentVariesByTerm ? parseFloat(String(formData.rentNonTermAmount || '0').replace(/,/g, '')) : rentAmt
-            const getRentAmt = (ds) => formData.rentVariesByTerm ? (isInTerm(ds, terms) ? rentAmt : rentNonTermAmt) : rentAmt
-            for (let ri = 0; ri < rentDates.length; ri++) {
-                const date = rentDates[ri]
-                const a = getRentAmt(date)
-                if (a > 0) {
-                    const dt = new Date(date + 'T00:00:00')
-                    const monthName = dt.toLocaleDateString('en-GB', { month: 'long' })
-                    events.push({ date, amount: a, type: 'expense', label: 'Rent', sublabel: `${monthName} rent`, editType: 'rent' })
-                }
-            }
-        }
-    }
-
-    // Bills expense events
-    const billsAmt = parseFloat(String(formData.billsAmount || '0').replace(/,/g, ''))
-    if (billsAmt > 0 && formData.expenseSources?.includes('bills')) {
-        const freq = formData.billsFrequency || 'monthly'
-        const billsAmtPeriod = formData.billsAmountPeriod || (formData.billsEntryMode === 'yearly' ? 'yearly' : freq)
-        const isYearlyBills = billsAmtPeriod === 'yearly'
-        const onlyTermTimeBills = isYearlyBills && formData.billsVariesByTerm
-        const ayStart = AY_START
-        const ayEnd = AY_END
-        const billsInRange = (ds) => {
-            if (formData.billsStartDate && ds < formData.billsStartDate) return false
-            if (formData.billsEndDate && ds > formData.billsEndDate) return false
-            return true
-        }
-        const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
-        const yearlyBills = billsAmt * (YM[billsAmtPeriod] || 1)
-
-        if (isYearlyBills) {
-            const allDates = []
-            if (freq === 'weekly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
-                while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly bills' }); d = new Date(d.getTime() + 7 * 86400000) }
-            } else if (freq === 'monthly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
-                const dom = d.getDate()
-                while (d > ayStart) d = addMonths(d, -1, dom)
-                while (d < ayStart) d = addMonths(d, 1, dom)
-                while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills` }); d = addMonths(d, 1, dom) }
-            } else if (freq === 'termly') {
-                const overrides = formData.billsTermDates || {}
-                for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} bills` }) }
-            } else if (freq === 'quarterly') {
-                const qDates = formData.billsQuarterlyDates || {}
-                const QD = defaultQuarterlyDates()
-                for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} bills` })
-            } else if (freq === 'yearly') {
-                allDates.push({ date: formData.billsNextDate || ayStartStr(), sublabel: 'Yearly bills' })
-            }
-            const filteredDates = (onlyTermTimeBills ? allDates.filter(d => isInTerm(d.date, terms)) : allDates).filter(d => billsInRange(d.date))
-            if (filteredDates.length > 0) {
-                const amounts = distributeExcludingRemoved(yearlyBills, filteredDates, 'bills', removedSet)
-                for (let i = 0; i < filteredDates.length; i++) {
-                    events.push({ date: filteredDates[i].date, amount: amounts[i], type: 'expense', label: 'Bills', sublabel: filteredDates[i].sublabel, editType: 'bills' })
-                }
-            }
-        } else {
-            const billsNonTermAmt = formData.billsVariesByTerm ? parseFloat(String(formData.billsNonTermAmount || '0').replace(/,/g, '')) : billsAmt
-            const getBillsAmt = (ds) => formData.billsVariesByTerm ? (isInTerm(ds, terms) ? billsAmt : billsNonTermAmt) : billsAmt
-            if (freq === 'weekly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
-                while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                while (d <= ayEnd) { const ds = toLocalDate(d); if (billsInRange(ds)) { const a = getBillsAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'Bills', sublabel: 'Weekly bills', editType: 'bills' }) }; d = new Date(d.getTime() + 7 * 86400000) }
-            } else if (freq === 'monthly') {
-                let d = formData.billsNextDate ? new Date(formData.billsNextDate + 'T00:00:00') : new Date(AY_START)
-                const dom = d.getDate()
-                while (d > ayStart) d = addMonths(d, -1, dom)
-                while (d < ayStart) d = addMonths(d, 1, dom)
-                while (d <= ayEnd) { const ds = toLocalDate(d); if (billsInRange(ds)) { const a = getBillsAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'Bills', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} bills`, editType: 'bills' }) }; d = addMonths(d, 1, dom) }
-            } else if (freq === 'termly') {
-                const overrides = formData.billsTermDates || {}
-                for (const term of terms) { const date = overrides[term.id] || term.start; if (date && billsInRange(date)) { const a = getBillsAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Bills', sublabel: `${term.name} bills`, editType: 'bills' }) } }
-            } else if (freq === 'quarterly') {
-                const qDates = formData.billsQuarterlyDates || {}
-                const QD = defaultQuarterlyDates()
-                for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; if (billsInRange(date)) { const a = getBillsAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Bills', sublabel: `Q${i + 1} bills`, editType: 'bills' }) } }
-            } else if (freq === 'yearly') {
-                const dateString = formData.billsNextDate || ayStartStr(); if (billsInRange(dateString)) { const a = getBillsAmt(dateString); if (a > 0) events.push({ date: dateString, amount: a, type: 'expense', label: 'Bills', sublabel: 'Yearly bills', editType: 'bills' }) }
-            }
-        }
-    }
-
-    // University fees events
-    if (formData.expenseSources?.includes('uni_fees')) {
-        const uniAmt = parseFloat(String(formData.uniFeesAmount || '0').replace(/,/g, ''))
-        if (uniAmt > 0) {
-            const uniAmtPeriod = formData.uniFeesAmountPeriod || 'yearly'
-            const uniFreq = uniAmtPeriod === 'yearly' ? (formData.uniFeesFrequency || 'monthly') : uniAmtPeriod
-            const isYearlyUni = uniAmtPeriod === 'yearly'
-            const onlyTermTimeUni = isYearlyUni && formData.uniFeesVariesByTerm
-            const ayStart = AY_START
-            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
-            const yearlyUni = uniAmt * (YM[uniAmtPeriod] || 1)
-            if (isYearlyUni) {
-                const allDates = []
-                if (uniFreq === 'weekly') {
-                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly fees' }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (uniFreq === 'yearly') {
-                    allDates.push({ date: formData.uniFeesNextDate || ayStartStr(), sublabel: 'Yearly tuition' })
-                } else if (uniFreq === 'monthly') {
-                    const dom = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00').getDate() : 1
-                    let d = new Date(AY_START.getFullYear(), AY_START.getMonth(), dom)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees` }); d = addMonths(d, 1, dom) }
-                } else if (uniFreq === 'termly') {
-                    const overrides = formData.uniFeesTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} fees` }) }
-                } else if (uniFreq === 'quarterly') {
-                    const qDates = formData.uniFeesQuarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} fees` })
-                }
-                const filteredDates = onlyTermTimeUni ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
-                if (filteredDates.length > 0) {
-                    const amounts = distributeExcludingRemoved(yearlyUni, filteredDates, 'uniFees', removedSet)
-                    for (let i = 0; i < filteredDates.length; i++) {
-                        events.push({ date: filteredDates[i].date, amount: amounts[i], type: 'expense', label: 'University Fees', sublabel: filteredDates[i].sublabel, editType: 'uniFees' })
-                    }
-                }
-            } else {
-                const uniNonTermAmt = formData.uniFeesVariesByTerm ? parseFloat(String(formData.uniFeesNonTermAmount || '0').replace(/,/g, '')) : uniAmt
-                const getUniAmt = (ds) => formData.uniFeesVariesByTerm ? (isInTerm(ds, terms) ? uniAmt : uniNonTermAmt) : uniAmt
-                if (uniFreq === 'weekly') {
-                    let d = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getUniAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'University Fees', sublabel: 'Weekly fees', editType: 'uniFees' }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (uniFreq === 'yearly') {
-                    events.push({ date: formData.uniFeesNextDate || ayStartStr(), amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: 'Yearly tuition', editType: 'uniFees' })
-                } else if (uniFreq === 'monthly') {
-                    const dom = formData.uniFeesNextDate ? new Date(formData.uniFeesNextDate + 'T00:00:00').getDate() : 1
-                    let d = new Date(AY_START.getFullYear(), AY_START.getMonth(), dom)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getUniAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'University Fees', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} fees`, editType: 'uniFees' }); d = addMonths(d, 1, dom) }
-                } else if (uniFreq === 'termly') {
-                    const overrides = formData.uniFeesTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: uniAmt, type: 'expense', label: 'University Fees', sublabel: `${term.name} fees`, editType: 'uniFees' }) }
-                } else if (uniFreq === 'quarterly') {
-                    const qDates = formData.uniFeesQuarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getUniAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'University Fees', sublabel: `Q${i + 1} fees`, editType: 'uniFees' }) }
-                }
-            }
-        }
-    }
-
-    // Savings & Investments events
-    if (formData.expenseSources?.includes('savings_investments')) {
-        const savAmt = parseFloat(String(formData.savingsInvAmount || '0').replace(/,/g, ''))
-        if (savAmt > 0) {
-            const freq = formData.savingsInvFrequency || 'monthly'
-            const savAmtPeriod = formData.savingsInvAmountPeriod || (formData.savingsInvEntryMode === 'yearly' ? 'yearly' : freq)
-            const isYearlySav = savAmtPeriod === 'yearly'
-            const onlyTermTimeSav = isYearlySav && formData.savingsInvVariesByTerm
-            const ayStart = AY_START
-            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
-            const yearlySav = savAmt * (YM[savAmtPeriod] || 1)
-            if (isYearlySav) {
-                const allDates = []
-                if (freq === 'weekly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly savings' }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (freq === 'monthly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
-                    const dom = d.getDate()
-                    while (d > ayStart) d = addMonths(d, -1, dom)
-                    while (d < ayStart) d = addMonths(d, 1, dom)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} savings` }); d = addMonths(d, 1, dom) }
-                } else if (freq === 'termly') {
-                    const overrides = formData.savingsInvTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: `${term.name} savings` }) }
-                } else if (freq === 'quarterly') {
-                    const qDates = formData.savingsInvQuarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1} savings` })
-                } else if (freq === 'yearly') {
-                    allDates.push({ date: formData.savingsInvNextDate || ayStartStr(), sublabel: 'Yearly savings' })
-                }
-                const filteredDates = onlyTermTimeSav ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
-                if (filteredDates.length > 0) {
-                    const amounts = distributeExcludingRemoved(yearlySav, filteredDates, 'savingsInv', removedSet)
-                    for (let i = 0; i < filteredDates.length; i++) {
-                        events.push({ date: filteredDates[i].date, amount: amounts[i], type: 'expense', label: 'Savings', sublabel: filteredDates[i].sublabel, editType: 'savingsInv' })
-                    }
-                }
-            } else {
-                const savNonTermAmt = formData.savingsInvVariesByTerm ? parseFloat(String(formData.savingsInvNonTermAmount || '0').replace(/,/g, '')) : savAmt
-                const getSavAmt = (ds) => formData.savingsInvVariesByTerm ? (isInTerm(ds, terms) ? savAmt : savNonTermAmt) : savAmt
-                if (freq === 'weekly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getSavAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'Savings', sublabel: 'Weekly savings', editType: 'savingsInv' }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (freq === 'monthly') {
-                    let d = formData.savingsInvNextDate ? new Date(formData.savingsInvNextDate + 'T00:00:00') : new Date(AY_START)
-                    const dom = d.getDate()
-                    while (d > ayStart) d = addMonths(d, -1, dom)
-                    while (d < ayStart) d = addMonths(d, 1, dom)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getSavAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: 'Savings', sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} savings`, editType: 'savingsInv' }); d = addMonths(d, 1, dom) }
-                } else if (freq === 'termly') {
-                    const overrides = formData.savingsInvTermDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: savAmt, type: 'expense', label: 'Savings', sublabel: `${term.name} savings`, editType: 'savingsInv' }) }
-                } else if (freq === 'quarterly') {
-                    const qDates = formData.savingsInvQuarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getSavAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: 'Savings', sublabel: `Q${i + 1} savings`, editType: 'savingsInv' }) }
-                } else if (freq === 'yearly') {
-                    events.push({ date: formData.savingsInvNextDate || ayStartStr(), amount: savAmt, type: 'expense', label: 'Savings', sublabel: 'Yearly savings', editType: 'savingsInv' })
-                }
-            }
-        }
-    }
-
-    // Other expense events - loop over otherExpenses array
-    for (const inst of (formData.otherExpenses || [])) {
-        const otherExpAmt = parseFloat(String(inst.amount || '0').replace(/,/g, ''))
-        const freq = inst.frequency || 'monthly'
-        const lbl = inst.label || 'Other Expense'
-        const otherExpAmtPeriod = inst.amountPeriod || freq || 'monthly'
-        const isYearlyOtherExp = otherExpAmtPeriod === 'yearly'
-        const onlyTermTimeOtherExp = isYearlyOtherExp && inst.variesByTerm
-
-        if (otherExpAmt > 0) {
-            const ayStart = AY_START
-            const ayEnd = AY_END
-            const YM = { weekly: 52, monthly: 12, quarterly: 4, termly: terms.length || 2, yearly: 1 }
-            const yearlyOtherExp = otherExpAmt * (YM[otherExpAmtPeriod] || 1)
-
-            if (isYearlyOtherExp) {
-                const allDates = []
-                if (freq === 'weekly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: 'Weekly' }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (freq === 'monthly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    const dom = d.getDate()
-                    while (d > ayStart) d = addMonths(d, -1, dom)
-                    while (d < ayStart) d = addMonths(d, 1, dom)
-                    while (d <= ayEnd) { allDates.push({ date: toLocalDate(d), sublabel: d.toLocaleDateString('en-GB', { month: 'long' }) }); d = addMonths(d, 1, dom) }
-                } else if (freq === 'termly') {
-                    const overrides = inst.termDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) allDates.push({ date, sublabel: term.name }) }
-                } else if (freq === 'quarterly') {
-                    const qDates = inst.quarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) allDates.push({ date: qDates[i] || QD[i], sublabel: `Q${i + 1}` })
-                } else if (freq === 'yearly') {
-                    allDates.push({ date: inst.nextDate || ayStartStr(), sublabel: 'Yearly expense' })
-                }
-                const filteredDates = onlyTermTimeOtherExp ? allDates.filter(d => isInTerm(d.date, terms)) : allDates
-                if (filteredDates.length > 0) {
-                    const amounts = distributeExcludingRemoved(yearlyOtherExp, filteredDates, inst.id, removedSet)
-                    for (let i = 0; i < filteredDates.length; i++) {
-                        events.push({ date: filteredDates[i].date, amount: amounts[i], type: 'expense', label: lbl, sublabel: filteredDates[i].sublabel, editType: inst.id })
-                    }
-                }
-            } else {
-                const otherExpNonTermAmt = inst.variesByTerm ? parseFloat(String(inst.nonTermAmount || '0').replace(/,/g, '')) : otherExpAmt
-                const getOtherExpAmt = (ds) => inst.variesByTerm ? (isInTerm(ds, terms) ? otherExpAmt : otherExpNonTermAmt) : otherExpAmt
-                if (freq === 'weekly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    while (d > ayStart) d = new Date(d.getTime() - 7 * 86400000)
-                    while (d < ayStart) d = new Date(d.getTime() + 7 * 86400000)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherExpAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: lbl, sublabel: 'Weekly', editType: inst.id }); d = new Date(d.getTime() + 7 * 86400000) }
-                } else if (freq === 'monthly') {
-                    let d = inst.nextDate ? new Date(inst.nextDate + 'T00:00:00') : new Date(AY_START)
-                    const dom = d.getDate()
-                    while (d > ayStart) d = addMonths(d, -1, dom)
-                    while (d < ayStart) d = addMonths(d, 1, dom)
-                    while (d <= ayEnd) { const ds = toLocalDate(d); const a = getOtherExpAmt(ds); if (a > 0) events.push({ date: ds, amount: a, type: 'expense', label: lbl, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: inst.id }); d = addMonths(d, 1, dom) }
-                } else if (freq === 'termly') {
-                    const overrides = inst.termDates || {}
-                    for (const term of terms) { const date = overrides[term.id] || term.start; if (date) events.push({ date, amount: otherExpAmt, type: 'expense', label: lbl, sublabel: term.name, editType: inst.id }) }
-                } else if (freq === 'quarterly') {
-                    const qDates = inst.quarterlyDates || {}
-                    const QD = defaultQuarterlyDates()
-                    for (let i = 0; i < 4; i++) { const date = qDates[i] || QD[i]; const a = getOtherExpAmt(date); if (a > 0) events.push({ date, amount: a, type: 'expense', label: lbl, sublabel: `Q${i + 1}`, editType: inst.id }) }
-                } else if (freq === 'yearly') {
-                    events.push({ date: inst.nextDate || ayStartStr(), amount: otherExpAmt, type: 'expense', label: lbl, sublabel: 'Yearly expense', editType: inst.id })
-                }
+                events.push({ date: entry.nextDate || ayStartStr(), amount: amt, type, label: cat.label, sublabel: `Yearly ${cat.label.toLowerCase()}`, editType: cat.id })
             }
         }
     }
@@ -1324,6 +772,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     const [editingEvent, setEditingEvent] = useState(null)  // { ...event, clickX, clickY }
     const [editAmount, setEditAmount] = useState('')
+    const [nearbyEvents, setNearbyEvents] = useState([])   // events on same date as editingEvent
+    const [nearbyIdx, setNearbyIdx] = useState(0)           // which nearby event is active
+    const [showDotHint, setShowDotHint] = useState(false)
+    const dotHintShownRef = useRef(false)
     const [editingBalance, setEditingBalance] = useState(false)
     const [editBalanceAmount, setEditBalanceAmount] = useState('')
     const transitionRef = useRef(null) // guards against overlapping transitions
@@ -1377,18 +829,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const buildPanelSteps = (sources, expSources) => {
         const panels = ['termDates', 'balance', 'overdraft', 'regularIncome']
         const s = sources || []
-        if (s.includes('maintenance_loan')) panels.push('maintenanceLoan')
-        if (s.includes('bursary')) panels.push('bursary')
-        if (s.includes('family_friends')) panels.push('familyFriends')
-        if (s.includes('work')) panels.push('work')
-        if (s.includes('other_income')) panels.push('otherIncome')
+        for (const cat of INCOME_CATEGORIES) {
+            if (s.includes(cat.id)) panels.push(cat.panelId)
+        }
         panels.push('regularExpenses')
         const e = expSources || []
-        if (e.includes('rent')) panels.push('rent')
-        if (e.includes('bills')) panels.push('bills')
-        if (e.includes('uni_fees')) panels.push('uniFees')
-        if (e.includes('savings_investments')) panels.push('savingsInvestments')
-        if (e.includes('other_expense')) panels.push('otherExpense')
+        for (const cat of EXPENSE_CATEGORIES) {
+            if (e.includes(cat.id)) panels.push(cat.panelId)
+        }
         panels.push('weeklySpend')
         panels.push('summary')
         return panels
@@ -1403,6 +851,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
     })
     const [expandedTerms, setExpandedTerms] = useState(new Set())
     const [showAllEvents, setShowAllEvents] = useState(false)
+    useEffect(() => {
+        if (activePanel === 4 && !dotHintShownRef.current) {
+            dotHintShownRef.current = true
+            setShowDotHint(true)
+        } else if (activePanel !== 4) {
+            setShowDotHint(false)
+        }
+    }, [activePanel])
     const defaultTermDatesRef = useRef(null)
     const prevActivePanelRef = useRef(0)
     const returnToSummaryRef = useRef(false)
@@ -1632,16 +1088,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     const PANEL_RESET_FIELDS = {
         balance: { balance: '' },
-        maintenanceLoan: { loanAmount: '', loanMonths: [...DEFAULT_LOAN_MONTHS], loanKnowDates: false, loanDates: {}, instalmentAmounts: {} },
-        bursary: { bursaryAmount: '', bursaryDates: [...INITIAL_FORM_DATA.bursaryDates], bursaryMonths: undefined, bursaryInstalmentAmounts: {} },
-        familyFriends: { familyAmount: '', familyFrequency: 'monthly', familyAmountPeriod: 'monthly', familyNextDate: '', familyTermDates: {}, familyQuarterlyDates: {}, familyVariesByTerm: false, familyNonTermAmount: '' },
-        work: { workAmount: '', workFrequency: 'monthly', workEntryMode: 'yearly', workAmountPeriod: 'monthly', workVariesByTerm: false, workNonTermAmount: '', workNextDate: '', workTermDates: {}, workQuarterlyDates: {} },
-        otherIncome: { otherIncomes: [], otherIncomeAmount: '', otherIncomeFrequency: 'monthly', otherIncomeEntryMode: 'yearly', otherIncomeAmountPeriod: 'monthly', otherIncomeLabel: '', otherIncomeNextDate: '', otherIncomeTermDates: {}, otherIncomeVariesByTerm: false, otherIncomeNonTermAmount: '' },
-        rent: { rentAmount: '', rentFrequency: 'monthly', rentNextDate: '', rentEntryMode: 'per_payment', rentAmountPeriod: 'monthly', rentTermDates: {}, rentQuarterlyDates: {}, rentVariesByTerm: false, rentStartDate: '', rentEndDate: '' },
-        bills: { billsAmount: '', billsFrequency: 'monthly', billsEntryMode: 'yearly', billsAmountPeriod: 'monthly', billsNextDate: '', billsTermDates: {}, billsQuarterlyDates: {}, billsStartDate: '', billsEndDate: '' },
-        uniFees: { uniFeesAmount: '9250', uniFeesFrequency: 'yearly', uniFeesEntryMode: 'yearly', uniFeesAmountPeriod: 'yearly', uniFeesNextDate: '', uniFeesTermDates: {}, uniFeesQuarterlyDates: {}, uniFeesVariesByTerm: false, uniFeesNonTermAmount: '' },
-        savingsInvestments: { savingsInvAmount: '', savingsInvFrequency: 'monthly', savingsInvEntryMode: 'per_payment', savingsInvAmountPeriod: 'monthly', savingsInvNextDate: '', savingsInvTermDates: {}, savingsInvQuarterlyDates: {}, savingsInvVariesByTerm: false, savingsInvNonTermAmount: '' },
-        otherExpense: { otherExpenses: [], otherExpenseAmount: '', otherExpenseFrequency: 'monthly', otherExpenseEntryMode: 'yearly', otherExpenseAmountPeriod: 'monthly', otherExpenseLabel: '', otherExpenseNextDate: '', otherExpenseTermDates: {}, otherExpenseQuarterlyDates: {}, otherExpenseVariesByTerm: false, otherExpenseNonTermAmount: '' },
+    }
+    // Generate reset fields for all category panels
+    for (const cat of [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]) {
+        PANEL_RESET_FIELDS[cat.panelId] = { [cat.formKey]: [] }
     }
 
     const resetPanel = (panelId) => {
@@ -1703,7 +1153,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
     }
 
     const isCurrentStepBlank = () => {
-        switch (currentStep.id) {
+        const stepId = currentStep.id
+        switch (stepId) {
             case 'university':
                 return !formData.university
             case 'termDates':
@@ -1712,32 +1163,19 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 return !formData.balance
             case 'regularIncome':
                 return false
-            case 'maintenanceLoan':
-                return !formData.loanAmount && (formData.loanMonths || []).length === 0
-            case 'bursary':
-                return !formData.bursaryAmount
-            case 'familyFriends':
-                return !formData.familyAmount
-            case 'work':
-                return !formData.workAmount
-            case 'otherIncome':
-                return !(formData.otherIncomes || []).some(i => i.amount)
             case 'regularExpenses':
                 return false
-            case 'rent':
-                return !formData.rentAmount
-            case 'bills':
-                return !formData.billsAmount
-            case 'uniFees':
-                return !formData.uniFeesAmount
-            case 'savingsInvestments':
-                return !formData.savingsInvAmount
-            case 'otherExpense':
-                return !(formData.otherExpenses || []).some(i => i.amount)
             case 'weeklySpend':
                 return !formData.weeklySpend
-            default:
+            default: {
+                // Check generic category panels
+                const cat = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES].find(c => c.panelId === stepId)
+                if (cat) {
+                    const entries = formData[cat.formKey] || []
+                    return !entries.some(e => e.amount)
+                }
                 return false
+            }
         }
     }
 
@@ -1792,78 +1230,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 }
                 break
 
-            case 'maintenanceLoan':
-                if (!formData.loanAmount) {
-                    return 'Please enter an amount'
-                }
-                if ((formData.loanMonths || []).length === 0) {
-                    return 'Please select at least one month'
-                }
-                break
-
-            case 'bursary':
-                if (!formData.bursaryAmount) {
-                    return 'Please enter an amount'
-                }
-                break
-
-            case 'familyFriends':
-                if (!formData.familyAmount) {
-                    return 'Please enter an amount'
-                }
-                break
-
-            case 'work':
-                if (!formData.workAmount) {
-                    return 'Please enter an amount'
-                }
-                if ((formData.workFrequency || 'monthly') === 'yearly' && !formData.workNextDate) {
-                    return 'Please select a payment date'
-                }
-                break
-
-            case 'otherIncome':
-                if (!(formData.otherIncomes || []).some(i => i.amount)) {
-                    return 'Please enter an amount'
-                }
-                if ((formData.otherIncomes || []).some(i => i.amount && !i.label?.trim())) {
-                    return 'Please give each income a name'
-                }
-                break
-
-            case 'rent':
-                if (!formData.rentAmount) {
-                    return 'Please enter an amount'
-                }
-                break
-
-            case 'bills':
-                if (!formData.billsAmount) {
-                    return 'Please enter an amount'
-                }
-                break
-
-            case 'uniFees':
-                if (!formData.uniFeesAmount) {
-                    return 'Please enter an amount'
-                }
-                break
-
-            case 'savingsInvestments':
-                if (!formData.savingsInvAmount) {
-                    return 'Please enter an amount'
-                }
-                break
-
-            case 'otherExpense':
-                if (!(formData.otherExpenses || []).some(i => i.amount)) {
-                    return 'Please enter an amount'
-                }
-                if ((formData.otherExpenses || []).some(i => i.amount && !i.label?.trim())) {
-                    return 'Please give each expense a name'
-                }
-                break
-
             case 'oneOffItems': {
                 const filledItems = (formData.oneOffItems || []).filter(i => i.amount || i.name?.trim() || i.date)
                 for (const item of filledItems) {
@@ -1874,6 +1240,15 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 break
             }
 
+        }
+
+        // Generic category panel validation
+        const cat = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES].find(c => c.panelId === currentStep.id)
+        if (cat) {
+            const entries = formData[cat.formKey] || []
+            if (!entries.some(e => e.amount)) {
+                return 'Please enter an amount'
+            }
         }
 
         return null
@@ -1933,17 +1308,12 @@ export default function FinancialOnboardingForm({ onComplete }) {
         setCurrentStepId(panels[prev])
     }
 
-    const PANEL_TO_SOURCE = {
-        maintenanceLoan: { key: 'incomeSources', value: 'maintenance_loan' },
-        bursary: { key: 'incomeSources', value: 'bursary' },
-        familyFriends: { key: 'incomeSources', value: 'family_friends' },
-        work: { key: 'incomeSources', value: 'work' },
-        otherIncome: { key: 'incomeSources', value: 'other_income' },
-        rent: { key: 'expenseSources', value: 'rent' },
-        bills: { key: 'expenseSources', value: 'bills' },
-        uniFees: { key: 'expenseSources', value: 'uni_fees' },
-        savingsInvestments: { key: 'expenseSources', value: 'savings_investments' },
-        otherExpense: { key: 'expenseSources', value: 'other_expense' },
+    const PANEL_TO_SOURCE = {}
+    for (const cat of INCOME_CATEGORIES) {
+        PANEL_TO_SOURCE[cat.panelId] = { key: 'incomeSources', value: cat.id }
+    }
+    for (const cat of EXPENSE_CATEGORIES) {
+        PANEL_TO_SOURCE[cat.panelId] = { key: 'expenseSources', value: cat.id }
     }
 
     const handlePanelSkip = () => {
@@ -1993,14 +1363,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
         if (mapping) {
             // Remove source and clear field data so it doesn't show on dashboard
-            const panelResetMap = {
-                maintenance_loan: 'maintenanceLoan', bursary: 'bursary',
-                family_friends: 'familyFriends', work: 'work',
-                other_income: 'otherIncome', rent: 'rent', bills: 'bills',
-                uni_fees: 'uniFees', savings_investments: 'savingsInvestments',
-                other_expense: 'otherExpense',
-            }
-            const resetFields = PANEL_RESET_FIELDS[panelResetMap[mapping.value]] || {}
+            const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+            const matchedCat = allCats.find(c => c.id === mapping.value)
+            const resetPanelId = matchedCat ? matchedCat.panelId : mapping.value
+            const resetFields = PANEL_RESET_FIELDS[resetPanelId] || {}
             setFormData(prev => ({
                 ...prev,
                 ...resetFields,
@@ -2163,30 +1529,21 @@ export default function FinancialOnboardingForm({ onComplete }) {
         balance: 'Confirm Bank Balance',
         overdraft: 'Confirm Overdraft',
         regularIncome: 'Confirm Income',
-        maintenanceLoan: 'Confirm Maintenance Loan',
-        bursary: 'Confirm Bursary',
-        familyFriends: 'Confirm Family & Friends',
-        work: 'Confirm Work',
-        otherIncome: 'Confirm Other Income',
-        rent: 'Confirm Rent',
         regularExpenses: 'Confirm Expenses',
-        bills: 'Confirm Bills',
-        uniFees: 'Confirm University Fees',
-        savingsInvestments: 'Confirm Savings & Investments',
-        otherExpense: 'Confirm Other Expense',
-        oneOffItems: 'Confirm One-off Items',
         weeklySpend: 'Confirm Weekly Spend',
-        summary: 'Build my budget',
+        summary: 'Reveal My Financial Future',
+    }
+    for (const cat of [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]) {
+        PANEL_LABEL_MAP[cat.panelId] = `Confirm ${cat.label}`
     }
     const PANEL_LABELS = PANEL_STEPS.map(id => PANEL_LABEL_MAP[id])
     const PANEL_HEADING_MAP = {
         termDates: 'University Term Dates', balance: 'Bank Balance', overdraft: 'Overdraft Limit',
-        regularIncome: 'Income', maintenanceLoan: 'Maintenance Loan', bursary: 'Bursary',
-        familyFriends: 'Family & Friends', work: 'Work', otherIncome: 'Other Income',
-        rent: 'Rent', regularExpenses: 'Expenses', bills: 'Bills',
-        uniFees: 'University Fees', savingsInvestments: 'Savings & Investments',
-        otherExpense: 'Other Expenses', oneOffItems: 'One-off Items',
+        regularIncome: 'Income', regularExpenses: 'Expenses',
         weeklySpend: 'Weekly Spend', summary: 'Your Budget',
+    }
+    for (const cat of [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]) {
+        PANEL_HEADING_MAP[cat.panelId] = cat.label
     }
     const inPanelGroup = PANEL_STEPS.includes(currentStep.id) || activePanel > 0
 
@@ -2280,11 +1637,12 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     overflow: 'hidden',
                     margin: '0 8px',
                     transition: 'opacity 0.35s ease, transform 0.35s ease',
-                    position: 'relative', zIndex: -1,
+                    position: 'relative', zIndex: 0,
                 }}>
                     <TermGraph
                         graphHeight={150}
                         marginTop={8}
+                        scrubNearLineOnly
                         terms={terms}
                         expandedTerm={activePanel === 0 && activeExpanded.size === 1 ? [...activeExpanded][0] : undefined}
                         balance={activePanel >= 1 ? balanceNum : undefined}
@@ -2293,49 +1651,33 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         hiddenEventTypes={(() => {
                             const panelId = PANEL_STEPS[activePanel]
                             if (panelId === 'summary') return []
-                            const oiIds = (formData.otherIncomes || []).map(i => i.id)
-                            const oeIds = (formData.otherExpenses || []).map(i => i.id)
-                            const incomeEditTypes = ['loan', 'bursary', 'family', 'work', ...oiIds]
-                            const expenseEditTypes = ['rent', 'bills', 'uniFees', 'savingsInv', ...oeIds, 'weeklySpend']
+                            const incomeEditTypes = INCOME_CATEGORIES.map(c => c.id)
+                            const expenseEditTypes = [...EXPENSE_CATEGORIES.map(c => c.id), 'weeklySpend']
                             const allTypes = [...incomeEditTypes, ...expenseEditTypes, 'oneOff']
                             // On regularIncome: hide all expense types + oneOff, and hide unchecked income types
                             if (panelId === 'regularIncome') {
                                 const hidden = [...expenseEditTypes, 'oneOff']
-                                const srcMap = { maintenance_loan: 'loan', bursary: 'bursary', family_friends: 'family', work: 'work', other_income: oiIds }
                                 const selected = formData.incomeSources || []
-                                for (const [src, editType] of Object.entries(srcMap)) {
-                                    if (!selected.includes(src)) {
-                                        if (Array.isArray(editType)) hidden.push(...editType)
-                                        else hidden.push(editType)
-                                    }
+                                for (const cat of INCOME_CATEGORIES) {
+                                    if (!selected.includes(cat.id)) hidden.push(cat.id)
                                 }
                                 return hidden
                             }
                             // On regularExpenses: hide all income types + oneOff + weeklySpend, and hide unchecked expense types
                             if (panelId === 'regularExpenses') {
                                 const hidden = [...incomeEditTypes, 'oneOff', 'weeklySpend']
-                                const srcMap = { rent: 'rent', bills: 'bills', uni_fees: 'uniFees', savings_investments: 'savingsInv', other_expense: oeIds }
                                 const selected = formData.expenseSources || []
-                                for (const [src, editType] of Object.entries(srcMap)) {
-                                    if (!selected.includes(src)) {
-                                        if (Array.isArray(editType)) hidden.push(...editType)
-                                        else hidden.push(editType)
-                                    }
+                                for (const cat of EXPENSE_CATEGORIES) {
+                                    if (!selected.includes(cat.id)) hidden.push(cat.id)
                                 }
                                 return hidden
                             }
                             if (!showAllEvents && activePanel >= 4) {
-                                const typeMap = {
-                                    maintenanceLoan: 'loan', bursary: 'bursary',
-                                    familyFriends: 'family', work: 'work',
-                                    rent: 'rent', bills: 'bills', uniFees: 'uniFees',
-                                    savingsInvestments: 'savingsInv',
-                                    oneOffItems: 'oneOff',
-                                    weeklySpend: 'weeklySpend',
-                                }
-                                let currentTypes = typeMap[panelId] ? [typeMap[panelId]] : []
-                                if (panelId === 'otherIncome') currentTypes = oiIds
-                                if (panelId === 'otherExpense') currentTypes = oeIds
+                                // Each category panel: its editType is the category ID
+                                const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+                                const matchedCat = allCats.find(c => c.panelId === panelId)
+                                let currentTypes = matchedCat ? [matchedCat.id] : []
+                                if (panelId === 'weeklySpend') currentTypes = ['weeklySpend']
                                 if (currentTypes.length === 0) return []
                                 return allTypes.filter(t => !currentTypes.includes(t))
                             }
@@ -2343,20 +1685,19 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         })()}
                         currentEventType={activePanel >= 4 ? (() => {
                             const panelId = PANEL_STEPS[activePanel]
-                            const typeMap = {
-                                maintenanceLoan: 'loan', bursary: 'bursary',
-                                familyFriends: 'family', work: 'work',
-                                rent: 'rent', bills: 'bills', uniFees: 'uniFees',
-                                savingsInvestments: 'savingsInv',
-                                oneOffItems: 'oneOff',
-                                weeklySpend: 'weeklySpend',
-                            }
-                            if (panelId === 'otherIncome') return (formData.otherIncomes || [])[0]?.id || null
-                            if (panelId === 'otherExpense') return (formData.otherExpenses || [])[0]?.id || null
-                            return typeMap[panelId] || null
+                            const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+                            const matchedCat = allCats.find(c => c.panelId === panelId)
+                            if (matchedCat) return matchedCat.id
+                            if (panelId === 'weeklySpend') return 'weeklySpend'
+                            return null
                         })() : null}
                         onEventClick={(evt, e) => {
                             const rect = e.currentTarget.getBoundingClientRect()
+                            const allEvts = buildGraphEvents(formData)
+                            // Find all visible events on the same date
+                            const sameDate = allEvts.filter(ev => ev.date === evt.date && !ev.noDot)
+                            setNearbyEvents(sameDate.length > 1 ? sameDate : [])
+                            setNearbyIdx(sameDate.length > 1 ? sameDate.findIndex(ev => ev.editType === evt.editType && ev.amount === evt.amount) : 0)
                             setEditingEvent({ ...evt, clickX: rect.left + rect.width / 2, clickY: rect.top })
                             setEditAmount(String(evt.amount))
                         }}
@@ -2368,11 +1709,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             if (next.has(termId)) next.delete(termId); else next.add(termId)
                             return next
                         }) : undefined}
-                        onBalanceClick={activePanel >= 1 ? (e) => {
-                            const rect = e.currentTarget.getBoundingClientRect()
-                            setEditBalanceAmount(String(formData.balance || ''))
-                            setEditingBalance({ clickX: rect.left + rect.width / 2, clickY: rect.top })
-                        } : undefined}
+                        onBalanceClick={undefined}
                     />
                 </div>
 
@@ -2483,8 +1820,48 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             <h2 style={{
                                 fontSize: 22, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
                                 color: '#000', margin: 0, flex: 1,
+                                display: 'flex', alignItems: 'center', gap: 8,
                             }}>
-                                {PANEL_HEADING_MAP[PANEL_STEPS[activePanel]] || ''}
+                                {(() => {
+                                    const pid = PANEL_STEPS[activePanel]
+                                    const cat = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES].find(c => c.panelId === pid)
+                                    if (cat) {
+                                        const isExp = EXPENSE_CATEGORIES.includes(cat)
+                                        const iconColor = isExp ? '#e06470' : '#147b75'
+                                        return (
+                                            <>
+                                                <div style={{
+                                                    width: 30, height: 30, borderRadius: '50%',
+                                                    background: isExp ? 'rgba(224,100,112,0.10)' : 'rgba(20,123,117,0.10)',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    flexShrink: 0,
+                                                }}>
+                                                    <cat.Icon size={17} color={iconColor} />
+                                                </div>
+                                                {cat.label}
+                                            </>
+                                        )
+                                    }
+                                    return PANEL_HEADING_MAP[pid] || ''
+                                })()}
+                                {activePanel >= 4 && PANEL_STEPS[activePanel] !== 'summary' && (
+                                    <div
+                                        onTouchStart={(e) => e.stopPropagation()}
+                                        onTouchEnd={(e) => e.stopPropagation()}
+                                        onTouchMove={(e) => e.stopPropagation()}
+                                        onClick={(e) => { e.stopPropagation(); setShowDotHint(p => !p) }}
+                                        style={{
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer', flexShrink: 0,
+                                            padding: 2,
+                                        }}
+                                    >
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#bbb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <circle cx="12" cy="12" r="10" />
+                                            <path d="M12 16v-4M12 8h.01" />
+                                        </svg>
+                                    </div>
+                                )}
                             </h2>
                             {PANEL_STEPS[activePanel] === 'termDates' && defaultTermDatesRef.current &&
                                 JSON.stringify(formData.termDates) !== JSON.stringify(defaultTermDatesRef.current) && (
@@ -2515,14 +1892,21 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             )}
                             {(() => {
                                 const pid = PANEL_STEPS[activePanel]
-                                const hiddenPanels = ['termDates', 'balance', 'overdraft', 'regularIncome', 'regularExpenses', 'savingsInvestments', 'otherExpense', 'summary']
+                                const hiddenPanels = ['termDates', 'balance', 'overdraft', 'regularIncome', 'regularExpenses', 'summary']
                                 if (hiddenPanels.includes(pid)) return null
-                                if (new Set(buildGraphEvents(formData).filter(e => !e.removed).map(e => e.editType)).size < 2) return null
-                                const incPanels = ['maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
-                                const expPanels = ['rent', 'bills', 'uniFees']
+                                const incPanelIds = INCOME_CATEGORIES.map(c => c.panelId)
+                                const expPanelIds = EXPENSE_CATEGORIES.map(c => c.panelId)
+                                const incEditTypes = new Set(INCOME_CATEGORIES.map(c => c.id))
+                                const expEditTypes = new Set(EXPENSE_CATEGORIES.map(c => c.id))
+                                const isIncPanel = incPanelIds.includes(pid)
+                                const isExpPanel = expPanelIds.includes(pid)
+                                if (!isIncPanel && !isExpPanel) return null
+                                // Show button when 2+ categories selected total (income + expense combined)
+                                const totalSelected = (formData.incomeSources || []).length + (formData.expenseSources || []).length
+                                if (totalSelected < 2) return null
                                 const otherPanels = ['oneOffItems', 'weeklySpend']
-                                const btnColor = incPanels.includes(pid) ? '#147b75'
-                                    : expPanels.includes(pid) ? '#e06470'
+                                const btnColor = isIncPanel ? '#147b75'
+                                    : isExpPanel ? '#e06470'
                                         : otherPanels.includes(pid) ? '#e06470' : '#147b75'
                                 return (
                                     <button
@@ -2560,6 +1944,23 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     </button>
                                 )
                             })()}
+                        </div>
+                        {/* Dot hint tooltip */}
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateRows: showDotHint ? '1fr' : '0fr',
+                            transition: 'grid-template-rows 0.3s ease',
+                            overflow: 'hidden',
+                        }}>
+                            <div style={{ overflow: 'hidden' }}>
+                                <p style={{
+                                    fontSize: 12, fontFamily: 'Nunito, sans-serif',
+                                    color: '#999', margin: 0, lineHeight: 1.4,
+                                    padding: '0 24px 8px',
+                                }}>
+                                    Tap a dot on the graph to change the amount, adjust the date, or skip it.
+                                </p>
+                            </div>
                         </div>
                     </div>
                     {/* Income/expense indicator strip — draggable + tap to toggle */}
@@ -2606,8 +2007,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     >
                     {(() => {
                         const panelId = PANEL_STEPS[activePanel]
-                        const incomeTypes = ['regularIncome', 'maintenanceLoan', 'bursary', 'familyFriends', 'work', 'otherIncome']
-                        const expenseTypes = ['rent', 'regularExpenses', 'bills', 'uniFees', 'savingsInvestments', 'otherExpense']
+                        const incomeTypes = ['regularIncome', ...INCOME_CATEGORIES.map(c => c.panelId)]
+                        const expenseTypes = ['regularExpenses', ...EXPENSE_CATEGORIES.map(c => c.panelId)]
                         const otherTypes = ['oneOffItems', 'weeklySpend']
                         const stripColor = panelId === 'summary' ? '#147b75'
                             : panelId === 'regularIncome' ? '#147b75'
@@ -2689,406 +2090,46 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         updateIncomeSources={(val) => updateField('incomeSources', val)}
                                     />
                                 )}
-                                {panelId === 'maintenanceLoan' && (
-                                    <MaintenanceLoanStep
-                                        loans={formData.maintenanceLoans || [{
-                                            id: 'loan_0',
-                                            amount: formData.loanAmount || '',
-                                            months: formData.loanMonths || [...DEFAULT_LOAN_MONTHS],
-                                            knowDates: formData.loanKnowDates || false,
-                                            dates: formData.loanDates || {},
-                                            instalmentAmounts: formData.instalmentAmounts || {},
-                                        }]}
-                                        updateLoans={(loansOrFn) => {
-                                            setFormData(prev => {
-                                                const prevLoans = prev.maintenanceLoans || [{
-                                                    id: 'loan_0',
-                                                    amount: prev.loanAmount || '',
-                                                    months: prev.loanMonths || [...DEFAULT_LOAN_MONTHS],
-                                                    knowDates: prev.loanKnowDates || false,
-                                                    dates: prev.loanDates || {},
-                                                    instalmentAmounts: prev.instalmentAmounts || {},
-                                                }]
-                                                const newLoans = typeof loansOrFn === 'function' ? loansOrFn(prevLoans) : loansOrFn
-                                                return {
-                                                    ...prev,
-                                                    maintenanceLoans: newLoans,
-                                                    ...(newLoans[0] ? {
-                                                        loanAmount: newLoans[0].amount,
-                                                        loanMonths: newLoans[0].months,
-                                                        loanKnowDates: newLoans[0].knowDates,
-                                                        loanDates: newLoans[0].dates,
-                                                        instalmentAmounts: newLoans[0].instalmentAmounts,
-                                                    } : {}),
-                                                }
-                                            })
-                                        }}
-                                    />
-                                )}
-                                {panelId === 'bursary' && (
-                                    <BursaryStep
-                                        bursaries={formData.bursaries || [{
-                                            id: 'bursary_0',
-                                            amount: formData.bursaryAmount || '',
-                                            months: formData.bursaryMonths || ['october', 'february', 'march'],
-                                            dates: formData.bursaryDates || { october: '2025-10-27', february: '2026-02-09', march: '2026-03-30' },
-                                            instalmentAmounts: formData.bursaryInstalmentAmounts || {},
-                                        }]}
-                                        updateBursaries={(bursariesOrFn) => {
-                                            setFormData(prev => {
-                                                const prevBursaries = prev.bursaries || [{
-                                                    id: 'bursary_0',
-                                                    amount: prev.bursaryAmount || '',
-                                                    months: prev.bursaryMonths || ['october', 'february', 'march'],
-                                                    dates: prev.bursaryDates || { october: '2025-10-27', february: '2026-02-09', march: '2026-03-30' },
-                                                    instalmentAmounts: prev.bursaryInstalmentAmounts || {},
-                                                }]
-                                                const newBursaries = typeof bursariesOrFn === 'function' ? bursariesOrFn(prevBursaries) : bursariesOrFn
-                                                return {
-                                                    ...prev,
-                                                    bursaries: newBursaries,
-                                                    ...(newBursaries[0] ? {
-                                                        bursaryAmount: newBursaries[0].amount,
-                                                        bursaryMonths: newBursaries[0].months,
-                                                        bursaryDates: newBursaries[0].dates,
-                                                        bursaryInstalmentAmounts: newBursaries[0].instalmentAmounts,
-                                                    } : {}),
-                                                }
-                                            })
-                                        }}
-                                    />
-                                )}
-                                {panelId === 'familyFriends' && (
-                                    <FamilyFriendsStep
-                                        entries={formData.familyEntries || [{
-                                            id: 'family_0',
-                                            amount: formData.familyAmount || '',
-                                            frequency: formData.familyFrequency || 'monthly',
-                                            nextDate: formData.familyNextDate || '',
-                                            months: [],
-                                            dates: {},
+                                {/* ── Generic category steps (all income & expense) ── */}
+                                {(() => {
+                                    const cat = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES].find(c => c.panelId === panelId)
+                                    if (!cat) return null
+                                    const formKey = cat.formKey
+                                    let entries = formData[formKey] || []
+                                    if (entries.length === 0) {
+                                        const defaultEntry = {
+                                            id: `${cat.id}_0`,
+                                            amount: '',
+                                            frequency: cat.defaultFrequency,
+                                            nextDate: '',
+                                            months: [...(cat.defaultMonths || [])],
+                                            dates: { ...(cat.defaultDates || {}) },
                                             instalmentAmounts: {},
-                                        }]}
-                                        updateEntries={(entriesOrFn) => {
-                                            setFormData(prev => {
-                                                const prevEntries = prev.familyEntries || [{
-                                                    id: 'family_0',
-                                                    amount: prev.familyAmount || '',
-                                                    frequency: prev.familyFrequency || 'monthly',
-                                                    nextDate: prev.familyNextDate || '',
-                                                    months: [],
-                                                    dates: {},
-                                                    instalmentAmounts: {},
-                                                }]
-                                                const newEntries = typeof entriesOrFn === 'function' ? entriesOrFn(prevEntries) : entriesOrFn
-                                                return {
-                                                    ...prev,
-                                                    familyEntries: newEntries,
-                                                    ...(newEntries[0] ? {
-                                                        familyAmount: newEntries[0].amount,
-                                                        familyFrequency: newEntries[0].frequency,
-                                                        familyNextDate: newEntries[0].nextDate,
-                                                    } : {}),
-                                                }
-                                            })
-                                        }}
-                                    />
-                                )}
-                                {panelId === 'work' && (
-                                    <WorkIncomeStep
-                                        workAmount={formData.workAmount}
-                                        updateWorkAmount={(val) => updateField('workAmount', val)}
-                                        workFrequency={formData.workFrequency}
-                                        updateWorkFrequency={(val) => updateField('workFrequency', val)}
-                                        workAmountPeriod={formData.workAmountPeriod}
-                                        updateWorkAmountPeriod={(val) => updateField('workAmountPeriod', val)}
-                                        workVariesByTerm={formData.workVariesByTerm}
-                                        updateWorkVariesByTerm={(val) => updateField('workVariesByTerm', val)}
-                                        workNonTermAmount={formData.workNonTermAmount}
-                                        updateWorkNonTermAmount={(val) => updateField('workNonTermAmount', val)}
-                                        workEntryMode={formData.workEntryMode}
-                                        updateWorkEntryMode={(val) => updateField('workEntryMode', val)}
-                                        workNextDate={formData.workNextDate}
-                                        updateWorkNextDate={(val) => updateField('workNextDate', val)}
-                                        terms={formData.termDates?.terms || []}
-                                        workTermDates={formData.workTermDates || {}}
-                                        updateWorkTermDates={(val) => updateField('workTermDates', val)}
-                                        workQuarterlyDates={formData.workQuarterlyDates || {}}
-                                        updateWorkQuarterlyDates={(val) => updateField('workQuarterlyDates', val)}
-                                    />
-                                )}
-                                {panelId === 'otherIncome' && (() => {
-                                    const instances = formData.otherIncomes || []
-                                    // Auto-create first instance if none
-                                    if (instances.length === 0) {
-                                        const first = makeOtherInstance('oi')
-                                        setTimeout(() => updateField('otherIncomes', [first]), 0)
-                                        return null
+                                        }
+                                        entries = [defaultEntry]
+                                        // Persist to formData so addEntry works correctly
+                                        setTimeout(() => setFormData(prev => prev[formKey]?.length ? prev : { ...prev, [formKey]: [defaultEntry] }), 0)
                                     }
                                     return (
-                                        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                                            <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                                                <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>Other Income</h2>
-                                                <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>Any other regular income not covered above?</p>
-                                            </div>
-                                            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 0 16px' }}>
-                                                {instances.map((inst, idx) => (
-                                                    <div key={inst.id} data-inst-id={inst.id}>
-                                                        {instances.length > 1 && (
-                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px 8px' }}>
-                                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>
-                                                                    {inst.label || `Income ${idx + 1}`}
-                                                                </span>
-                                                                <button onClick={() => {
-                                                                    const prevId = idx > 0 ? instances[idx - 1].id : null
-                                                                    updateField('otherIncomes', instances.filter(i => i.id !== inst.id))
-                                                                    if (prevId) setTimeout(() => {
-                                                                        const el = document.querySelector(`[data-inst-id="${prevId}"]`)
-                                                                        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                                                                    }, 50)
-                                                                }}
-                                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                                    Remove
-                                                                </button>
-                                                            </div>
-                                                        )}
-                                                        <OtherIncomeStep
-                                                            compact
-                                                            onboarding
-                                                            otherIncomeAmount={inst.amount}
-                                                            updateOtherIncomeAmount={(val) => updateOtherInst('otherIncomes', inst.id, 'amount', val)}
-                                                            otherIncomeFrequency={inst.frequency}
-                                                            updateOtherIncomeFrequency={(val) => updateOtherInst('otherIncomes', inst.id, 'frequency', val)}
-                                                            otherIncomeAmountPeriod={inst.amountPeriod}
-                                                            updateOtherIncomeAmountPeriod={(val) => updateOtherInst('otherIncomes', inst.id, 'amountPeriod', val)}
-                                                            otherIncomeQuarterlyDates={inst.quarterlyDates}
-                                                            updateOtherIncomeQuarterlyDates={(val) => updateOtherInst('otherIncomes', inst.id, 'quarterlyDates', val)}
-                                                            otherIncomeLabel={inst.label}
-                                                            updateOtherIncomeLabel={(val) => updateOtherInst('otherIncomes', inst.id, 'label', val)}
-                                                            otherIncomeNextDate={inst.nextDate}
-                                                            updateOtherIncomeNextDate={(val) => updateOtherInst('otherIncomes', inst.id, 'nextDate', val)}
-                                                            terms={formData.termDates?.terms || []}
-                                                            otherIncomeTermDates={inst.termDates || {}}
-                                                            updateOtherIncomeTermDates={(val) => updateOtherInst('otherIncomes', inst.id, 'termDates', val)}
-                                                            otherIncomeVariesByTerm={inst.variesByTerm}
-                                                            updateOtherIncomeVariesByTerm={(val) => updateOtherInst('otherIncomes', inst.id, 'variesByTerm', val)}
-                                                            otherIncomeNonTermAmount={inst.nonTermAmount}
-                                                            updateOtherIncomeNonTermAmount={(val) => updateOtherInst('otherIncomes', inst.id, 'nonTermAmount', val)}
-                                                            otherIncomeEntryMode={inst.entryMode}
-                                                        />
-                                                        {idx < instances.length - 1 && (
-                                                            <div style={{ height: 1, background: '#e8e8e8', margin: '12px 24px' }} />
-                                                        )}
-                                                    </div>
-                                                ))}
-                                                <div style={{ padding: '12px 24px 0' }}>
-                                                    <button
-                                                        onClick={() => {
-                                                            const newInst = makeOtherInstance('oi')
-                                                            updateField('otherIncomes', [...instances, newInst])
-                                                            setTimeout(() => {
-                                                                const el = document.querySelector(`[data-inst-id="${newInst.id}"]`)
-                                                                el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                                                            }, 50)
-                                                        }}
-                                                        style={{
-                                                            width: '100%', padding: '10px 0', borderRadius: 10,
-                                                            border: '1.5px solid #147b75', background: 'transparent',
-                                                            cursor: 'pointer', fontSize: 14, fontWeight: 600,
-                                                            fontFamily: 'Nunito, sans-serif', color: '#147b75',
-                                                        }}>
-                                                        + Add another income
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <CategoryStep
+                                            categoryId={cat.id}
+                                            entries={entries}
+                                            updateEntries={(entriesOrFn) => {
+                                                setFormData(prev => {
+                                                    const prevEntries = prev[formKey] || entries
+                                                    const newEntries = typeof entriesOrFn === 'function' ? entriesOrFn(prevEntries) : entriesOrFn
+                                                    return { ...prev, [formKey]: newEntries }
+                                                })
+                                            }}
+                                        />
                                     )
                                 })()}
-                                {panelId === 'rent' && (
-                                    <RentStep
-                                        rentAmount={formData.rentAmount}
-                                        updateRentAmount={(val) => updateField('rentAmount', val)}
-                                        rentFrequency={formData.rentFrequency}
-                                        updateRentFrequency={(val) => updateField('rentFrequency', val)}
-                                        rentAmountPeriod={formData.rentAmountPeriod}
-                                        updateRentAmountPeriod={(val) => updateField('rentAmountPeriod', val)}
-                                        rentNextDate={formData.rentNextDate}
-                                        updateRentNextDate={(val) => updateField('rentNextDate', val)}
-                                        rentEntryMode={formData.rentEntryMode || 'yearly'}
-                                        updateRentEntryMode={(val) => updateField('rentEntryMode', val)}
-                                        terms={formData.termDates?.terms || []}
-                                        rentTermDates={formData.rentTermDates || {}}
-                                        updateRentTermDates={(val) => updateField('rentTermDates', val)}
-                                        rentQuarterlyDates={formData.rentQuarterlyDates || {}}
-                                        updateRentQuarterlyDates={(val) => updateField('rentQuarterlyDates', val)}
-                                        rentStartDate={formData.rentStartDate}
-                                        updateRentStartDate={(val) => updateField('rentStartDate', val)}
-                                        rentEndDate={formData.rentEndDate}
-                                        updateRentEndDate={(val) => updateField('rentEndDate', val)}
-                                    />
-                                )}
                                 {panelId === 'regularExpenses' && (
                                     <RegularExpensesStep
                                         expenseSources={formData.expenseSources || []}
                                         updateExpenseSources={(val) => updateField('expenseSources', val)}
                                     />
                                 )}
-                                {panelId === 'bills' && (
-                                    <BillsStep
-                                        billsAmount={formData.billsAmount}
-                                        updateBillsAmount={(val) => updateField('billsAmount', val)}
-                                        billsFrequency={formData.billsFrequency}
-                                        updateBillsFrequency={(val) => updateField('billsFrequency', val)}
-                                        billsAmountPeriod={formData.billsAmountPeriod}
-                                        updateBillsAmountPeriod={(val) => updateField('billsAmountPeriod', val)}
-                                        billsQuarterlyDates={formData.billsQuarterlyDates}
-                                        updateBillsQuarterlyDates={(val) => updateField('billsQuarterlyDates', val)}
-                                        billsEntryMode={formData.billsEntryMode}
-                                        updateBillsEntryMode={(val) => updateField('billsEntryMode', val)}
-                                        billsNextDate={formData.billsNextDate}
-                                        updateBillsNextDate={(val) => updateField('billsNextDate', val)}
-                                        terms={formData.termDates?.terms || []}
-                                        billsTermDates={formData.billsTermDates || {}}
-                                        updateBillsTermDates={(val) => updateField('billsTermDates', val)}
-                                        billsStartDate={formData.billsStartDate}
-                                        updateBillsStartDate={(val) => updateField('billsStartDate', val)}
-                                        billsEndDate={formData.billsEndDate}
-                                        updateBillsEndDate={(val) => updateField('billsEndDate', val)}
-                                        rentStartDate={formData.rentStartDate}
-                                        rentEndDate={formData.rentEndDate}
-                                    />
-                                )}
-                                {panelId === 'uniFees' && (
-                                    <UniFeesStep
-                                        uniFeesAmount={formData.uniFeesAmount}
-                                        updateUniFeesAmount={(val) => updateField('uniFeesAmount', val)}
-                                        uniFeesFrequency={formData.uniFeesFrequency}
-                                        updateUniFeesFrequency={(val) => updateField('uniFeesFrequency', val)}
-                                        uniFeesAmountPeriod={formData.uniFeesAmountPeriod}
-                                        updateUniFeesAmountPeriod={(val) => updateField('uniFeesAmountPeriod', val)}
-                                        uniFeesQuarterlyDates={formData.uniFeesQuarterlyDates}
-                                        updateUniFeesQuarterlyDates={(val) => updateField('uniFeesQuarterlyDates', val)}
-                                        uniFeesEntryMode={formData.uniFeesEntryMode}
-                                        updateUniFeesEntryMode={(val) => updateField('uniFeesEntryMode', val)}
-                                        uniFeesNextDate={formData.uniFeesNextDate}
-                                        updateUniFeesNextDate={(val) => updateField('uniFeesNextDate', val)}
-                                        terms={formData.termDates?.terms || []}
-                                        uniFeesTermDates={formData.uniFeesTermDates || {}}
-                                        updateUniFeesTermDates={(val) => updateField('uniFeesTermDates', val)}
-                                        uniFeesVariesByTerm={formData.uniFeesVariesByTerm}
-                                        updateUniFeesVariesByTerm={(val) => updateField('uniFeesVariesByTerm', val)}
-                                        uniFeesNonTermAmount={formData.uniFeesNonTermAmount}
-                                        updateUniFeesNonTermAmount={(val) => updateField('uniFeesNonTermAmount', val)}
-                                    />
-                                )}
-                                {panelId === 'savingsInvestments' && (
-                                    <SavingsInvestmentsStep
-                                        savingsInvAmount={formData.savingsInvAmount}
-                                        updateSavingsInvAmount={(val) => updateField('savingsInvAmount', val)}
-                                        savingsInvFrequency={formData.savingsInvFrequency}
-                                        updateSavingsInvFrequency={(val) => updateField('savingsInvFrequency', val)}
-                                        savingsInvAmountPeriod={formData.savingsInvAmountPeriod}
-                                        updateSavingsInvAmountPeriod={(val) => updateField('savingsInvAmountPeriod', val)}
-                                        savingsInvNextDate={formData.savingsInvNextDate}
-                                        updateSavingsInvNextDate={(val) => updateField('savingsInvNextDate', val)}
-                                        savingsInvEntryMode={formData.savingsInvEntryMode}
-                                        updateSavingsInvEntryMode={(val) => updateField('savingsInvEntryMode', val)}
-                                        terms={formData.termDates?.terms || []}
-                                        savingsInvTermDates={formData.savingsInvTermDates || {}}
-                                        updateSavingsInvTermDates={(val) => updateField('savingsInvTermDates', val)}
-                                        savingsInvQuarterlyDates={formData.savingsInvQuarterlyDates || {}}
-                                        updateSavingsInvQuarterlyDates={(val) => updateField('savingsInvQuarterlyDates', val)}
-                                        savingsInvVariesByTerm={formData.savingsInvVariesByTerm}
-                                        updateSavingsInvVariesByTerm={(val) => updateField('savingsInvVariesByTerm', val)}
-                                        savingsInvNonTermAmount={formData.savingsInvNonTermAmount}
-                                        updateSavingsInvNonTermAmount={(val) => updateField('savingsInvNonTermAmount', val)}
-                                    />
-                                )}
-                                {panelId === 'otherExpense' && (() => {
-                                    const instances = formData.otherExpenses || []
-                                    if (instances.length === 0) {
-                                        const first = makeOtherInstance('oe')
-                                        setTimeout(() => updateField('otherExpenses', [first]), 0)
-                                        return null
-                                    }
-                                    return (
-                                        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-                                            <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                                                <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 8px', lineHeight: 1.3 }}>Other Expenses</h2>
-                                                <p style={{ fontSize: 15, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>Any other regular expense not covered above?</p>
-                                            </div>
-                                            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 0 16px' }}>
-                                                {instances.map((inst, idx) => (
-                                                    <div key={inst.id} data-inst-id={inst.id}>
-                                                        {instances.length > 1 && (
-                                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 16px 8px' }}>
-                                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                                    {inst.label || `Expense ${idx + 1}`}
-                                                                </span>
-                                                                <button onClick={() => {
-                                                                    const prevId = idx > 0 ? instances[idx - 1].id : null
-                                                                    updateField('otherExpenses', instances.filter(i => i.id !== inst.id))
-                                                                    if (prevId) setTimeout(() => {
-                                                                        const el = document.querySelector(`[data-inst-id="${prevId}"]`)
-                                                                        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                                                                    }, 50)
-                                                                }}
-                                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                                    Remove
-                                                                </button>
-                                                            </div>
-                                                        )}
-                                                        <OtherExpenseStep
-                                                            compact
-                                                            onboarding
-                                                            otherExpenseAmount={inst.amount}
-                                                            updateOtherExpenseAmount={(val) => updateOtherInst('otherExpenses', inst.id, 'amount', val)}
-                                                            otherExpenseFrequency={inst.frequency}
-                                                            updateOtherExpenseFrequency={(val) => updateOtherInst('otherExpenses', inst.id, 'frequency', val)}
-                                                            otherExpenseAmountPeriod={inst.amountPeriod}
-                                                            updateOtherExpenseAmountPeriod={(val) => updateOtherInst('otherExpenses', inst.id, 'amountPeriod', val)}
-                                                            otherExpenseQuarterlyDates={inst.quarterlyDates}
-                                                            updateOtherExpenseQuarterlyDates={(val) => updateOtherInst('otherExpenses', inst.id, 'quarterlyDates', val)}
-                                                            otherExpenseLabel={inst.label}
-                                                            updateOtherExpenseLabel={(val) => updateOtherInst('otherExpenses', inst.id, 'label', val)}
-                                                            otherExpenseNextDate={inst.nextDate}
-                                                            updateOtherExpenseNextDate={(val) => updateOtherInst('otherExpenses', inst.id, 'nextDate', val)}
-                                                            terms={formData.termDates?.terms || []}
-                                                            otherExpenseTermDates={inst.termDates || {}}
-                                                            updateOtherExpenseTermDates={(val) => updateOtherInst('otherExpenses', inst.id, 'termDates', val)}
-                                                            otherExpenseVariesByTerm={inst.variesByTerm}
-                                                            updateOtherExpenseVariesByTerm={(val) => updateOtherInst('otherExpenses', inst.id, 'variesByTerm', val)}
-                                                            otherExpenseNonTermAmount={inst.nonTermAmount}
-                                                            updateOtherExpenseNonTermAmount={(val) => updateOtherInst('otherExpenses', inst.id, 'nonTermAmount', val)}
-                                                        />
-                                                        {idx < instances.length - 1 && (
-                                                            <div style={{ height: 1, background: '#e8e8e8', margin: '12px 24px' }} />
-                                                        )}
-                                                    </div>
-                                                ))}
-                                                <div style={{ padding: '12px 24px 0' }}>
-                                                    <button
-                                                        onClick={() => {
-                                                            const newInst = makeOtherInstance('oe')
-                                                            updateField('otherExpenses', [...instances, newInst])
-                                                            setTimeout(() => {
-                                                                const el = document.querySelector(`[data-inst-id="${newInst.id}"]`)
-                                                                el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                                                            }, 50)
-                                                        }}
-                                                        style={{
-                                                            width: '100%', padding: '10px 0', borderRadius: 10,
-                                                            border: '1.5px solid #e06470', background: 'transparent',
-                                                            cursor: 'pointer', fontSize: 14, fontWeight: 600,
-                                                            fontFamily: 'Nunito, sans-serif', color: '#e06470',
-                                                        }}>
-                                                        + Add another expense
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )
-                                })()}
                                 {panelId === 'oneOffItems' && (
                                     <OneOffItemsStep
                                         items={formData.oneOffItems || [{ name: '', amount: '', date: '', direction: 'out' }]}
@@ -3113,25 +2154,17 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     const sym = getCurrencySymbol()
                                     const fmtK = (v) => { if (v >= 1000) { const k = v / 1000; const dec = Math.round(k * 10) % 10; return `${sym}${k.toFixed(dec === 0 ? 0 : 1)}k` } return `${sym}${Math.round(v).toLocaleString()}` }
 
-                                    const INCOME_SOURCE_MAP = [
-                                        { id: 'maintenance_loan', label: 'Maintenance Loan', editType: 'loan', panelId: 'maintenanceLoan' },
-                                        { id: 'bursary', label: 'Bursary', editType: 'bursary', panelId: 'bursary' },
-                                        { id: 'family_friends', label: 'Family & Friends', editType: 'family', panelId: 'familyFriends' },
-                                        { id: 'work', label: 'Work', editType: 'work', panelId: 'work' },
-                                    ]
-                                    const EXPENSE_SOURCE_MAP = [
-                                        { id: 'rent', label: 'Rent', editType: 'rent', panelId: 'rent' },
-                                        { id: 'bills', label: 'Bills & Utilities', editType: 'bills', panelId: 'bills' },
-                                        { id: 'uni_fees', label: 'University Fees', editType: 'uniFees', panelId: 'uniFees' },
-                                        { id: 'savings_investments', label: 'Savings & Investments', editType: 'savingsInv', panelId: 'savingsInvestments' },
-                                    ]
+                                    const INCOME_SOURCE_MAP = INCOME_CATEGORIES.map(cat => ({
+                                        id: cat.id, label: cat.label, editType: cat.id, panelId: cat.panelId
+                                    }))
+                                    const EXPENSE_SOURCE_MAP = EXPENSE_CATEGORIES.map(cat => ({
+                                        id: cat.id, label: cat.label, editType: cat.id, panelId: cat.panelId
+                                    }))
 
                                     const getYearly = (editTypes, includeNoDot = false) => allEvts.filter(e => editTypes.includes(e.editType) && !e.removed && (includeNoDot || !e.noDot)).reduce((s, e) => s + e.amount, 0)
 
                                     const incomeSources = INCOME_SOURCE_MAP.filter(s => (formData.incomeSources || []).includes(s.id))
-                                    const otherIncSources = (formData.incomeSources || []).includes('other_income') ? (formData.otherIncomes || []).filter(inst => inst.amount) : []
                                     const expenseSources = EXPENSE_SOURCE_MAP.filter(s => (formData.expenseSources || []).includes(s.id))
-                                    const otherExpSources = (formData.expenseSources || []).includes('other_expense') ? (formData.otherExpenses || []).filter(inst => inst.amount) : []
                                     const weeklySpendAmt = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, ''))
                                     const oneOffFiltered = (formData.oneOffItems || []).filter(it => it.name || it.amount)
                                     const oneOffCount = oneOffFiltered.length
@@ -3152,158 +2185,114 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
                                     const chevron = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 18l6-6-6-6" /></svg>
 
+                                    const EXTRA_ICONS = { weeklySpend: { Icon: PiShoppingCart, color: '#e06470' } }
                                     const SummaryRow = ({ sourceId, label, amount, color, isExpense, onTap }) => {
-                                        const si = SOURCE_ICONS[sourceId]
+                                        const si = SOURCE_ICONS[sourceId] || EXTRA_ICONS[sourceId]
                                         const IconComp = si?.Icon
                                         const iconColor = isExpense ? '#e06470' : '#147b75'
                                         return (
-                                            <div onClick={onTap} style={{ display: 'flex', alignItems: 'center', padding: '7px 0', gap: 10, cursor: onTap ? 'pointer' : 'default' }}>
+                                            <div onClick={onTap} style={{
+                                                display: 'flex', alignItems: 'center', padding: '10px 14px', gap: 10,
+                                                cursor: onTap ? 'pointer' : 'default',
+                                                background: '#fff', borderRadius: 12, marginBottom: 6,
+                                            }}>
                                                 <div style={{
-                                                    width: 28, height: 28, borderRadius: '50%',
-                                                    background: `${iconColor}15`,
+                                                    width: 30, height: 30, borderRadius: '50%',
+                                                    background: `${iconColor}12`,
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                     flexShrink: 0,
                                                 }}>
                                                     {IconComp && <IconComp size={16} color={iconColor} />}
                                                 </div>
-                                                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>{label}</span>
-                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color }}>{fmtK(amount)}/yr</span>
+                                                <span style={{ flex: 1, fontSize: 14, fontWeight: 600, fontFamily: F, color: '#333' }}>{label}</span>
+                                                <span style={{ fontSize: 14, fontWeight: 700, fontFamily: F, color }}>{fmtK(amount)}/yr</span>
                                                 {onTap && chevron}
                                             </div>
                                         )
                                     }
 
+                                    const F = 'Nunito, sans-serif'
+                                    const cardStyle = {
+                                        background: '#fff', borderRadius: 12, padding: '10px 14px',
+                                        display: 'flex', alignItems: 'center', gap: 10,
+                                        cursor: 'pointer', marginBottom: 6,
+                                    }
+                                    const sectionHeader = (icon, label, color) => (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 4px 6px' }}>
+                                            {icon}
+                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: F, color: '#333' }}>{label}</span>
+                                        </div>
+                                    )
+
                                     return (
                                         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
                                             <div style={{ padding: '18px 24px 0', flexShrink: 0 }}>
-                                                <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#000', margin: '0 0 4px', lineHeight: 1.3 }}>Your Budget</h2>
-                                                <p style={{ fontSize: 14, fontFamily: 'Nunito, sans-serif', color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>Here's a summary of your finances for the year.</p>
+                                                <h2 style={{ fontSize: 25, fontWeight: 700, fontFamily: F, color: '#000', margin: '0 0 4px', lineHeight: 1.3 }}>Your Budget</h2>
+                                                <p style={{ fontSize: 14, fontFamily: F, color: '#444', margin: '0 0 16px', lineHeight: 1.5 }}>Here's a summary of your finances for the year.</p>
                                             </div>
                                             <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', padding: '0 24px 16px' }}>
                                                 {/* Bank balance & overdraft */}
-                                                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                                                    <div onClick={() => goToPanel('balance')} style={{
-                                                        flex: 1, background: '#f5f7f7', borderRadius: 10, padding: '10px 12px',
-                                                        display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-                                                    }}>
+                                                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                                                    <div onClick={() => goToPanel('balance')} style={{ ...cardStyle, flex: 1, marginBottom: 0 }}>
                                                         <div style={{ flex: 1 }}>
-                                                            <p style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: 0.3 }}>Balance</p>
-                                                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#333', margin: '2px 0 0' }}>{sym}{Math.round(parseFloat(String(formData.balance || '0').replace(/,/g, ''))).toLocaleString()}</p>
+                                                            <p style={{ fontSize: 11, fontWeight: 600, fontFamily: F, color: '#999', margin: 0 }}>Balance</p>
+                                                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: F, color: '#333', margin: '2px 0 0' }}>{sym}{Math.round(parseFloat(String(formData.balance || '0').replace(/,/g, ''))).toLocaleString()}</p>
                                                         </div>
                                                         {chevron}
                                                     </div>
-                                                    <div onClick={() => goToPanel('overdraft')} style={{
-                                                        flex: 1, background: '#f5f7f7', borderRadius: 10, padding: '10px 12px',
-                                                        display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
-                                                    }}>
+                                                    <div onClick={() => goToPanel('overdraft')} style={{ ...cardStyle, flex: 1, marginBottom: 0 }}>
                                                         <div style={{ flex: 1 }}>
-                                                            <p style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', margin: 0, textTransform: 'uppercase', letterSpacing: 0.3 }}>Overdraft</p>
-                                                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#333', margin: '2px 0 0' }}>{formData.overdraft ? `${sym}${Math.round(parseFloat(String(formData.overdraft).replace(/,/g, ''))).toLocaleString()}` : 'None'}</p>
+                                                            <p style={{ fontSize: 11, fontWeight: 600, fontFamily: F, color: '#999', margin: 0 }}>Overdraft</p>
+                                                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: F, color: '#333', margin: '2px 0 0' }}>{formData.overdraft ? `${sym}${Math.round(parseFloat(String(formData.overdraft).replace(/,/g, ''))).toLocaleString()}` : 'None'}</p>
                                                         </div>
                                                         {chevron}
                                                     </div>
                                                 </div>
 
-                                                {/* Income vs Expense bar */}
+                                                {/* Yearly Overview */}
                                                 {(() => {
                                                     const total = totalIncome + totalExpense
                                                     const spendPct = total > 0 ? Math.round((totalExpense / total) * 100) : 50
                                                     return (
-                                                        <div style={{ marginBottom: 16, background: '#f5f7f7', borderRadius: 12, padding: '14px 16px' }}>
+                                                        <div style={{ marginBottom: 8, background: '#fff', borderRadius: 12, padding: '12px 14px' }}>
                                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                                                <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: F, color: '#333' }}>
                                                                     Yearly Overview
                                                                 </span>
                                                                 <span style={{
-                                                                    fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+                                                                    fontSize: 14, fontWeight: 800, fontFamily: F,
                                                                     color: net >= 0 ? '#147b75' : '#e06470',
                                                                 }}>
                                                                     {net >= 0 ? '+' : '\u2212'}{sym}{Math.abs(Math.round(net)).toLocaleString()}
                                                                 </span>
                                                             </div>
-                                                            <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: '#f0f0f0', marginBottom: 10 }}>
-                                                                <div style={{
-                                                                    height: '100%',
-                                                                    width: `${100 - spendPct}%`,
-                                                                    background: '#147b75',
-                                                                    borderRadius: spendPct <= 0 ? 4 : '4px 0 0 4px',
-                                                                    transition: 'width 0.4s ease',
-                                                                }} />
-                                                                <div style={{
-                                                                    height: '100%',
-                                                                    width: `${spendPct}%`,
-                                                                    background: '#e06470',
-                                                                    borderRadius: spendPct >= 100 ? 4 : '0 4px 4px 0',
-                                                                    transition: 'width 0.4s ease',
-                                                                }} />
+                                                            <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: '#f0f0f0', marginBottom: 8 }}>
+                                                                <div style={{ height: '100%', width: `${100 - spendPct}%`, background: '#147b75', borderRadius: spendPct <= 0 ? 3 : '3px 0 0 3px', transition: 'width 0.4s ease' }} />
+                                                                <div style={{ height: '100%', width: `${spendPct}%`, background: '#e06470', borderRadius: spendPct >= 100 ? 3 : '0 3px 3px 0', transition: 'width 0.4s ease' }} />
                                                             </div>
                                                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>
-                                                                    Income {sym}{Math.round(totalIncome).toLocaleString()}
-                                                                </span>
-                                                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                                    Spend {sym}{Math.round(totalExpense).toLocaleString()}
-                                                                </span>
+                                                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: F, color: '#147b75' }}>Income {sym}{Math.round(totalIncome).toLocaleString()}</span>
+                                                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: F, color: '#e06470' }}>Spend {sym}{Math.round(totalExpense).toLocaleString()}</span>
                                                             </div>
                                                         </div>
                                                     )
                                                 })()}
 
                                                 {/* Income section */}
-                                                {(incomeSources.length > 0 || otherIncSources.length > 0) && (
-                                                    <div style={{ background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 10 }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                                                            <PiTrendUp size={16} color="#333" />
-                                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Income</span>
-                                                        </div>
+                                                {incomeSources.length > 0 && (
+                                                    <div style={{ marginBottom: 4 }}>
+                                                        {sectionHeader(<PiTrendUp size={15} color="#147b75" />, 'Income')}
                                                         {incomeSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getYearly([s.editType])} color="rgba(20,123,117,0.8)" onTap={() => goToPanel(s.panelId)} />)}
-                                                        {otherIncSources.map(inst => <SummaryRow key={inst.id} sourceId="other_income" label={inst.label || 'Other Income'} amount={getYearly([inst.id])} color="rgba(20,123,117,0.8)" onTap={() => goToPanel('otherIncome')} />)}
                                                     </div>
                                                 )}
 
                                                 {/* Expense section */}
-                                                {(expenseSources.length > 0 || otherExpSources.length > 0) && (
-                                                    <div style={{ background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 10 }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                                                            <PiTrendDown size={16} color="#333" />
-                                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Expenses</span>
-                                                        </div>
+                                                {expenseSources.length > 0 && (
+                                                    <div style={{ marginBottom: 4 }}>
+                                                        {sectionHeader(<PiTrendDown size={15} color="#e06470" />, 'Expenses')}
                                                         {expenseSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getYearly([s.editType])} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel(s.panelId)} />)}
-                                                        {otherExpSources.map(inst => <SummaryRow key={inst.id} sourceId="other_expense" label={inst.label || 'Other Expense'} amount={getYearly([inst.id])} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel('otherExpense')} />)}
-                                                    </div>
-                                                )}
-
-                                                {/* Flexible section */}
-                                                {(weeklySpendAmt > 0 || oneOffCount > 0) && (
-                                                    <div style={{ background: '#fff', borderRadius: 14, padding: '10px 14px', marginBottom: 10 }}>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                                                            <PiShuffle size={16} color="#333" />
-                                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Flexible</span>
-                                                        </div>
                                                         {weeklySpendAmt > 0 && (
-                                                            <div onClick={() => goToPanel('weeklySpend')} style={{ display: 'flex', alignItems: 'center', padding: '7px 0', gap: 10, cursor: 'pointer' }}>
-                                                                <div style={{
-                                                                    width: 28, height: 28, borderRadius: '50%',
-                                                                    background: 'rgba(224,100,112,0.08)',
-                                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                                    flexShrink: 0,
-                                                                }}>
-                                                                    <PiShoppingCart size={16} color="#e06470" />
-                                                                </div>
-                                                                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>Weekly Spend</span>
-                                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: 'rgba(224,100,112,0.8)' }}>{fmtK(getYearly(['weeklySpend'], true))}/yr</span>
-                                                                {chevron}
-                                                            </div>
-                                                        )}
-                                                        {oneOffCount > 0 && (
-                                                            <div onClick={() => goToPanel('oneOffItems')} style={{ display: 'flex', alignItems: 'center', padding: '7px 0', gap: 10, cursor: 'pointer' }}>
-                                                                <img src={variableOneOff} alt="" style={{ width: 22, height: 22, objectFit: 'contain', objectPosition: 'center', flexShrink: 0 }} />
-                                                                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>{oneOffCount} One-Off Item{oneOffCount !== 1 ? 's' : ''}</span>
-                                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: oneOffTotal >= 0 ? 'rgba(20,123,117,0.8)' : 'rgba(224,100,112,0.8)' }}>
-                                                                    {oneOffTotal >= 0 ? '+' : ''}{sym}{Math.abs(Math.round(oneOffTotal)).toLocaleString()}
-                                                                </span>
-                                                                {chevron}
-                                                            </div>
+                                                            <SummaryRow sourceId="weeklySpend" label="Weekly Spend" amount={getYearly(['weeklySpend'], true)} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel('weeklySpend')} />
                                                         )}
                                                     </div>
                                                 )}
@@ -3327,7 +2316,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 0,
-                    zIndex: 10,
+                    zIndex: 5,
                     pointerEvents: 'none',
                 }}>
                     <button
@@ -3390,47 +2379,77 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 {editingEvent && (() => {
                     const isIncome = editingEvent.type === 'income'
                     const color = isIncome ? '#147b75' : '#e06470'
-                    const w = 140
-                    const left = Math.max(8, Math.min(editingEvent.clickX - w / 2, window.innerWidth - w - 8))
-                    const top = editingEvent.clickY + 12
+                    const lightBg = isIncome ? 'rgba(20,123,117,0.06)' : 'rgba(224,100,112,0.06)'
                     return (
                         <>
                             <div
-                                onClick={() => setEditingEvent(null)}
-                                style={{ position: 'fixed', inset: 0, zIndex: 100 }}
+                                onClick={() => { setEditingEvent(null); setNearbyEvents([]); setNearbyIdx(0) }}
+                                style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.15)' }}
                             />
                             <div style={{
                                 position: 'fixed',
-                                left, top,
-                                width: w,
+                                top: 0, left: 0, right: 0,
                                 background: '#fff',
-                                borderRadius: 8,
+                                borderRadius: '0 0 16px 16px',
                                 zIndex: 101,
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                                padding: '5px 4px 4px',
+                                boxShadow: '0 2px 16px rgba(0,0,0,0.08)',
+                                padding: 'calc(14px + env(safe-area-inset-top, 0px)) 16px 14px',
                             }}>
-                                <span style={{
-                                    fontSize: 8, fontWeight: 600,
-                                    fontFamily: 'Nunito, sans-serif',
-                                    color: '#999',
-                                    padding: '0 3px',
-                                    display: 'block',
-                                    marginBottom: 1,
-                                }}>
-                                    {editingEvent.sublabel}{editingEvent.date ? ` · ${new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}
-                                </span>
-                                {!editingEvent.removed && editingEvent.balanceAfter != null && (
-                                    <span style={{
-                                        fontSize: 7, fontWeight: 700,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: editingEvent.balanceAfter >= 0 ? '#147b75' : '#e06470',
-                                        padding: '0 3px',
-                                        display: 'block',
-                                        marginBottom: 3,
-                                    }}>
-                                        New balance: {getCurrencySymbol()}{Math.round(editingEvent.balanceAfter).toLocaleString()}
-                                    </span>
+                                {/* Close button — top right */}
+                                <div
+                                    onClick={() => { setEditingEvent(null); setNearbyEvents([]); setNearbyIdx(0) }}
+                                    style={{
+                                        position: 'absolute', top: 'calc(10px + env(safe-area-inset-top, 0px))', right: 12,
+                                        width: 28, height: 28, borderRadius: '50%',
+                                        background: '#f0f0f0',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer', zIndex: 1,
+                                    }}
+                                >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bbb" strokeWidth="2.5" strokeLinecap="round">
+                                        <path d="M18 6L6 18M6 6l12 12" />
+                                    </svg>
+                                </div>
+
+                                {/* Nearby event pills */}
+                                {nearbyEvents.length > 1 && (
+                                    <div style={{ display: 'flex', gap: 5, marginBottom: 10, overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingRight: 36 }}>
+                                        {nearbyEvents.map((ev, idx) => {
+                                            const active = idx === nearbyIdx
+                                            const evColor = ev.type === 'income' ? '#147b75' : '#e06470'
+                                            return (
+                                                <button key={`${ev.editType}-${idx}`}
+                                                    onClick={() => {
+                                                        setNearbyIdx(idx)
+                                                        setEditingEvent(prev => ({ ...prev, ...ev, removed: !!ev.removed }))
+                                                        setEditAmount(String(ev.amount))
+                                                    }}
+                                                    style={{
+                                                        padding: '4px 10px', borderRadius: 16, border: 'none',
+                                                        fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                                        background: active ? evColor : `${evColor}10`,
+                                                        color: active ? '#fff' : evColor,
+                                                        cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                                                        transition: 'all 0.15s ease',
+                                                    }}
+                                                >
+                                                    {ev.label || ev.sublabel}
+                                                </button>
+                                            )
+                                        })}
+                                    </div>
                                 )}
+
+                                {/* Header */}
+                                <div style={{ marginBottom: 12, paddingRight: 36 }}>
+                                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222' }}>
+                                        {editingEvent.label || editingEvent.sublabel}
+                                    </div>
+                                    <div style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 2 }}>
+                                        {editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                                    </div>
+                                </div>
+
                                 {editingEvent.removed ? (
                                     <button
                                         onClick={() => {
@@ -3439,26 +2458,47 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             setEditingEvent(null)
                                         }}
                                         style={{
-                                            width: '100%', height: 20, border: 'none', borderRadius: 5,
-                                            background: color, padding: '0 6px',
+                                            width: '100%', height: 40, border: 'none', borderRadius: 10,
+                                            background: color,
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            cursor: 'pointer', gap: 3,
+                                            cursor: 'pointer',
                                         }}
                                     >
-                                        <span style={{ fontSize: 9, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Restore</span>
+                                        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Restore</span>
                                     </button>
                                 ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        {/* Balance after — live updated, same width as input */}
+                                        {editingEvent.balanceAfter != null && (() => {
+                                            const origAmt = editingEvent.amount || 0
+                                            const newAmt = parseFloat(editAmount.replace(/[^0-9.]/g, '')) || 0
+                                            const diff = editingEvent.type === 'income' ? (newAmt - origAmt) : (origAmt - newAmt)
+                                            const liveBalance = editingEvent.balanceAfter + diff
+                                            const balColor = liveBalance >= 0 ? '#147b75' : '#e06470'
+                                            const balBg = liveBalance >= 0 ? 'rgba(20,123,117,0.06)' : 'rgba(224,100,112,0.06)'
+                                            return (
+                                                <div style={{
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                                    background: balBg, borderRadius: 10,
+                                                    padding: '6px 12px', marginBottom: 4,
+                                                }}>
+                                                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                                                        Balance after
+                                                    </span>
+                                                    <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: balColor }}>
+                                                        {liveBalance < 0 ? '-' : ''}{getCurrencySymbol()}{Math.abs(Math.round(liveBalance)).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            )
+                                        })()}
+                                        <div style={{ display: 'flex', gap: 8 }}>
+                                            {/* Amount input */}
                                             <div style={{
-                                                display: 'flex', alignItems: 'center', flex: 1,
-                                                background: '#f5f5f5', borderRadius: 5,
-                                                padding: '0 6px', height: 24, gap: 2,
+                                                flex: 1, display: 'flex', alignItems: 'center',
+                                                border: '1px solid #e8e8e8', borderRadius: 10,
+                                                padding: '0 12px', height: 44, gap: 4, background: '#fff', minWidth: 0,
                                             }}>
-                                                <span style={{
-                                                    fontSize: 11, fontWeight: 600,
-                                                    color: '#aaa', fontFamily: 'Nunito, sans-serif',
-                                                }}>{getCurrencySymbol()}</span>
+                                                <span style={{ fontSize: 15, fontWeight: 600, color: '#999', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
                                                 <input
                                                     type="text"
                                                     inputMode="decimal"
@@ -3466,121 +2506,70 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                     onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
                                                     ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
                                                     style={{
-                                                        flex: 1, border: 'none',
-                                                        background: 'transparent',
-                                                        fontSize: 11, fontWeight: 700,
-                                                        fontFamily: 'Nunito, sans-serif',
-                                                        color: '#000', outline: 'none', padding: 0,
-                                                        width: 0, minWidth: 0,
+                                                        flex: 1, border: 'none', background: 'transparent',
+                                                        fontSize: 16, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                                        color: '#000', outline: 'none', padding: 0, minWidth: 0,
                                                     }}
                                                 />
                                             </div>
+
+                                            {/* Save button */}
                                             <button
                                                 onClick={() => {
                                                     const val = editAmount.replace(/[^0-9.]/g, '')
-                                                    if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
-                                                        updateField('instalmentAmounts', {
-                                                            ...(formData.instalmentAmounts || {}),
-                                                            [editingEvent.editMonth]: val,
+                                                    const cat = CATEGORY_MAP[editingEvent.editType]
+                                                    if (cat) {
+                                                        const formKey = cat.formKey
+                                                        setFormData(prev => {
+                                                            const entries = prev[formKey] || []
+                                                            if (editingEvent.editMonth) {
+                                                                // Irregular: update instalment amount for this month
+                                                                return { ...prev, [formKey]: entries.map(e => ({
+                                                                    ...e,
+                                                                    instalmentAmounts: { ...(e.instalmentAmounts || {}), [editingEvent.editMonth]: val }
+                                                                }))}
+                                                            } else {
+                                                                // Single-amount entries: update first entry's amount
+                                                                // (for multi-entry, match by date if possible)
+                                                                const matchIdx = entries.findIndex(e => {
+                                                                    if (e.nextDate === editingEvent.date) return true
+                                                                    return false
+                                                                })
+                                                                const idx = matchIdx >= 0 ? matchIdx : 0
+                                                                return { ...prev, [formKey]: entries.map((e, i) => i === idx ? { ...e, amount: val } : e) }
+                                                            }
                                                         })
-                                                    } else if (editingEvent.editType === 'bursary' && editingEvent.editMonth) {
-                                                        updateField('bursaryInstalmentAmounts', {
-                                                            ...(formData.bursaryInstalmentAmounts || {}),
-                                                            [editingEvent.editMonth]: val,
-                                                        })
-                                                    } else if (editingEvent.editType === 'work' && editingEvent.editMonth) {
-                                                        updateField('workInstalmentAmounts', {
-                                                            ...(formData.workInstalmentAmounts || {}),
-                                                            [editingEvent.editMonth]: val,
-                                                        })
-                                                    } else if (editingEvent.editType === 'savings' && editingEvent.editMonth) {
-                                                        updateField('savingsInstalmentAmounts', {
-                                                            ...(formData.savingsInstalmentAmounts || {}),
-                                                            [editingEvent.editMonth]: val,
-                                                        })
-                                                    } else if (editingEvent.editType === 'family') {
-                                                        updateField('familyAmount', val)
-                                                    } else if (editingEvent.editType?.startsWith('oi_')) {
-                                                        updateOtherInst('otherIncomes', editingEvent.editType, 'amount', val)
-                                                    } else if (editingEvent.editType?.startsWith('oe_')) {
-                                                        updateOtherInst('otherExpenses', editingEvent.editType, 'amount', val)
-                                                    } else if (editingEvent.editType === 'rent') {
-                                                        updateField('rentAmount', val)
                                                     }
                                                     setEditingEvent(null)
                                                 }}
                                                 style={{
-                                                    width: 24, height: 24,
-                                                    border: 'none', borderRadius: 5,
-                                                    background: color,
+                                                    height: 40, borderRadius: 10, border: 'none',
+                                                    background: color, padding: '0 16px',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                     cursor: 'pointer', flexShrink: 0,
                                                 }}
                                             >
-                                                <svg width="10" height="7" viewBox="0 0 14 10" fill="none">
-                                                    <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                                                </svg>
+                                                <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
+                                            </button>
+                                            {/* Skip button */}
+                                            <button
+                                                onClick={() => {
+                                                    const key = `${editingEvent.editType}:${editingEvent.date}`
+                                                    updateField('removedEvents', [...(formData.removedEvents || []), key])
+                                                    setEditingEvent(null)
+                                                }}
+                                                style={{
+                                                    height: 40, borderRadius: 10, border: 'none',
+                                                    background: 'rgba(224,100,112,0.08)', padding: '0 12px',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                    cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
+                                                }}
+                                            >
+                                                <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                                    Skip {editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' }) : ''}
+                                                </span>
                                             </button>
                                         </div>
-                                        {(() => {
-                                            const isLoan = editingEvent.editType === 'loan' && editingEvent.editMonth
-                                            const isBursary = editingEvent.editType === 'bursary' && editingEvent.editMonth
-                                            if (isLoan || isBursary) {
-                                                const monthsKey = isLoan ? 'loanMonths' : 'bursaryMonths'
-                                                const defaultMonths = isLoan ? DEFAULT_LOAN_MONTHS : ['october', 'february', 'march']
-                                                const currentMonths = formData[monthsKey] || defaultMonths
-                                                if (currentMonths.length <= 1) return null
-                                                return (
-                                                    <button
-                                                        onClick={() => {
-                                                            const month = editingEvent.editMonth
-                                                            const instKey = isLoan ? 'instalmentAmounts' : 'bursaryInstalmentAmounts'
-                                                            const datesKey = isLoan ? 'loanDates' : 'bursaryDates'
-                                                            setFormData(prev => {
-                                                                const newMonths = (prev[monthsKey] || defaultMonths).filter(m => m !== month)
-                                                                const newInst = { ...(prev[instKey] || {}) }; delete newInst[month]
-                                                                const newDates = { ...(prev[datesKey] || {}) }; delete newDates[month]
-                                                                return { ...prev, [monthsKey]: newMonths, [instKey]: newInst, [datesKey]: newDates }
-                                                            })
-                                                            setEditingEvent(null)
-                                                        }}
-                                                        style={{
-                                                            width: '100%', height: 18, border: 'none', borderRadius: 4,
-                                                            background: '#fee',
-                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                            cursor: 'pointer', gap: 4,
-                                                        }}
-                                                    >
-                                                        <svg width="9" height="10" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                            <polyline points="3 6 5 6 21 6" />
-                                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                                        </svg>
-                                                        <span style={{ fontSize: 8, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Remove instalment</span>
-                                                    </button>
-                                                )
-                                            }
-                                            return (
-                                                <button
-                                                    onClick={() => {
-                                                        const key = `${editingEvent.editType}:${editingEvent.date}`
-                                                        updateField('removedEvents', [...(formData.removedEvents || []), key])
-                                                        setEditingEvent(null)
-                                                    }}
-                                                    style={{
-                                                        width: '100%', height: 18, border: 'none', borderRadius: 4,
-                                                        background: '#fee',
-                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        cursor: 'pointer', gap: 4,
-                                                    }}
-                                                >
-                                                    <svg width="9" height="10" viewBox="0 0 24 24" fill="none" stroke="#e06470" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                        <polyline points="3 6 5 6 21 6" />
-                                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                                    </svg>
-                                                    <span style={{ fontSize: 8, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Delete payment</span>
-                                                </button>
-                                            )
-                                        })()}
                                     </div>
                                 )}
                             </div>
