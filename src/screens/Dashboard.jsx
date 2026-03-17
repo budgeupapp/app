@@ -852,7 +852,7 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
 
 /* ---------- INCOME/EXPENSE ROW ---------- */
 
-function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemoved, overrideCount = 0, onClearOverrides, isExpense, expanded, onToggle, onExpandToggle, onDelete, scrollContainerRef, isTabSwitchingRef, formData, updateField, children }) {
+function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemoved, overrideCount = 0, onClearOverrides, isExpense, expanded, onToggle, onExpandToggle, onDelete, scrollContainerRef, isTabSwitchingRef, formData, updateField, entryCount = 1, children }) {
     const isInactive = !active
     const rowRef = useRef(null)
     const innerRef = useRef(null)
@@ -968,7 +968,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                         fontFamily: 'Nunito, sans-serif',
                         color: isInactive ? '#838383' : '#000',
                         margin: 0,
-                    }}>{source.label}</p>
+                    }}>{source.label}{entryCount > 1 && <span style={{ fontWeight: 500, color: '#999', marginLeft: 4 }}>({entryCount})</span>}</p>
                     <p style={{
                         fontSize: 11, fontWeight: 600,
                         fontFamily: 'Nunito, sans-serif',
@@ -2586,8 +2586,8 @@ export default function Dashboard() {
             setCollapsingSections(prev => new Set(prev).add(sectionAttr))
         }
 
-        // If all sources gone — add spacer and start graph expand immediately (alongside row swipe)
-        if (willBeEmpty && el && el.scrollTop > 0) {
+        // If section will be empty, scroll to top so content doesn't disappear
+        if (sectionWillBeEmpty && el && el.scrollTop > 0) {
             const spacer = document.createElement('div')
             spacer.style.height = (el.scrollTop + 200) + 'px'
             spacer.style.flexShrink = '0'
@@ -2792,7 +2792,7 @@ export default function Dashboard() {
                 onScroll={handleScroll}
                 style={{
                     flex: 1,
-                    overflowY: (showInitialBalancePopup || tabContentEmpty) ? 'hidden' : 'auto',
+                    overflowY: showInitialBalancePopup ? 'hidden' : 'auto',
                     overflowX: 'hidden',
                     WebkitOverflowScrolling: 'touch',
                     overscrollBehavior: 'none',
@@ -3287,6 +3287,7 @@ export default function Dashboard() {
                                                     onDelete={() => deleteSource(source.id, false)}
                                                     scrollContainerRef={scrollRef}
                                                     isTabSwitchingRef={isTabSwitchingRef}
+                                                    entryCount={(() => { const cat = CATEGORY_MAP[source.id]; return cat ? (formData[cat.formKey] || []).length : 1 })()}
                                                     formData={formData}
                                                     updateField={updateField}
                                                 >
@@ -3479,6 +3480,7 @@ export default function Dashboard() {
                                                     onDelete={() => deleteSource(source.id, true)}
                                                     scrollContainerRef={scrollRef}
                                                     isTabSwitchingRef={isTabSwitchingRef}
+                                                    entryCount={(() => { const cat = CATEGORY_MAP[source.id]; return cat ? (formData[cat.formKey] || []).length : 1 })()}
                                                     formData={formData}
                                                     updateField={updateField}
                                                 >
