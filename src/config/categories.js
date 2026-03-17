@@ -154,7 +154,7 @@ export const EXPENSE_CATEGORIES = [
     },
     {
         id: 'rent',
-        label: 'Rent / Mortgage',
+        label: 'Rent & Mortgage',
         subtitle: 'Halls, private landlords, or home payments.',
         Icon: PiHouse,
         color: '#e06470',

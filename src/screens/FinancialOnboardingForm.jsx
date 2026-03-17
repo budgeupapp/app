@@ -234,7 +234,55 @@ function buildGraphEvents(formData) {
                     if (month > 11) { month = 0; year++ }
                 }
             } else if (freq === 'yearly') {
-                events.push({ date: entry.nextDate || ayStartStr(), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: entryEditType })
+                const sf = entry.scheduleFrequency
+                if (sf === 'weekly' || sf === 'fortnightly') {
+                    const interval = sf === 'weekly' ? 7 : 14
+                    const startDate = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
+                    let d = new Date(startDate)
+                    if (!entry.nextDate) {
+                        while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
+                        while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
+                    }
+                    const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
+                    let count = 0
+                    let tempD = new Date(d)
+                    while (tempD <= endDate) { if (tempD >= AY_START) count++; tempD = new Date(tempD.getTime() + interval * 86400000) }
+                    const perPayment = count > 0 ? Math.round(amt * 100 / count) / 100 : amt
+                    while (d <= endDate) {
+                        if (d >= AY_START) {
+                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${sf === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: entryEditType })
+                        }
+                        d = new Date(d.getTime() + interval * 86400000)
+                    }
+                } else if (sf === 'monthly') {
+                    const domRaw = entry.dayOfMonth || '1'
+                    const isLast = domRaw === 'last'
+                    const domTarget = isLast ? 31 : parseInt(domRaw) || 1
+                    const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
+                    const earliest = startFrom > AY_START ? startFrom : AY_START
+                    const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
+                    let count = 0, m2 = AY_START.getMonth(), y2 = AY_START.getFullYear()
+                    for (let i = 0; i < 13; i++) {
+                        const lastDay = new Date(y2, m2 + 1, 0).getDate()
+                        const day = Math.min(domTarget, lastDay)
+                        const dd = new Date(y2, m2, day)
+                        if (dd >= earliest && dd <= endDate) count++
+                        m2++; if (m2 > 11) { m2 = 0; y2++ }
+                    }
+                    const perPayment = count > 0 ? Math.round(amt * 100 / count) / 100 : amt
+                    let month = AY_START.getMonth(), year = AY_START.getFullYear()
+                    for (let i = 0; i < 13; i++) {
+                        const lastDay = new Date(year, month + 1, 0).getDate()
+                        const day = Math.min(domTarget, lastDay)
+                        const d = new Date(year, month, day)
+                        if (d >= earliest && d <= endDate) {
+                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: entryEditType })
+                        }
+                        month++; if (month > 11) { month = 0; year++ }
+                    }
+                } else {
+                    events.push({ date: entry.nextDate || ayStartStr(), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: entryEditType })
+                }
             }
         }
     }

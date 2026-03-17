@@ -453,8 +453,8 @@ function EntryCard({
     )
     const dateActiveRef = useRef(false)
     const [showFreqPicker, setShowFreqPicker] = useState(frequency === 'yearly')
-    // Default schedule frequency: pick first non-yearly, non-one-off option, fallback to 'monthly'
-    const defaultScheduleFreq = entry.scheduleFrequency || frequencyOptions.find(f => f !== 'yearly' && f !== 'one-off') || 'monthly'
+    // Default schedule frequency: prefer monthly, fallback to first non-yearly non-one-off option
+    const defaultScheduleFreq = entry.scheduleFrequency || (frequencyOptions.includes('monthly') ? 'monthly' : frequencyOptions.find(f => f !== 'yearly' && f !== 'one-off')) || 'monthly'
     const [scheduleFreq, setScheduleFreq] = useState(defaultScheduleFreq)
 
     const isIrregular = frequency === 'irregular'

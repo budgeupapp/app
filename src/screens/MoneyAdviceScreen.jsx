@@ -238,6 +238,13 @@ export default function MoneyAdviceScreen() {
     const [newsletterOn, setNewsletterOn] = useState(() => localStorage.getItem('budgeup_newsletter') !== 'false')
     const [newsletterLoading, setNewsletterLoading] = useState(false)
     const userIdRef = useRef(null)
+    const resourcesScrollRef = useRef(null)
+    useEffect(() => {
+        const saved = sessionStorage.getItem('budgeup_scroll_resources')
+        if (saved && resourcesScrollRef.current) {
+            resourcesScrollRef.current.scrollTop = parseInt(saved, 10)
+        }
+    }, [])
 
     useEffect(() => {
         analytics.track(MONEY_ADVICE_EVENTS.VIEWED)
@@ -325,7 +332,9 @@ export default function MoneyAdviceScreen() {
             </div>
 
             {/* Scrollable content */}
-            <div style={{
+            <div ref={resourcesScrollRef} onScroll={() => {
+                if (resourcesScrollRef.current) sessionStorage.setItem('budgeup_scroll_resources', String(resourcesScrollRef.current.scrollTop))
+            }} style={{
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: '0 16px',

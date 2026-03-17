@@ -7,9 +7,9 @@ function computeAY() {
     const start = getGraphStart()
     const [y, m, d] = start.split('-').map(Number)
     const ayStart = new Date(y, m - 1, d)
-    // Always end Aug 31: same year if start is Sep+, next year otherwise
+    // Always end Sep 1: same year if start is Sep+, next year otherwise
     const endYear = m >= 9 ? y + 1 : y
-    const ayEnd = new Date(endYear, 7, 31) // Aug 31
+    const ayEnd = new Date(endYear, 8, 1) // Sep 1
     return { ayStart, ayEnd, ayMs: ayEnd - ayStart }
 }
 
@@ -1638,7 +1638,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             const isCurrent = !currentEventType || et === currentEventType || et.startsWith(currentEventType + ':')
                             const isPast = dot.x < markerPct
                             const color = isCurrent
-                                ? (isIncome ? '#147b75' : '#e06470')
+                                ? (isPast && !currentEventType ? (isIncome ? '#a8d5cf' : '#f2b3b8') : (isIncome ? '#147b75' : '#e06470'))
                                 : (isIncome ? '#a8d5cf' : '#f2b3b8')
                             const delay = 0.25 + i * 0.12
                             const isActive = activeEventDot && activeEventDot.date === dot.event.date && activeEventDot.editType === dot.event.editType
@@ -1685,26 +1685,32 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
                         {/* Removed event dots — only show on the related card */}
                         {balanceVisible && showToday && currentEventType && (() => {
-                            // Interpolate balance on the line using actual balance values
-                            const bp = steppedPath?.balPoints || []
-                            const getLineBal = (xPct) => {
-                                if (!bp.length) return balNum
-                                if (xPct <= bp[0].x) return bp[0].bal
-                                for (let j = 1; j < bp.length; j++) {
-                                    if (xPct <= bp[j].x) {
-                                        // Stepped line: use previous segment's balance
-                                        return bp[j - 1].bal
+                            // Build combined line points (x%, y% top) from past + future paths
+                            const linePts = []
+                            if (pastPath?.points) linePts.push(...pastPath.points)
+                            if (steppedPath?.points) {
+                                const startIdx = linePts.length > 0 && steppedPath.points.length > 0 && Math.abs(steppedPath.points[0].x - markerPct) < 0.1 ? 1 : 0
+                                for (let i = startIdx; i < steppedPath.points.length; i++) linePts.push(steppedPath.points[i])
+                            }
+                            linePts.sort((a, b) => a.x - b.x)
+                            // Find y% on the green line at a given x%
+                            const getLineY = (xPct) => {
+                                if (!linePts.length) return toTopPct(balNum)
+                                if (xPct <= linePts[0].x) return linePts[0].y
+                                for (let j = 1; j < linePts.length; j++) {
+                                    if (xPct <= linePts[j].x) {
+                                        // Stepped line: use previous segment's y
+                                        return linePts[j - 1].y
                                     }
                                 }
-                                return bp[bp.length - 1].bal
+                                return linePts[linePts.length - 1].y
                             }
 
                             return [...removedFutureEvents, ...removedPastEvents]
                                 .filter(evt => evt.editType === currentEventType && !removedHiddenTypes.includes(evt.editType))
                                 .map((evt, i) => {
                                     const x = datePct(evt.date)
-                                    const lineBal = getLineBal(x)
-                                    const yPct = toTopPct(lineBal)
+                                    const yPct = getLineY(x)
                                     const isIncome = evt.type === 'income'
                                     const dotColor = '#e06470'
                                     const isActive = activeEventDot && activeEventDot.date === evt.date && activeEventDot.editType === evt.editType
@@ -2223,7 +2229,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
             {/* X-axis date labels — adapt to zoom level */}
             <div ref={xAxisContainerRef} style={{
-                position: 'relative', height: 14, marginTop: 6, marginBottom: 18, marginLeft: Y_AXIS_W,
+                position: 'relative', height: 14, marginTop: 6, marginBottom: 8, marginLeft: Y_AXIS_W,
                 overflow: 'hidden', touchAction: 'none',
             }}>
                 {/* During zoom-out animation, render month labels in a fixed (non-zoomed) container

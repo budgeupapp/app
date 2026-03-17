@@ -177,7 +177,59 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                     if (month > 11) { month = 0; year++ }
                 }
             } else if (freq === 'yearly') {
-                events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: cat.id })
+                const sf = entry.scheduleFrequency
+                if (sf === 'weekly' || sf === 'fortnightly') {
+                    // Divide yearly total across weekly/fortnightly payments
+                    const interval = sf === 'weekly' ? 7 : 14
+                    const startDate = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
+                    let d = new Date(startDate)
+                    if (!entry.nextDate) {
+                        while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
+                        while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
+                    }
+                    // Count total payments to divide amount
+                    const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
+                    let count = 0
+                    let tempD = new Date(d)
+                    while (tempD <= endDate) { if (tempD >= AY_START) count++; tempD = new Date(tempD.getTime() + interval * 86400000) }
+                    const perPayment = count > 0 ? Math.round(amt * 100 / count) / 100 : amt
+                    while (d <= endDate) {
+                        if (d >= AY_START) {
+                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${sf === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: cat.id })
+                        }
+                        d = new Date(d.getTime() + interval * 86400000)
+                    }
+                } else if (sf === 'monthly') {
+                    // Divide yearly total across monthly payments
+                    const domRaw = entry.dayOfMonth || '1'
+                    const isLast = domRaw === 'last'
+                    const domTarget = isLast ? 31 : parseInt(domRaw) || 1
+                    const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
+                    const earliest = startFrom > AY_START ? startFrom : AY_START
+                    const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
+                    // Count months to divide amount
+                    let count = 0, m2 = AY_START.getMonth(), y2 = AY_START.getFullYear()
+                    for (let i = 0; i < 13; i++) {
+                        const lastDay = new Date(y2, m2 + 1, 0).getDate()
+                        const day = Math.min(domTarget, lastDay)
+                        const dd = new Date(y2, m2, day)
+                        if (dd >= earliest && dd <= endDate) count++
+                        m2++; if (m2 > 11) { m2 = 0; y2++ }
+                    }
+                    const perPayment = count > 0 ? Math.round(amt * 100 / count) / 100 : amt
+                    let month = AY_START.getMonth(), year = AY_START.getFullYear()
+                    for (let i = 0; i < 13; i++) {
+                        const lastDay = new Date(year, month + 1, 0).getDate()
+                        const day = Math.min(domTarget, lastDay)
+                        const d = new Date(year, month, day)
+                        if (d >= earliest && d <= endDate) {
+                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: cat.id })
+                        }
+                        month++; if (month > 11) { month = 0; year++ }
+                    }
+                } else {
+                    events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: cat.id })
+                }
             }
         }
     }
@@ -1131,7 +1183,16 @@ export default function Dashboard() {
     const [showExpenses, setShowExpenses] = useState(() => localStorage.getItem('budgeup_show_expenses') === 'true')
     const [showOverdraft, setShowOverdraft] = useState(() => localStorage.getItem('budgeup_show_overdraft') !== 'false')
     const [showHolidays, setShowHolidays] = useState(() => localStorage.getItem('budgeup_show_holidays') !== 'false')
-    const [expandedSources, setExpandedSources] = useState(new Set())
+    const [expandedSources, setExpandedSourcesRaw] = useState(() => {
+        try { const s = sessionStorage.getItem('budgeup_expanded_sources'); return s ? new Set(JSON.parse(s)) : new Set() } catch { return new Set() }
+    })
+    const setExpandedSources = (fn) => {
+        setExpandedSourcesRaw(prev => {
+            const next = typeof fn === 'function' ? fn(prev) : fn
+            sessionStorage.setItem('budgeup_expanded_sources', JSON.stringify([...next]))
+            return next
+        })
+    }
     const [visibleExpandedSource, setVisibleExpandedSource] = useState(null)
     const [balanceToast, setBalanceToast] = useState(null)
     const balanceToastTimer = useRef(null)
@@ -1322,8 +1383,8 @@ export default function Dashboard() {
 
         applyScrollStyles(targetScroll)
 
-        // Hide content during switch to prevent flash
-        el.style.visibility = 'hidden'
+        // Hide content during switch to prevent flash — use opacity to keep background white
+        el.style.opacity = '0'
         cachedNodesRef.current = null
 
         flushSync(() => {
@@ -1337,7 +1398,7 @@ export default function Dashboard() {
         requestAnimationFrame(() => {
             el.scrollTop = targetScroll
             applyScrollStyles(targetScroll)
-            el.style.visibility = ''
+            el.style.opacity = ''
             isTabSwitchingRef.current = false
             isAnimatingRef.current = false
         })
@@ -2668,8 +2729,23 @@ export default function Dashboard() {
     for (const id of [...(formData.flexIncomeSources || []), ...(formData.flexExpenseSources || [])]) {
         sourceToEditType[id] = [id]
     }
-    const activeSource = visibleExpandedSource && expandedSources.has(visibleExpandedSource)
-        ? visibleExpandedSource : null
+    // Find expanded source in current tab for dot highlighting
+    const activeSource = (() => {
+        const tabSources = activeTab === 'income'
+            ? INCOME_SOURCES.map(s => s.id)
+            : activeTab === 'expenses'
+                ? EXPENSE_SOURCES.map(s => s.id)
+                : []
+        // Prefer visible expanded source if it's in the current tab
+        if (visibleExpandedSource && expandedSources.has(visibleExpandedSource) && tabSources.includes(visibleExpandedSource)) {
+            return visibleExpandedSource
+        }
+        // Fallback to first expanded source in current tab
+        for (const id of tabSources) {
+            if (expandedSources.has(id)) return id
+        }
+        return null
+    })()
     const currentEventType = activeSource && sourceToEditType[activeSource]
         ? sourceToEditType[activeSource][0]
         : null
@@ -2721,7 +2797,7 @@ export default function Dashboard() {
                     WebkitOverflowScrolling: 'touch',
                     overscrollBehavior: 'none',
                     paddingBottom: 'calc(120px + env(safe-area-inset-bottom))',
-                    background: '#f5f7f7',
+                    background: '#ffffff',
                 }}
             >
                 {/* White cover so grey doesn't show behind safe area on overscroll */}
@@ -3096,7 +3172,7 @@ export default function Dashboard() {
                                                         padding: '7px 0', borderRadius: 50, cursor: 'pointer',
                                                         position: 'relative', zIndex: 1,
                                                         color: isActive ? '#fff' : '#1a1a1a',
-                                                        transition: isActive ? 'color 0.12s ease 0.12s' : 'color 0.15s ease 0.15s',
+                                                        transition: isActive ? 'color 0.1s ease 0.1s' : 'color 0.1s ease',
                                                     }}
                                                 >
                                                     <tab.Icon size={15} style={{ flexShrink: 0 }} />
@@ -3116,7 +3192,7 @@ export default function Dashboard() {
 
                 {/* Content below */}
                 <div ref={contentWrapRef} style={{
-                    minHeight: '60vh',
+                    minHeight: '100vh',
                     background: '#f5f7f7',
                     opacity: showInitialBalancePopup ? 0.35 : 1,
                     pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
@@ -4411,7 +4487,17 @@ export default function Dashboard() {
                     const freqMap = { family: formData.familyFrequency, work: formData.workFrequency, rent: formData.rentFrequency }
                     return freqMap[editingEvent.editType] || 'monthly'
                 })()
-                const freqLabel = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly', yearly: 'Yearly', irregular: 'Irregular', 'one-off': 'One-off' }[eventFreq] || ''
+                const FREQ_LABEL_MAP = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly', yearly: 'Yearly', irregular: 'Irregular', 'one-off': 'One-off' }
+                // For yearly with schedule frequency, show the schedule freq (e.g. "Monthly" not "Yearly")
+                const displayFreq = (() => {
+                    if (eventFreq !== 'yearly') return eventFreq
+                    const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+                    const cat = allCats.find(c => c.id === editingEvent.editType)
+                    const entries = cat ? (formData[cat.formKey] || []) : []
+                    const sf = entries[0]?.scheduleFrequency
+                    return sf || eventFreq
+                })()
+                const freqLabel = FREQ_LABEL_MAP[displayFreq] || ''
                 const skipLabel = (() => {
                     if (!editingEvent.date) return ''
                     if (eventFreq === 'weekly') return 'week'
@@ -4474,7 +4560,15 @@ export default function Dashboard() {
                         }
                     } else {
                         const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
-                        updateField('amountOverrides', { ...(formData.amountOverrides || {}), [overrideKey]: val })
+                        const originalAmt = editingEvent.originalAmount != null ? editingEvent.originalAmount : editingEvent.amount
+                        if (Math.abs(parsedAmount - originalAmt) < 0.01) {
+                            // Same as original — remove override if exists
+                            const updated = { ...(formData.amountOverrides || {}) }
+                            delete updated[overrideKey]
+                            updateField('amountOverrides', updated)
+                        } else {
+                            updateField('amountOverrides', { ...(formData.amountOverrides || {}), [overrideKey]: val })
+                        }
                     }
                     analytics.track(DASHBOARD_EVENTS.EVENT_EDITED, { edit_type: editingEvent.editType, event_type: editingEvent.type })
                     setEditingEvent(null)

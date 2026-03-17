@@ -121,7 +121,24 @@ function OpenQuestion({ question, value, onChange }) {
                     boxSizing: 'border-box',
                     transition: 'border-color 0.2s ease',
                 }}
-                onFocus={e => { e.target.style.borderColor = '#147B75' }}
+                onTouchEnd={e => {
+                    // Focus with preventScroll to avoid iOS auto-scroll
+                    e.preventDefault()
+                    e.target.focus({ preventScroll: true })
+                }}
+                onFocus={e => {
+                    e.target.style.borderColor = '#147B75'
+                    // Lock all scrollable ancestors
+                    const sc = e.target.closest('[style*="overflow"]')
+                    if (sc) {
+                        const pos = sc.scrollTop
+                        const lock = () => { sc.scrollTop = pos }
+                        lock()
+                        const id = setInterval(lock, 10)
+                        setTimeout(() => clearInterval(id), 800)
+                    }
+                    window.scrollTo(0, 0)
+                }}
                 onBlur={e => { e.target.style.borderColor = '#e8e8e8' }}
             />
         </div>
@@ -215,6 +232,10 @@ export default function FeedbackScreen() {
     const [submitted, setSubmitted] = useState(false)
     const [submitting, setSubmitting] = useState(false)
     const scrollRef = useRef(null)
+    useEffect(() => {
+        const saved = sessionStorage.getItem('budgeup_scroll_feedback')
+        if (saved && scrollRef.current) scrollRef.current.scrollTop = parseInt(saved, 10)
+    }, [])
 
     useEffect(() => {
         analytics.track(FEEDBACK_EVENTS.VIEWED)
@@ -236,19 +257,16 @@ export default function FeedbackScreen() {
         setResponses(prev => ({ ...prev, [index]: value }))
     }
 
-    const hasRequiredResponses = () => {
+    const hasAnyResponse = () => {
         if (!survey?.questions) return false
-        return survey.questions.some((q, i) => {
-            if (q.optional) return false
+        return survey.questions.some((_, i) => {
             const val = responses[i]
-            if (val === undefined || val === null || val === '') return false
-            if (Array.isArray(val) && val.length === 0) return false
-            return true
+            return val !== undefined && val !== null && val !== '' && !(Array.isArray(val) && val.length === 0)
         })
     }
 
     const handleSubmit = () => {
-        if (!hasRequiredResponses()) return
+        if (!hasAnyResponse()) return
         setSubmitting(true)
 
         const payload = { $survey_id: POSTHOG_SURVEY_ID }
@@ -316,7 +334,9 @@ export default function FeedbackScreen() {
                 }}>Feedback</h1>
             </div>
 
-            <div ref={scrollRef} style={{
+            <div ref={scrollRef} onScroll={() => {
+                if (scrollRef.current) sessionStorage.setItem('budgeup_scroll_feedback', String(scrollRef.current.scrollTop))
+            }} style={{
                 flex: 1,
                 overflowY: 'auto',
                 overflowX: 'hidden',
@@ -361,8 +381,8 @@ export default function FeedbackScreen() {
 
                                 {/* Submit */}
                                 <div style={{
-                                    maxHeight: hasRequiredResponses() ? 70 : 0,
-                                    opacity: hasRequiredResponses() ? 1 : 0,
+                                    maxHeight: hasAnyResponse() ? 70 : 0,
+                                    opacity: hasAnyResponse() ? 1 : 0,
                                     overflow: 'hidden',
                                     transition: 'max-height 0.3s ease, opacity 0.25s ease',
                                 }}>

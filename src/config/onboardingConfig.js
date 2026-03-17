@@ -37,7 +37,7 @@ export const STEPS = [
     },
     // ── Expense category steps (shown if selected) ──
     { id: 'uniFees', heading: 'University Fees', subtitle: 'Only put these down if the money comes out of your bank account.' },
-    { id: 'rent', heading: 'Rent / Mortgage', subtitle: 'Halls, private landlords, or home payments.' },
+    { id: 'rent', heading: 'Rent & Mortgage', subtitle: 'Halls, private landlords, or home payments.' },
     { id: 'bills', heading: 'Bills', subtitle: 'Gas, electric, water, and Wi-Fi!' },
     { id: 'phoneSubscriptions', heading: 'Phone & Subscriptions', subtitle: 'Monthly mobile bills, Spotify, Netflix, or the gym.' },
     { id: 'holidayTrips', heading: 'Holiday & Trips', subtitle: 'Estimate how much you plan to spend on any upcoming trips.' },

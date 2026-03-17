@@ -43,14 +43,14 @@ export function setGraphStart(dateStr) {
     localStorage.setItem(GRAPH_START_KEY, dateStr)
 }
 
-// Compute academic year range from start date — always ends Aug 31
+// Compute academic year range from start date — always ends Sep 1
 export function getAcademicYear() {
     const start = getGraphStart()
     const [y, m, d] = start.split('-').map(Number)
     const ayStart = new Date(y, m - 1, d)
-    // End is always Aug 31: same year if start is Sep+, next year otherwise
+    // End is always Sep 1: same year if start is Sep+, next year otherwise
     const endYear = m >= 9 ? y + 1 : y
-    const ayEnd = new Date(endYear, 7, 31) // Aug 31
+    const ayEnd = new Date(endYear, 8, 1) // Sep 1
     return { ayStart, ayEnd }
 }
 
