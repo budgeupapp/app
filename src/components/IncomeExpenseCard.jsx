@@ -3,6 +3,11 @@ import { useState, useRef, useEffect } from 'react'
 import { ALL_MONTH_KEYS, MONTH_LABELS } from '../config/onboardingConfig'
 import { fmt } from './TermGraph'
 
+/* Center text in select elements (iOS Safari ignores textAlign) */
+const selectCenterStyle = document.createElement('style')
+selectCenterStyle.textContent = '.select-center { text-align: center; text-align-last: center; -webkit-text-align-last: center; }'
+if (!document.querySelector('[data-select-center]')) { selectCenterStyle.setAttribute('data-select-center', ''); document.head.appendChild(selectCenterStyle) }
+
 /* ---------- HELPERS ---------- */
 
 function splitEvenly(total, n) {
@@ -103,7 +108,11 @@ export default function IncomeExpenseCard({
             dates: { ...defaultDates },
             instalmentAmounts: {},
         }])
-        setTimeout(() => setNewId(null), 400)
+        setTimeout(() => {
+            setNewId(null)
+            const el = document.querySelector(`[data-entry-id="${id}"]`)
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 350)
     }
 
     const [removingIdx, setRemovingIdx] = useState(null)
@@ -151,7 +160,7 @@ export default function IncomeExpenseCard({
                     const isCollapsing = collapsingIdx === idx
                     const isNew = entry.id === newId
                     return (
-                    <div key={entry.id || idx} data-entry {...{[`data-entry-${idx}`]: ''}} style={{
+                    <div key={entry.id || idx} data-entry data-entry-id={entry.id} {...{[`data-entry-${idx}`]: ''}} style={{
                         marginBottom: isCollapsing ? 0 : 10,
                         ...(isCollapsing ? {
                             maxHeight: 0, opacity: 0, overflow: 'hidden',
@@ -168,8 +177,8 @@ export default function IncomeExpenseCard({
                             <div style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                 margin: idx === 0 ? '0 0 8px' : '16px 0 8px',
-                                maxHeight: (entries.length > 1) ? 30 : 0,
-                                opacity: (entries.length > 1) ? 1 : 0,
+                                maxHeight: (entries.length > 1 && !(removingIdx !== null && entries.length === 2)) ? 30 : 0,
+                                opacity: (entries.length > 1 && !(removingIdx !== null && entries.length === 2)) ? 1 : 0,
                                 overflow: 'hidden',
                                 transition: 'max-height 0.35s ease, opacity 0.25s ease',
                             }}>
@@ -332,12 +341,12 @@ function EntryCard({
     return (
         <div>
             {/* Amount + frequency dropdown */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 16, width: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
                 <div style={{
                     display: 'flex', alignItems: 'center',
                     border: '1px solid #e8e8e8', borderRight: 'none',
                     borderRadius: '10px 0 0 10px', background: '#fff',
-                    padding: '0 14px', height: 44, gap: 6, flex: 1,
+                    padding: '0 14px', height: 44, gap: 6, flex: 1, minWidth: 0,
                 }}>
                     <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>
                         {getCurrencySymbol()}
@@ -463,7 +472,7 @@ function EntryCard({
                                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                             padding: '10px 14px', borderTop: '1px solid #f3f3f3',
                                         }}>
-                                            <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', minWidth: 70 }}>
+                                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', minWidth: 70 }}>
                                                 {MONTH_LABELS[m]}
                                             </span>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -472,7 +481,7 @@ function EntryCard({
                                                     background: '#f8f8f8', borderRadius: 8,
                                                     padding: '4px 8px', width: 80, boxSizing: 'border-box',
                                                 }}>
-                                                    <span style={{ fontSize: 13, fontWeight: 600, color: '#999', fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>
+                                                    <span style={{ fontSize: 14, fontWeight: 600, color: '#999', fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>
                                                         {getCurrencySymbol()}
                                                     </span>
                                                     <input
@@ -481,18 +490,18 @@ function EntryCard({
                                                         onChange={(e) => handleInstalmentChange(m, e)}
                                                         style={{
                                                             flex: 1, border: 'none', background: 'transparent',
-                                                            fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                                            fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
                                                             color: '#000', outline: 'none', padding: 0, textAlign: 'left',
                                                         }}
                                                     />
                                                 </div>
                                                 <div style={{ position: 'relative' }}>
                                                     <span style={{
-                                                        fontSize: 13, fontWeight: 600, color: '#888',
+                                                        fontSize: 14, fontWeight: 600, color: '#888',
                                                         fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                                                         background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
                                                         display: 'inline-block', whiteSpace: 'nowrap',
-                                                        minWidth: 100, textAlign: 'center',
+                                                        minWidth: 120, textAlign: 'center',
                                                     }}>
                                                         {datesProp?.[m] ? fmt(datesProp[m]) : 'Select date'}
                                                     </span>
@@ -545,11 +554,11 @@ function EntryCard({
                     </span>
                     <div style={{ position: 'relative' }}>
                         <span style={{
-                            fontSize: 13, fontWeight: 600, color: '#888',
+                            fontSize: 14, fontWeight: 600, color: '#888',
                             fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                             background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
                             display: 'inline-block', whiteSpace: 'nowrap',
-                            minWidth: 100, textAlign: 'center',
+                            minWidth: 120, textAlign: 'center',
                         }}>
                             {nextDate ? fmt(nextDate) : 'Select date'}
                         </span>
@@ -569,90 +578,98 @@ function EntryCard({
                 </div>
             )}
 
-            {/* === Day of week (weekly/fortnightly) === */}
-            {(frequency === 'weekly' || frequency === 'fortnightly') && (
-                <div style={{ position: 'relative', marginBottom: 12 }}>
-                    <select
-                        value={entry.dayOfWeek || 'monday'}
-                        onChange={(e) => updateField('dayOfWeek', e.target.value)}
-                        style={{
-                            width: '100%', height: 44, boxSizing: 'border-box',
-                            background: '#fff', borderRadius: 10,
-                            padding: '0 36px 0 14px', border: '1px solid #e8e8e8',
-                            fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                            color: '#333', outline: 'none',
-                            WebkitAppearance: 'none', appearance: 'none',
-                            cursor: 'pointer',
-                        }}
-                    >
-                        {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => (
-                            <option key={d} value={d.toLowerCase()}>Every {d}</option>
-                        ))}
-                    </select>
-                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                        <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                </div>
-            )}
-
-            {/* === Day of month (monthly) === */}
-            {frequency === 'monthly' && (
-                <div style={{ position: 'relative', marginBottom: 12 }}>
-                    <select
-                        value={entry.dayOfMonth || '1'}
-                        onChange={(e) => updateField('dayOfMonth', e.target.value)}
-                        style={{
-                            width: '100%', height: 44, boxSizing: 'border-box',
-                            background: '#fff', borderRadius: 10,
-                            padding: '0 36px 0 14px', border: '1px solid #e8e8e8',
-                            fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                            color: '#333', outline: 'none',
-                            WebkitAppearance: 'none', appearance: 'none',
-                            cursor: 'pointer',
-                        }}
-                    >
-                        {Array.from({ length: 31 }, (_, i) => {
-                            const d = i + 1
-                            const suffix = d === 1 || d === 21 || d === 31 ? 'st' : d === 2 || d === 22 ? 'nd' : d === 3 || d === 23 ? 'rd' : 'th'
-                            return <option key={d} value={String(d)}>{d}{suffix} of every month</option>
-                        })}
-                        <option value="last">Last day of every month</option>
-                    </select>
-                    <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                        <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    {(parseInt(entry.dayOfMonth) >= 29 || entry.dayOfMonth === 'last') && (
-                        <p style={{
-                            fontSize: 11, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
-                            color: '#999', margin: '6px 0 0',
-                        }}>
-                            {entry.dayOfMonth === 'last' ? 'Will use the last day of each month.' : 'For shorter months, we\'ll use the last day instead.'}
-                        </p>
-                    )}
-                </div>
-            )}
-
-            {/* === Start/end dates (weekly/fortnightly/monthly) === */}
+            {/* === WEEKLY/FORTNIGHTLY/MONTHLY: day + start/end in one card === */}
             {(frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly') && (
                 <div style={{
                     border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
                     overflow: 'hidden', marginBottom: 16,
                 }}>
+                    {/* Day of week (weekly/fortnightly) */}
+                    {(frequency === 'weekly' || frequency === 'fortnightly') && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '12px 14px',
+                        }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                                Day of week
+                            </span>
+                            <div style={{ position: 'relative' }}>
+                                <select
+                                    className="select-center"
+                                    value={entry.dayOfWeek || 'monday'}
+                                    onChange={(e) => updateField('dayOfWeek', e.target.value)}
+                                    style={{
+                                        background: '#f8f8f8', borderRadius: 8,
+                                        padding: '4px 28px 4px 28px', border: 'none',
+                                        fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                        color: '#333', outline: 'none',
+                                        WebkitAppearance: 'none', appearance: 'none',
+                                        cursor: 'pointer', minWidth: 120, textAlign: 'center',
+                                    }}
+                                >
+                                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => (
+                                        <option key={d} value={d.toLowerCase()}>{d}</option>
+                                    ))}
+                                </select>
+                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                                    <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Day of month (monthly) */}
+                    {frequency === 'monthly' && (
+                        <div style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                            padding: '12px 14px',
+                        }}>
+                            <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                                Day of month
+                            </span>
+                            <div style={{ position: 'relative' }}>
+                                <select
+                                    className="select-center"
+                                    value={entry.dayOfMonth || '1'}
+                                    onChange={(e) => updateField('dayOfMonth', e.target.value)}
+                                    style={{
+                                        background: '#f8f8f8', borderRadius: 8,
+                                        padding: '4px 28px 4px 28px', border: 'none',
+                                        fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                        color: '#333', outline: 'none',
+                                        WebkitAppearance: 'none', appearance: 'none',
+                                        cursor: 'pointer', minWidth: 120, textAlign: 'center',
+                                    }}
+                                >
+                                    {Array.from({ length: 31 }, (_, i) => {
+                                        const d = i + 1
+                                        const suffix = d === 1 || d === 21 || d === 31 ? 'st' : d === 2 || d === 22 ? 'nd' : d === 3 || d === 23 ? 'rd' : 'th'
+                                        return <option key={d} value={String(d)}>{d}{suffix}</option>
+                                    })}
+                                    <option value="last">Last day</option>
+                                </select>
+                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                                    <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Start date */}
                     <div style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '12px 14px',
+                        padding: '12px 14px', borderTop: '1px solid #f3f3f3',
                     }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
                             Start date <span style={{ fontWeight: 500, color: '#bbb' }}>(optional)</span>
                         </span>
                         <div style={{ position: 'relative' }}>
                             <span style={{
-                                fontSize: 13, fontWeight: 600, color: '#888',
+                                fontSize: 14, fontWeight: 600, color: '#888',
                                 fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                                 background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
                                 display: 'inline-block', whiteSpace: 'nowrap',
-                                minWidth: 100, textAlign: 'center',
+                                minWidth: 120, textAlign: 'center',
                             }}>
                                 {nextDate ? fmt(nextDate) : 'Select date'}
                             </span>
@@ -672,16 +689,16 @@ function EntryCard({
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         padding: '12px 14px', borderTop: '1px solid #f3f3f3',
                     }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
                             End date <span style={{ fontWeight: 500, color: '#bbb' }}>(optional)</span>
                         </span>
                         <div style={{ position: 'relative' }}>
                             <span style={{
-                                fontSize: 13, fontWeight: 600, color: '#888',
+                                fontSize: 14, fontWeight: 600, color: '#888',
                                 fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                                 background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
                                 display: 'inline-block', whiteSpace: 'nowrap',
-                                minWidth: 100, textAlign: 'center',
+                                minWidth: 120, textAlign: 'center',
                             }}>
                                 {entry.endDate ? fmt(entry.endDate) : 'Select date'}
                             </span>
@@ -706,16 +723,16 @@ function EntryCard({
                     border: '1px solid #e8e8e8', borderRadius: 12, background: '#fff',
                     padding: '12px 14px', marginBottom: 16,
                 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888' }}>
                         Date
                     </span>
                     <div style={{ position: 'relative' }}>
                         <span style={{
-                            fontSize: 13, fontWeight: 600, color: '#888',
+                            fontSize: 14, fontWeight: 600, color: '#888',
                             fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
                             background: '#f8f8f8', padding: '4px 10px', borderRadius: 8,
                             display: 'inline-block', whiteSpace: 'nowrap',
-                            minWidth: 100, textAlign: 'center',
+                            minWidth: 120, textAlign: 'center',
                         }}>
                             {nextDate ? fmt(nextDate) : 'Select date'}
                         </span>

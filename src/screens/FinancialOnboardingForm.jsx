@@ -2378,7 +2378,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 {/* Opaque backing behind sheet — covers rounded corner gaps and panel transitions */}
                 <div style={{
                     position: 'absolute',
-                    top: COLLAPSED_TOP,
+                    top: `calc(${COLLAPSED_TOP} + 20px)`,
                     left: 0, right: 0, bottom: 0,
                     background: '#f5f7f7',
                     zIndex: 1,
