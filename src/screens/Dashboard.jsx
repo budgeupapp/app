@@ -105,11 +105,14 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
         if (!sourceList?.includes(cat.id)) continue
 
         const entries = formData[cat.formKey] || []
-        for (const entry of entries) {
+        const multiEntry = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
+        for (let ei = 0; ei < entries.length; ei++) {
+            const entry = entries[ei]
             const amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
             if (amt <= 0) continue
             const type = isIncome ? 'income' : 'expense'
             const freq = entry.frequency || cat.defaultFrequency
+            const entryLabel = multiEntry ? `${cat.label} ${ei + 1}` : cat.label
 
             if (freq === 'irregular') {
                 const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
@@ -123,11 +126,11 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                     const instAmt = parseFloat(String(entry.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
                     const amount = instAmt > 0 ? instAmt : amounts[mi]
                     if (amount <= 0) continue
-                    events.push({ date, amount, type, label: cat.label, sublabel: `${MONTH_SHORT[month]} ${cat.label.toLowerCase()}`, editType: cat.id, editMonth: month })
+                    events.push({ date, amount, type, label: entryLabel, sublabel: `${MONTH_SHORT[month]} ${entryLabel.toLowerCase()}`, editType: cat.id, editMonth: month })
                 }
             } else if (freq === 'one-off') {
                 if (entry.nextDate) {
-                    events.push({ date: entry.nextDate, amount: amt, type, label: cat.label, sublabel: 'One-off', editType: cat.id })
+                    events.push({ date: entry.nextDate, amount: amt, type, label: entryLabel, sublabel: 'One-off', editType: cat.id })
                 }
             } else if (freq === 'weekly' || freq === 'fortnightly') {
                 const interval = freq === 'weekly' ? 7 : 14
@@ -144,7 +147,7 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                         const dateStr = toLocalDate(d)
                         const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
                         if (eventAmt > 0) {
-                            events.push({ date: dateStr, amount: eventAmt, type, label: cat.label, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${cat.label.toLowerCase()}`, editType: cat.id })
+                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: cat.id })
                         }
                     }
                     d = new Date(d.getTime() + interval * 86400000)
@@ -167,14 +170,14 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                         const dateStr = toLocalDate(d)
                         const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
                         if (eventAmt > 0) {
-                            events.push({ date: dateStr, amount: eventAmt, type, label: cat.label, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${cat.label.toLowerCase()}`, editType: cat.id })
+                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: cat.id })
                         }
                     }
                     month++
                     if (month > 11) { month = 0; year++ }
                 }
             } else if (freq === 'yearly') {
-                events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: cat.label, sublabel: `Yearly ${cat.label.toLowerCase()}`, editType: cat.id })
+                events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: cat.id })
             }
         }
     }
@@ -261,7 +264,7 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
         // Apply per-payment amount override
         const overrideKey = `${base.editType}:${base.date}`
         const overrideVal = overrides[overrideKey]
-        const withOverride = overrideVal != null ? { ...base, amount: parseFloat(String(overrideVal).replace(/,/g, '')) || base.amount, hasOverride: true } : base
+        const withOverride = overrideVal != null ? { ...base, amount: parseFloat(String(overrideVal).replace(/,/g, '')) || base.amount, hasOverride: true, originalAmount: base.amount } : base
         return removed.includes(overrideKey) ? { ...withOverride, removed: true } : withOverride
     })
 }
@@ -998,7 +1001,18 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                                     color: '#d4566a', cursor: 'pointer',
                                 }}
                             >
-                                Delete {source.label.toLowerCase()}
+                                Delete {(() => {
+                                    const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
+                                    const cat = allCats.find(c => c.id === source.id)
+                                    const entries = cat ? (formData[cat.formKey] || []) : []
+                                    const count = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length
+                                    const name = source.label.toLowerCase()
+                                    if (count > 1) {
+                                        const plural = name.endsWith('y') ? name.slice(0, -1) + 'ies' : name + 's'
+                                        return `${count} ${plural}`
+                                    }
+                                    return name
+                                })()}
                             </span>
                         </div>
                     )}
@@ -2434,7 +2448,8 @@ export default function Dashboard() {
     }
 
     const getSourceRemovedCount = (editTypes) => {
-        return allEvents.filter(e => editTypes.includes(e.editType) && e.removed && !e.noDot).length
+        // Only count removed events that actually appear on the graph
+        return allEvents.filter(e => (editTypes.includes(e.editType) || editTypes.some(et => e.editType?.startsWith(et + ':'))) && e.removed && !e.noDot).length
     }
 
     const restoreSourceEvents = (editTypes) => {
@@ -2445,7 +2460,14 @@ export default function Dashboard() {
 
     const getSourceOverrideCount = (editTypes) => {
         const overrides = formData.amountOverrides || {}
-        return Object.keys(overrides).filter(key => editTypes.some(et => key.startsWith(et + ':'))).length
+        // Only count overrides where the event actually exists on the graph
+        return Object.keys(overrides).filter(key => {
+            if (!editTypes.some(et => key.startsWith(et + ':'))) return false
+            const parts = key.split(':')
+            const date = parts[parts.length - 1]
+            const et = parts.slice(0, -1).join(':')
+            return allEvents.some(e => (e.editType === et || editTypes.includes(e.editType)) && e.date === date && !e.removed)
+        }).length
     }
 
     const clearSourceOverrides = (editTypes) => {
@@ -3788,6 +3810,15 @@ export default function Dashboard() {
                                                     <p style={{ margin: 0, fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
                                                         {alreadyOut ? 'Low balance warning' : 'Running low warning'}
                                                     </p>
+                                                    {warningMinimised && (
+                                                        <span style={{
+                                                            fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                                            background: 'rgba(255,255,255,0.2)', borderRadius: 8,
+                                                            padding: '3px 8px', whiteSpace: 'nowrap', flexShrink: 0,
+                                                        }}>
+                                                            {alreadyOut ? 'Now' : daysUntil === 0 ? 'Today' : daysUntil === 1 ? '1d' : `${daysUntil}d`}
+                                                        </span>
+                                                    )}
                                                     <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{
                                                         transform: warningMinimised ? 'rotate(-90deg)' : 'rotate(0deg)',
                                                         transition: 'transform 0.25s ease', flexShrink: 0,
@@ -4469,13 +4500,40 @@ export default function Dashboard() {
                                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                             background: balBg, borderRadius: 10, padding: '7px 12px', marginBottom: 8,
                                         }}>
-                                            <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>Balance after</span>
+                                            <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>Balance after payment</span>
                                             <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: balColor }}>
                                                 {liveBalance < 0 ? '-' : ''}{getCurrencySymbol()}{Math.abs(Math.round(liveBalance)).toLocaleString()}
                                             </span>
                                         </div>
                                     )
                                 })()}
+                                {/* Original amount + reset (if edited) */}
+                                {editingEvent.hasOverride && editingEvent.originalAmount != null && (
+                                    <div style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                        background: '#eef4ff', borderRadius: 10, padding: '7px 12px', marginBottom: 8,
+                                    }}>
+                                        <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#3b82f6' }}>
+                                            Originally {getCurrencySymbol()}{editingEvent.originalAmount.toLocaleString()} / {freqLabel ? freqLabel.toLowerCase() : 'payment'}
+                                        </span>
+                                        <button
+                                            onClick={() => {
+                                                const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
+                                                const updated = { ...(formData.amountOverrides || {}) }
+                                                delete updated[overrideKey]
+                                                updateField('amountOverrides', updated)
+                                                setEditingEvent(null)
+                                            }}
+                                            style={{
+                                                background: '#3b82f6', border: 'none',
+                                                padding: '4px 10px', borderRadius: 6,
+                                                cursor: 'pointer', flexShrink: 0,
+                                            }}
+                                        >
+                                            <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Reset</span>
+                                        </button>
+                                    </div>
+                                )}
                                 {/* Amount + Save + Skip on one row */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                     <div style={{
@@ -4505,24 +4563,6 @@ export default function Dashboard() {
                                     }}>
                                         <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
                                     </button>
-                                    {editingEvent.hasOverride && (
-                                        <button onClick={() => {
-                                            const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
-                                            const updated = { ...(formData.amountOverrides || {}) }
-                                            delete updated[overrideKey]
-                                            updateField('amountOverrides', updated)
-                                            setEditingEvent(null)
-                                        }} style={{
-                                            height: 34, borderRadius: 8, border: 'none',
-                                            background: '#eef4ff', padding: '0 8px',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
-                                        }}>
-                                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6' }}>
-                                                Reset
-                                            </span>
-                                        </button>
-                                    )}
                                     {canSkip && (
                                         <button onClick={handleSkip} style={{
                                             height: 34, borderRadius: 8, border: 'none',

@@ -308,8 +308,8 @@ export default function BottomNav() {
                 {/* L1 + L2 buttons (hidden when L3 picker is showing) */}
                 <div style={{
                     display: 'flex',
-                    alignItems: 'flex-end', justifyContent: 'space-between',
-                    width: '100%', maxWidth: 400, padding: '0 30px',
+                    alignItems: 'flex-end',
+                    width: '100%', maxWidth: 400, padding: '0 16px',
                     position: 'relative',
                     opacity: showPicker ? 0 : 1,
                     transform: showPicker ? 'translateY(15px)' : 'translateY(0)',
@@ -320,7 +320,7 @@ export default function BottomNav() {
                 }}>
 
                     {/* LEFT SLOT */}
-                    <div style={{ width: 110, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative', flexShrink: 0 }}>
+                    <div style={{ flex: 1, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative' }}>
                         {fabBtn(mainVisible, 'translateY(0) scale(1)', 'translateY(30px) scale(0.4)', '0s',
                             () => { if (mainVisible) setFabSourcePicker('expense') },
                             '#e06470', <TrendingDown size={24} color="#fff" strokeWidth={2.2} />, 'ADD EXPENSE',
@@ -330,7 +330,7 @@ export default function BottomNav() {
                     </div>
 
                     {/* CENTER SLOT */}
-                    <div style={{ width: 110, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative', flexShrink: 0, overflow: 'visible' }}>
+                    <div style={{ flex: 1, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative', overflow: 'visible' }}>
                         {fabBtn(mainVisible, 'translateY(0) scale(1)', 'translateY(30px) scale(0.4)', '0s',
                             () => { if (mainVisible) handleAction('update-balance') },
                             '#EC8C17',
@@ -342,7 +342,7 @@ export default function BottomNav() {
                     </div>
 
                     {/* RIGHT SLOT */}
-                    <div style={{ width: 110, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative', flexShrink: 0 }}>
+                    <div style={{ flex: 1, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative' }}>
                         {fabBtn(mainVisible, 'translateY(0) scale(1)', 'translateY(30px) scale(0.4)', '0s',
                             () => { if (mainVisible) setFabSourcePicker('income') },
                             '#147b75', <TrendingUp size={24} color="#fff" strokeWidth={2.2} />, 'ADD INCOME',
@@ -399,7 +399,7 @@ export default function BottomNav() {
                             transform: `translateX(${pickerOffset}px)`,
                             width: 'max-content',
                         } : {
-                            justifyContent: 'center',
+                            justifyContent: 'space-evenly',
                             width: '100%',
                         }),
                     }}>

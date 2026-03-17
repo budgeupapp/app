@@ -1492,7 +1492,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     const delay = 0.25 + i * 0.12
                                     const bg = isCurrent
                                         ? (isIncome ? '#147b75' : '#e06470')
-                                        : (isIncome ? '#6dbfad' : '#f2c4c8')
+                                        : (currentEventType ? '#d0d0d0' : (isIncome ? '#6dbfad' : '#f2c4c8'))
                                     const isActive = activeEventDot && activeEventDot.date === dot.event.date && activeEventDot.editType === dot.event.editType
                                     return (
                                         <div
@@ -1575,9 +1575,11 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             const isHidden = hiddenEventTypes.includes(et) || hiddenEventTypes.some(h => et.startsWith(h + ':'))
                             const isCurrent = !currentEventType || et === currentEventType || et.startsWith(currentEventType + ':')
                             const isPast = dot.x < markerPct
-                            const color = isCurrent
-                                ? (isIncome ? '#147b75' : '#e06470')
-                                : (isIncome ? '#6dbfad' : '#f2c4c8')
+                            const color = isPast
+                                ? (isCurrent ? (isIncome ? '#6dbfad' : '#f2c4c8') : (currentEventType ? '#d0d0d0' : (isIncome ? '#6dbfad' : '#f2c4c8')))
+                                : isCurrent
+                                    ? (isIncome ? '#147b75' : '#e06470')
+                                    : (currentEventType ? '#d0d0d0' : (isIncome ? '#6dbfad' : '#f2c4c8'))
                             const delay = 0.25 + i * 0.12
                             const isActive = activeEventDot && activeEventDot.date === dot.event.date && activeEventDot.editType === dot.event.editType
                             return (
@@ -1614,9 +1616,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                             : isActive ? '2px solid white' : '1px solid white',
                                         boxShadow: isActive
                                             ? `0 0 8px ${isIncome ? 'rgba(20,123,117,0.7)' : 'rgba(224,100,112,0.7)'}`
-                                            : dot.event.hasOverride && currentEventType && dot.event.editType === currentEventType
-                                                ? `0 0 0 1px #fff, 0 0 0 2.5px #3b82f6`
-                                                : 'none',
+                                            : 'none',
                                         transition: 'width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease, border 0.15s ease',
                                     }} />
                                 </div>
@@ -1648,8 +1648,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                     const isIncome = evt.type === 'income'
                                     const dotColor = '#e06470'
                                     const isActive = activeEventDot && activeEventDot.date === evt.date && activeEventDot.editType === evt.editType
-                                    const size = isActive ? 16 : 13
-                                    const r = isActive ? 6 : 4.5
+                                    const size = isActive ? 18 : 12
                                     return (
                                         <div
                                             key={`removed-${i}`}
@@ -1658,20 +1657,21 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                                 position: 'absolute',
                                                 left: `clamp(5px, ${x}%, calc(100% - 5px))`,
                                                 top: `${yPct}%`,
-                                                transform: 'translate(-50%, -50%)',
+                                                transform: `translate(-50%, -50%) scale(${isActive ? 1.15 : 1})`,
                                                 padding: 10,
                                                 cursor: 'pointer',
                                                 pointerEvents: 'auto',
                                                 zIndex: isActive ? 20 : 6,
+                                                transition: 'transform 0.2s cubic-bezier(.34,1.56,.64,1)',
                                             }}
                                         >
                                             <div style={{
                                                 width: size, height: size,
                                                 borderRadius: '50%',
-                                                background: 'white',
-                                                border: `${isActive ? 2.2 : 1.8}px dashed ${dotColor}`,
-                                                boxShadow: isActive ? `0 0 6px ${dotColor}80` : 'none',
-                                                transition: 'width 0.15s ease, height 0.15s ease, border-width 0.15s ease, box-shadow 0.15s ease',
+                                                background: isActive ? `${dotColor}15` : 'white',
+                                                border: `${isActive ? 2.5 : 1.8}px dashed ${dotColor}`,
+                                                boxShadow: isActive ? `0 0 10px ${dotColor}40, 0 0 0 3px ${dotColor}15` : 'none',
+                                                transition: 'all 0.2s cubic-bezier(.34,1.56,.64,1)',
                                             }} />
                                         </div>
                                     )

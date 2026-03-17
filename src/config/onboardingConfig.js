@@ -23,11 +23,11 @@ export const STEPS = [
     },
     // ── Income category steps (shown if selected) ──
     { id: 'studentFinance', heading: 'Student Finance', subtitle: 'Maintenance loans or grants (usually paid in three big chunks).' },
-    { id: 'bursary', heading: 'Bursaries', subtitle: 'Extra grants or "free" money from the uni.' },
+    { id: 'bursary', heading: 'Bursary', subtitle: 'Extra grants or "free" money from the uni.' },
     { id: 'job', heading: 'Job', subtitle: 'Wages from part-time work, shifts, or "gig" roles.' },
     { id: 'familySupport', heading: 'Family Support', subtitle: 'Regular help or one-off gifts from family.' },
     { id: 'savingsIncome', heading: 'Savings', subtitle: 'Money moved over from a separate savings pot.' },
-    { id: 'sideHustles', heading: 'Side Hustles', subtitle: 'Selling clothes online, tutoring, or freelance projects.' },
+    { id: 'sideHustles', heading: 'Side Hustle', subtitle: 'Selling clothes online, tutoring, or freelance projects.' },
     { id: 'benefits', heading: 'Benefits', subtitle: 'Universal Credit, PIP, or Child Benefit.' },
     { id: 'otherIncome', heading: 'Other Income', subtitle: 'Any other income you want to add!' },
     {
@@ -48,7 +48,7 @@ export const STEPS = [
     { id: 'insurance', heading: 'Insurance', subtitle: 'Protecting your laptop, bike, or car.' },
     { id: 'sendingMoneyHome', heading: 'Sending Money Home', subtitle: 'Enter any money that you send back to support family.' },
     { id: 'councilTax', heading: 'Council Tax', subtitle: '(Only if you\'re living with non-students).' },
-    { id: 'loanRepayment', heading: 'Loan Interest & Repayment', subtitle: "Money you're paying back on any debt." },
+    { id: 'loanRepayment', heading: 'Loan Repayment', subtitle: "Money you're paying back on any debt." },
     { id: 'graduation', heading: 'Graduation', subtitle: 'Gown hire and graduation tickets (final year!)' },
     { id: 'otherExpense', heading: 'Other Expenses', subtitle: 'Any other expenses you want to add!' },
     {

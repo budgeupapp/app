@@ -27,7 +27,7 @@ export const INCOME_CATEGORIES = [
     },
     {
         id: 'bursary',
-        label: 'Bursaries',
+        label: 'Bursary',
         subtitle: 'Extra grants or "free" money from the uni.',
         Icon: PiHandCoins,
         color: '#1a9e97',
@@ -88,7 +88,7 @@ export const INCOME_CATEGORIES = [
     },
     {
         id: 'side_hustles',
-        label: 'Side Hustles',
+        label: 'Side Hustle',
         subtitle: 'Selling clothes online, tutoring, or freelance projects.',
         Icon: PiLaptop,
         color: '#6366f1',
@@ -319,7 +319,7 @@ export const EXPENSE_CATEGORIES = [
     },
     {
         id: 'loan_repayment',
-        label: 'Loan Interest & Repayment',
+        label: 'Loan Repayment',
         subtitle: "Money you're paying back on any debt.",
         Icon: PiReceipt,
         color: '#e06470',
