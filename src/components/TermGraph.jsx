@@ -150,7 +150,7 @@ function fmtMoney(v) {
 
 /* ---------- TERM GRAPH ---------- */
 
-export default function TermGraph({ terms, expandedTerm, balance, actualBalance, balanceStartDate, overdraft, events = [], hiddenEventTypes = [], removedHiddenTypes = [], balanceHiddenTypes = [], currentEventType, onEventClick, onBalanceClick, onOverdraftClick, onTermClick, footer, showDotsToggle, onToggleDots, showIncome, onToggleIncome, showExpenses, onToggleExpenses, graphHeight = 108, marginTop = 16, graphHeightRef, forceGreenDots = false, forceDotColor = null, hideDots = false, balanceHistory = [], showBalanceHistory = true, activeEventDot = null, onZeroDate, onOverdraftBreachDate, showHolidays = true, onZoomChange, zoomOutRef, scrubNearLineOnly = false }) {
+export default function TermGraph({ terms, expandedTerm, balance, actualBalance, balanceStartDate, overdraft, events = [], hiddenEventTypes = [], removedHiddenTypes = [], balanceHiddenTypes = [], currentEventType, onEventClick, onBalanceClick, onOverdraftClick, onTermClick, footer, showDotsToggle, onToggleDots, showIncome, onToggleIncome, showExpenses, onToggleExpenses, graphHeight = 108, marginTop = 16, graphHeightRef, forceGreenDots = false, forceDotColor = null, hideDots = false, balanceHistory = [], showBalanceHistory = true, activeEventDot = null, onZeroDate, onOverdraftBreachDate, showHolidays = true, onZoomChange, zoomOutRef, scrubNearLineOnly = false, onScrubStart }) {
     const today = new Date()
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate())
     const todayNoon = new Date(todayMidnight.getTime() + 12 * 60 * 60 * 1000)
@@ -1117,6 +1117,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                 } else {
                     s.active = true
                     if (navigator.vibrate) navigator.vibrate(10)
+                    onScrubStart?.()
                     e.preventDefault()
                     updateScrubPosition(e.touches[0].clientX)
                     return

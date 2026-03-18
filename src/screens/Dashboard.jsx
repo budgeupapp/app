@@ -1259,6 +1259,12 @@ export default function Dashboard() {
             return next
         })
 
+        // Track expand/collapse
+        analytics.track(DASHBOARD_EVENTS.SOURCE_EXPANDED, {
+            source_id: sourceId,
+            expanded: !wasExpanded,
+        })
+
         // When expanding, scroll row into view (without collapsing the graph)
         if (!wasExpanded) {
             isAnimatingRef.current = true
@@ -1640,8 +1646,8 @@ export default function Dashboard() {
                         }
                         if (localFD.otherIncomes?.length) merged.otherIncomes = [...new Set([...(merged.otherIncomes || []).map(i => JSON.stringify(i)), ...localFD.otherIncomes.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
                         if (localFD.otherExpenses?.length) merged.otherExpenses = [...new Set([...(merged.otherExpenses || []).map(i => JSON.stringify(i)), ...localFD.otherExpenses.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
-                        // Prefer localStorage values when DB hasn't synced yet (fresh onboarding)
-                        if (localFD.balance && (!merged.balance || merged.balance === '' || merged.balance === '0')) merged.balance = localFD.balance
+                        // Prefer localStorage balance (Settings saves there immediately, DB may lag)
+                        if (localFD.balance) merged.balance = localFD.balance
                         if (localFD.overdraft != null && (!merged.overdraft || merged.overdraft === '')) merged.overdraft = localFD.overdraft
                         if (localFD.weeklySpend && (!merged.weeklySpend || merged.weeklySpend === '')) merged.weeklySpend = localFD.weeklySpend
                         if (localFD.weeklySpendNonTerm && (!merged.weeklySpendNonTerm || merged.weeklySpendNonTerm === '')) merged.weeklySpendNonTerm = localFD.weeklySpendNonTerm
@@ -2383,6 +2389,7 @@ export default function Dashboard() {
             if (action.startsWith('add-flex:')) {
                 const [, sourceId, type] = action.split(':')
                 const isExp = type === 'expense'
+                analytics.track(DASHBOARD_EVENTS.FLEX_SOURCE_ADDED, { source_id: sourceId, source_type: isExp ? 'expense' : 'income' })
                 const targetTab = isExp ? 'expenses' : 'income'
                 if (activeTab !== targetTab) setActiveTab(targetTab)
                 collapseGraph()
@@ -2456,8 +2463,26 @@ export default function Dashboard() {
     const originBalance = parseFloat(String(formData.balance || '0').replace(/,/g, ''))
     const overdraftNum = formData.overdraft ? parseFloat(String(formData.overdraft || '0').replace(/,/g, '')) : undefined
 
-    // Projection balance (green line): anchored at formData.balance (set once on first recording)
-    const projectionBalance = originBalance
+    // Source lists from categories config
+    const INCOME_SOURCES = FIXED_INCOME_SOURCES
+    const EXPENSE_SOURCES = FIXED_EXPENSE_SOURCES
+
+    const events = buildGraphEvents(formData)
+
+    // Projection balance (green line): start from formData.balance at join date,
+    // walk forward through events to get predicted balance at today
+    const projectionBalance = (() => {
+        const graphStart = getGraphStart()
+        const todayStr = toLocalDate(new Date())
+        let running = originBalance
+        const pastEvents = events.filter(e => !e.removed && e.date >= graphStart && e.date <= todayStr)
+            .sort((a, b) => a.date.localeCompare(b.date))
+        for (const evt of pastEvents) {
+            if (evt.type === 'income') running += evt.amount
+            else running -= evt.amount
+        }
+        return running
+    })()
 
     // Actual balance: latest balance_history entry, or formData.balance if no history
     const balanceNum = (() => {
@@ -2466,12 +2491,6 @@ export default function Dashboard() {
         }
         return originBalance
     })()
-
-    // Source lists from categories config
-    const INCOME_SOURCES = FIXED_INCOME_SOURCES
-    const EXPENSE_SOURCES = FIXED_EXPENSE_SOURCES
-
-    const events = buildGraphEvents(formData)
     // Build all events (ignoring source toggles) for computing yearly amounts when sources are off
     const allSourceIds = [...INCOME_SOURCES.map(s => s.id), ...EXPENSE_SOURCES.map(s => s.id)]
     const allEvents = buildGraphEvents({ ...formData, incomeSources: allSourceIds, expenseSources: allSourceIds }, { filterByGraphStart: false })
@@ -2525,6 +2544,7 @@ export default function Dashboard() {
     const restoreSourceEvents = (editTypes) => {
         const removed = formData.removedEvents || []
         const keep = removed.filter(key => !editTypes.some(et => key.startsWith(et + ':')))
+        analytics.track(DASHBOARD_EVENTS.EVENT_RESTORED, { edit_types: editTypes, count: removed.length - keep.length })
         updateField('removedEvents', keep)
     }
 
@@ -2542,9 +2562,11 @@ export default function Dashboard() {
 
     const clearSourceOverrides = (editTypes) => {
         const overrides = { ...(formData.amountOverrides || {}) }
+        let cleared = 0
         for (const key of Object.keys(overrides)) {
-            if (editTypes.some(et => key.startsWith(et + ':'))) delete overrides[key]
+            if (editTypes.some(et => key.startsWith(et + ':'))) { delete overrides[key]; cleared++ }
         }
+        analytics.track(DASHBOARD_EVENTS.OVERRIDES_CLEARED, { edit_types: editTypes, count: cleared })
         updateField('amountOverrides', overrides)
     }
 
@@ -3114,7 +3136,11 @@ export default function Dashboard() {
                                 onZeroDate={setGraphZeroDate}
                                 onOverdraftBreachDate={setGraphOverdraftDate}
                                 showHolidays={showHolidays}
-                                onZoomChange={setGraphIsZoomed}
+                                onScrubStart={() => analytics.track(DASHBOARD_EVENTS.GRAPH_SCRUBBED)}
+                                onZoomChange={(zoomed) => {
+                                    setGraphIsZoomed(zoomed)
+                                    if (zoomed) analytics.track(DASHBOARD_EVENTS.GRAPH_ZOOMED)
+                                }}
                                 zoomOutRef={zoomOutRef}
                                 footer={<div ref={footerRef} style={{ height: 0 }} />}
                             />
@@ -3848,8 +3874,8 @@ export default function Dashboard() {
 
                                         // Gauge: pointer shows position on arc
                                         // Left = behind (-), center = on track (0), right = ahead (+)
-                                        const gW = 270
-                                        const strokeW = 16
+                                        const gW = 250
+                                        const strokeW = 14
                                         const r = (gW - strokeW) / 2
                                         const cx = gW / 2
                                         const cy = r + strokeW / 2
@@ -3878,23 +3904,29 @@ export default function Dashboard() {
                                                             {/* Full gradient arc */}
                                                             <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
                                                                 fill="none" stroke="url(#gaugeGrad)" strokeWidth={strokeW} strokeLinecap="round" />
-                                                            {/* White dot on the arc */}
-                                                            <circle cx={dotX} cy={dotY} r={strokeW / 2 + 2}
-                                                                fill="#fff" stroke={healthColor} strokeWidth={2.5}
-                                                                style={{ transition: 'cx 0.6s ease, cy 0.6s ease' }} />
+                                                            {/* White dot on the arc — rotated around center to follow arc */}
+                                                            <g style={{
+                                                                transformOrigin: `${cx}px ${cy}px`,
+                                                                transform: `rotate(${-(pointerAngle * 180 / Math.PI)}deg)`,
+                                                                transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                            }}>
+                                                                <circle cx={cx + r} cy={cy} r={strokeW / 2 + 2}
+                                                                    fill="#fff" stroke={healthColor} strokeWidth={2.5}
+                                                                    style={{ transition: 'stroke 0.3s ease' }} />
+                                                            </g>
                                                         </svg>
                                                         {/* Content inside the arc */}
                                                         <div style={{
-                                                            position: 'absolute', bottom: 36, left: '50%', transform: 'translateX(-50%)',
-                                                            textAlign: 'center', whiteSpace: 'nowrap',
+                                                            position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+                                                            textAlign: 'center', width: gW * 0.45,
                                                         }}>
-                                                            <p style={{ margin: 0, fontSize: 22, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1 }}>
+                                                            <p style={{ margin: 0, fontSize: 24, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1.1 }}>
                                                                 {isClose ? 'On Track!' : isAhead ? 'Ahead!' : isDanger ? 'Needs Attention' : 'Watch Spending'}
                                                             </p>
-                                                            <p style={{ margin: '10px 0 0', fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
+                                                            <p style={{ margin: '10px 0 0 -8px', fontSize: 17, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1 }}>
                                                                 {isAhead || absDiff === 0 ? '+' : '\u2212'}{sym}{absDiff.toLocaleString()}
                                                             </p>
-                                                            <p style={{ margin: '3px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                                                            <p style={{ margin: '3px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999', whiteSpace: 'nowrap' }}>
                                                                 compared to forecast
                                                             </p>
                                                         </div>
@@ -4070,7 +4102,7 @@ export default function Dashboard() {
                                                                 const isTapped = tappedSegment?.label === label && tappedSegment?.type === key
                                                                 return (
                                                                     <div key={label}
-                                                                        onClick={() => setTappedSegment(isTapped ? null : { label, amt, color, type: key })}
+                                                                        onClick={() => { if (!isTapped) analytics.track(DASHBOARD_EVENTS.BREAKDOWN_TAPPED, { label, type: key }); setTappedSegment(isTapped ? null : { label, amt, color, type: key }) }}
                                                                         style={{
                                                                             width: `${(amt / totalAmt) * 100}%`,
                                                                             background: color, minWidth: 2,
@@ -4576,6 +4608,11 @@ export default function Dashboard() {
                     setEditingEvent(null)
                 }
                 const handleSkip = () => {
+                    analytics.track(DASHBOARD_EVENTS.EVENT_SKIPPED, {
+                        edit_type: editingEvent.editType,
+                        event_type: editingEvent.type,
+                        date: editingEvent.date,
+                    })
                     const isLoan = editingEvent.editType === 'loan' && editingEvent.editMonth
                     const isBursary = editingEvent.editType === 'bursary' && editingEvent.editMonth
                     if (isLoan || isBursary) {
@@ -4719,6 +4756,7 @@ export default function Dashboard() {
                                 <button
                                     onClick={() => {
                                         const key = `${editingEvent.editType}:${editingEvent.date}`
+                                        analytics.track(DASHBOARD_EVENTS.EVENT_RESTORED, { edit_type: editingEvent.editType, date: editingEvent.date })
                                         updateField('removedEvents', (formData.removedEvents || []).filter(k => k !== key))
                                         setEditingEvent(null)
                                     }}
@@ -5037,11 +5075,11 @@ export default function Dashboard() {
             {showGraphFilter && (() => {
                 const rect = graphFilterRef.current?.getBoundingClientRect()
                 const items = [
-                    { label: 'Expenses', active: showExpenses, color: '#e06470', toggle: () => setShowExpenses(prev => { localStorage.setItem('budgeup_show_expenses', String(!prev)); return !prev }) },
-                    { label: 'Income', active: showIncome, color: '#147b75', toggle: () => setShowIncome(prev => { localStorage.setItem('budgeup_show_income', String(!prev)); return !prev }) },
-                    { label: 'History', active: showBalanceHistory, color: '#EC8C17', toggle: () => { setShowBalanceHistory(prev => { analytics.track(DASHBOARD_EVENTS.BALANCE_HISTORY_TOGGLED, { visible: !prev }); localStorage.setItem('budgeup_show_balance_history', String(!prev)); return !prev }) } },
-                    ...(overdraftNum ? [{ label: 'Overdraft', active: showOverdraft, color: '#c0392b', toggle: () => setShowOverdraft(prev => { localStorage.setItem('budgeup_show_overdraft', String(!prev)); return !prev }) }] : []),
-                    { label: 'Breaks', active: showHolidays, color: '#7c8ab8', toggle: () => setShowHolidays(prev => { localStorage.setItem('budgeup_show_holidays', String(!prev)); return !prev }) },
+                    { label: 'Expenses', active: showExpenses, color: '#e06470', toggle: () => setShowExpenses(prev => { analytics.track(DASHBOARD_EVENTS.GRAPH_FILTER_TOGGLED, { filter: 'expenses', visible: !prev }); localStorage.setItem('budgeup_show_expenses', String(!prev)); return !prev }) },
+                    { label: 'Income', active: showIncome, color: '#147b75', toggle: () => setShowIncome(prev => { analytics.track(DASHBOARD_EVENTS.GRAPH_FILTER_TOGGLED, { filter: 'income', visible: !prev }); localStorage.setItem('budgeup_show_income', String(!prev)); return !prev }) },
+                    { label: 'History', active: showBalanceHistory, color: '#EC8C17', toggle: () => { setShowBalanceHistory(prev => { analytics.track(DASHBOARD_EVENTS.GRAPH_FILTER_TOGGLED, { filter: 'history', visible: !prev }); localStorage.setItem('budgeup_show_balance_history', String(!prev)); return !prev }) } },
+                    ...(overdraftNum ? [{ label: 'Overdraft', active: showOverdraft, color: '#c0392b', toggle: () => setShowOverdraft(prev => { analytics.track(DASHBOARD_EVENTS.GRAPH_FILTER_TOGGLED, { filter: 'overdraft', visible: !prev }); localStorage.setItem('budgeup_show_overdraft', String(!prev)); return !prev }) }] : []),
+                    { label: 'Breaks', active: showHolidays, color: '#7c8ab8', toggle: () => setShowHolidays(prev => { analytics.track(DASHBOARD_EVENTS.GRAPH_FILTER_TOGGLED, { filter: 'breaks', visible: !prev }); localStorage.setItem('budgeup_show_holidays', String(!prev)); return !prev }) },
                 ]
                 return (
                     <div ref={graphFilterDropdownRef} style={{
