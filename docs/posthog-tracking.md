@@ -74,13 +74,13 @@ Last updated: 18 March 2026
 
 ## PostHog Surveys (Native)
 
-| Survey | ID | Trigger |
-|--------|----|---------|
-| Suggestion Box | `019ce76a-1249-0000-d170-e004fa92e737` | Feedback page — emoji rating + open text |
-| Quick Survey (10 Questions) | `019cf78b-c626-0000-535f-e578d85fbcd5` | Feedback page — 10 Likert-scale questions + NPS |
-| Onboarding Survey | `019cdce8-6017-0000-b093-3245533e0f81` | Immediately after onboarding completion |
-| Open-Ended Survey | `019cdce4-4b7f-0000-bbcf-97c75b0a8944` | 3+ days after onboarding, on dashboard view |
-| Graph Survey | `019cdcfd-5db3-0000-e4a7-8c6dcaa2d048` | 3+ days after onboarding, on graph interaction |
+| Survey | Trigger |
+|--------|---------|
+| Suggestion Box | Feedback page — emoji rating + open text |
+| Quick Survey (10 Questions) | Feedback page — 10 Likert-scale questions + NPS |
+| Onboarding Survey | Immediately after onboarding completion |
+| Open-Ended Survey | 3+ days after onboarding, on dashboard view |
+| Graph Survey | 3+ days after onboarding, on graph interaction |
 
 ## Other
 

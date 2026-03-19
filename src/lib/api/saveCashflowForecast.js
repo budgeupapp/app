@@ -447,7 +447,9 @@ export async function saveCashflowForecast(userId, data) {
     const removedEvents = data.removedEvents || []
     if (removedEvents.length) {
         for (const key of removedEvents) {
-            const [editType, date] = key.split(':')
+            const parts = key.split(':')
+            const date = parts.pop()
+            const editType = parts.join(':')
             if (!editType || !date) continue
             rows.push({
                 user_id: userId, direction: 'out', type: editType,
@@ -462,7 +464,9 @@ export async function saveCashflowForecast(userId, data) {
     /* --- Amount overrides (per-payment) --- */
     const amountOverrides = data.amountOverrides || {}
     for (const [key, val] of Object.entries(amountOverrides)) {
-        const [editType, date] = key.split(':')
+        const parts = key.split(':')
+        const date = parts.pop() // last part is always the date
+        const editType = parts.join(':') // rest is the editType
         if (!editType || !date || !val) continue
         rows.push({
             user_id: userId, direction: 'out', type: editType,
@@ -483,6 +487,7 @@ export async function saveCashflowForecast(userId, data) {
         'loanRepaymentEntries', 'graduationEntries', 'otherExpenseEntries',
     ]
     const INCOME_KEYS = ['studentFinanceEntries', 'bursaryEntries', 'jobEntries', 'familySupportEntries', 'savingsIncomeEntries', 'sideHustlesEntries', 'benefitsEntries', 'otherIncomeEntries']
+    const isValidDate = (d) => d && /^\d{4}-\d{2}-\d{2}$/.test(d)
     for (const formKey of CATEGORY_FORM_KEYS) {
         const entries = data[formKey]
         if (!Array.isArray(entries) || entries.length === 0) continue
@@ -507,13 +512,23 @@ export async function saveCashflowForecast(userId, data) {
                     })
                 }
             } else {
+                // Build title with schedule metadata for cross-device sync
+                const meta = {}
+                if (entry.scheduleFrequency) meta.sf = entry.scheduleFrequency
+                if (entry.dayOfWeek && entry.dayOfWeek !== 'monday') meta.dow = entry.dayOfWeek
+                if (entry.dayOfMonth && entry.dayOfMonth !== '1') meta.dom = entry.dayOfMonth
+                if (entry.variesByTerm) meta.vbt = true
+                if (entry.nonTermAmount) meta.nta = entry.nonTermAmount
+                if (entry.id) meta.eid = entry.id
+                const title = Object.keys(meta).length > 0 ? JSON.stringify({ n: entry.label || catId, ...meta }) : (entry.label || catId)
                 rows.push({
                     user_id: userId, direction: isIncome ? 'in' : 'out',
-                    type: catId, title: entry.label || catId,
+                    type: catId, title,
                     amount: amt || '0', currency: 'GBP',
                     recurrence: mapFrequencyToRecurrence(freq),
-                    scheduled_date: entry.nextDate || '2025-09-01',
-                    end_date: entry.endDate || null, source: 'manual',
+                    scheduled_date: isValidDate(entry.nextDate) ? entry.nextDate : '2025-09-01',
+                    end_date: isValidDate(entry.endDate) ? entry.endDate : null,
+                    source: 'manual',
                     category: `cat_${catId}`,
                     term_specific: entry.variesByTerm || false,
                 })
@@ -523,8 +538,9 @@ export async function saveCashflowForecast(userId, data) {
                         type: `${catId}_non_term`, title: (entry.label || catId) + ' (non-term)',
                         amount: stripCommas(entry.nonTermAmount), currency: 'GBP',
                         recurrence: mapFrequencyToRecurrence(freq),
-                        scheduled_date: entry.nextDate || '2025-09-01',
-                        end_date: entry.endDate || null, source: 'manual',
+                        scheduled_date: isValidDate(entry.nextDate) ? entry.nextDate : '2025-09-01',
+                        end_date: isValidDate(entry.endDate) ? entry.endDate : null,
+                        source: 'manual',
                         category: `cat_${catId}`, subcategory: 'non_term',
                         term_specific: true,
                     })
@@ -533,8 +549,38 @@ export async function saveCashflowForecast(userId, data) {
         }
     }
 
-    if (!rows.length) return
+    /* --- Hidden sources metadata --- */
+    const hiddenSources = data.hiddenSources || []
+    if (hiddenSources.length > 0) {
+        rows.push({
+            user_id: userId, direction: 'out', type: '_hidden_sources',
+            title: JSON.stringify(hiddenSources),
+            amount: 0, currency: 'GBP', recurrence: 'once',
+            scheduled_date: '2025-09-01', end_date: null, source: 'manual',
+            category: '_meta',
+        })
+    }
 
+    if (!rows.length) {
+        console.warn('[saveCashflow] No rows to save — all entries empty?', Object.keys(data).filter(k => k.endsWith('Entries')).map(k => `${k}: ${(data[k] || []).length}`))
+        return
+    }
+
+    // Sanitize all date fields to prevent invalid date errors
+    for (const row of rows) {
+        if (row.scheduled_date && !/^\d{4}-\d{2}-\d{2}/.test(row.scheduled_date)) {
+            console.warn('[saveCashflow] Invalid scheduled_date:', row.scheduled_date, 'in row:', row.type, row.title)
+            row.scheduled_date = '2025-09-01'
+        }
+        if (row.end_date && !/^\d{4}-\d{2}-\d{2}/.test(row.end_date)) {
+            console.warn('[saveCashflow] Invalid end_date:', row.end_date, 'in row:', row.type, row.title)
+            row.end_date = null
+        }
+    }
+    console.log(`[saveCashflow] Saving ${rows.length} rows`)
     const { error } = await supabase.from('cashflow_forecast').insert(rows)
-    if (error) throw error
+    if (error) {
+        console.error('[saveCashflow] Insert failed:', error.message, error.details, error.hint)
+        throw error
+    }
 }

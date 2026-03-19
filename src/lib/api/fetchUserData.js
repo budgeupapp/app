@@ -78,6 +78,13 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
         byCategory[cat].push(cf)
     }
 
+    // Restore hidden sources from metadata row
+    const metaRows = byCategory['_meta'] || []
+    const hiddenRow = metaRows.find(r => r.type === '_hidden_sources')
+    if (hiddenRow) {
+        try { fd.hiddenSources = JSON.parse(hiddenRow.title) } catch { }
+    }
+
     // Income sources
     const incomeSources = []
     const expenseSources = []
@@ -395,18 +402,30 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
         // Regular entries — each row is one entry
         for (const r of regularRows) {
             const nonTerm = nonTermRows.find(nt => nt.recurrence === r.recurrence)
+            // Parse metadata from title if JSON
+            let meta = {}, label = r.title || ''
+            try {
+                const parsed = JSON.parse(r.title)
+                if (parsed && typeof parsed === 'object' && parsed.n) {
+                    label = parsed.n
+                    meta = parsed
+                }
+            } catch { /* not JSON, use as plain label */ }
             entries.push({
-                id: `${r.type}_${entries.length}`,
+                id: meta.eid || `${r.type}_${entries.length}`,
                 amount: String(r.amount),
                 frequency: r.recurrence || 'monthly',
+                scheduleFrequency: meta.sf || undefined,
+                dayOfWeek: meta.dow || undefined,
+                dayOfMonth: meta.dom || undefined,
                 nextDate: r.scheduled_date || '',
                 endDate: r.end_date || '',
-                label: r.title || '',
+                label,
                 months: [],
                 dates: {},
                 instalmentAmounts: {},
-                variesByTerm: r.term_specific || false,
-                nonTermAmount: nonTerm ? String(nonTerm.amount) : '',
+                variesByTerm: meta.vbt || r.term_specific || false,
+                nonTermAmount: meta.nta || (nonTerm ? String(nonTerm.amount) : ''),
             })
         }
         // Irregular entries — group months into one entry

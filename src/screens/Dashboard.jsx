@@ -114,7 +114,7 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             const amtFreq = entry.frequency || cat.defaultFrequency
             const paidFreq = entry.scheduleFrequency || amtFreq
             // If paid frequency differs from amount frequency, convert the amount
-            const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, yearly: 1, irregular: 1, 'one-off': 1 }
+            const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, quarterly: 4, yearly: 1, irregular: 1, 'one-off': 1 }
             const freq = (paidFreq === 'irregular' || paidFreq === 'one-off') ? amtFreq : paidFreq
             const convertedAmt = (freq !== amtFreq && FREQ_PER_YEAR[amtFreq] && FREQ_PER_YEAR[freq])
                 ? Math.round(amt * FREQ_PER_YEAR[amtFreq] / FREQ_PER_YEAR[freq] * 100) / 100
@@ -939,11 +939,10 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
     return (
         <div ref={rowRef} data-source-row data-source-id={source.id} style={{
             borderRadius: 14,
-            background: isInactive ? '#f5f5f5' : '#fff',
-            border: '1px solid #fff',
+            background: isInactive ? '#f0f0f0' : '#fff',
             overflow: 'hidden',
             maxHeight: deleting ? 0 : naturalHeight != null ? naturalHeight : 5000,
-            opacity: deleting ? 0 : isInactive ? 0.55 : 1,
+            opacity: deleting ? 0 : isInactive ? 0.7 : 1,
             marginBottom: deleting ? 0 : 12,
             boxShadow: expanded ? '0 2px 12px rgba(0,0,0,0.06)' : '0 1px 4px rgba(0,0,0,0.04)',
             transition: deleting
@@ -1446,8 +1445,9 @@ export default function Dashboard() {
             el.scrollTop = targetScroll
             applyScrollStyles(targetScroll)
             el.style.opacity = ''
-            isTabSwitchingRef.current = false
             isAnimatingRef.current = false
+            // Delay clearing tab switch flag to block stale scroll events from content change
+            setTimeout(() => { isTabSwitchingRef.current = false }, 50)
         })
     }
     const [editingEvent, setEditingEvent] = useState(null)
@@ -1737,6 +1737,14 @@ export default function Dashboard() {
                         // No balance set — show mandatory popup
                         setShowInitialBalancePopup(true)
                     }
+                    // Restore hidden sources from DB (merge with localStorage)
+                    if (result.formData?.hiddenSources?.length) {
+                        setHiddenSources(prev => {
+                            const merged = new Set([...prev, ...result.formData.hiddenSources])
+                            localStorage.setItem('budgeup_hidden_sources', JSON.stringify([...merged]))
+                            return merged
+                        })
+                    }
                     setDbLoaded(true)
                 } catch (err) {
                     console.error('Failed to load from Supabase:', err)
@@ -1770,7 +1778,7 @@ export default function Dashboard() {
             try {
                 const userId = userIdRef.current
                 await Promise.all([
-                    saveCashflowForecast(userId, formData),
+                    saveCashflowForecast(userId, { ...formData, hiddenSources: [...hiddenSources] }),
                     saveUserFinances(userId, {
                         university: formData.university,
                         overdraft: formData.overdraft,
@@ -1792,7 +1800,7 @@ export default function Dashboard() {
                 // Flush save immediately on cleanup
                 const userId = userIdRef.current
                 if (userId) {
-                    saveCashflowForecast(userId, formData).catch(() => { })
+                    saveCashflowForecast(userId, { ...formData, hiddenSources: [...hiddenSources] }).catch(() => { })
                     saveUserFinances(userId, {
                         university: formData.university,
                         overdraft: formData.overdraft,
@@ -1842,7 +1850,7 @@ export default function Dashboard() {
     const HIDE_DIST = MIN_H // additional scroll to fully hide graph
 
     // Graph height — always MAX_H. Drag handler controls height via refs only.
-    const graphHeight = MAX_H
+    const graphHeight = (graphCovered || graphCollapsed) ? MIN_H : MAX_H
     const cardDetailsRef = useRef(null)
     const footerRef = useRef(null)
 
@@ -2212,9 +2220,9 @@ export default function Dashboard() {
     const animatingStartRef = useRef(0)
 
     const handleScroll = useCallback(() => {
-        if (isAnimatingRef.current) {
+        if (isAnimatingRef.current || isTabSwitchingRef.current) {
             // Safety: if stuck animating for over 1s, force unlock
-            if (performance.now() - animatingStartRef.current > 1000) {
+            if (isAnimatingRef.current && performance.now() - animatingStartRef.current > 1000) {
                 isAnimatingRef.current = false
                 isTabSwitchingRef.current = false
             } else {
@@ -2875,6 +2883,10 @@ export default function Dashboard() {
             ? sourceToEditType[activeSource][visibleEntryIndex] || sourceToEditType[activeSource][0]
             : sourceToEditType[activeSource][0])
         : null
+    // All edit types for the active source (including base category ID) — used to unhide dots
+    const activeSourceEditTypes = activeSource
+        ? new Set([activeSource, ...(sourceToEditType[activeSource] || [])])
+        : new Set()
 
     // No longer modify graph visibility when "show all" is toggled
     const goalsVisibleEditTypes = new Set()
@@ -3216,7 +3228,7 @@ export default function Dashboard() {
                                         return allMaps[id] || []
                                     }),
                                 ].filter(t => {
-                                    if (t === currentEventType) return false
+                                    if (activeSourceEditTypes.has(t)) return false
                                     if (activeTab === 'income' && t === 'oneOffIncome') return false
                                     if (activeTab === 'expenses' && t === 'oneOffExpense') return false
                                     if (goalsVisibleEditTypes.has(t)) return false

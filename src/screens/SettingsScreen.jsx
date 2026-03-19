@@ -474,6 +474,13 @@ export default function SettingsScreen() {
       parsed.formData = resetData
       localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
       localStorage.removeItem('budgeup_balance_last_date')
+      // Reset graph expanded/collapsed state so it starts expanded
+      sessionStorage.removeItem('budgeup_graph_collapsed_goals')
+      sessionStorage.removeItem('budgeup_graph_collapsed_income')
+      sessionStorage.removeItem('budgeup_graph_collapsed_expenses')
+      sessionStorage.removeItem('budgeup_graph_covered_goals')
+      sessionStorage.removeItem('budgeup_graph_covered_income')
+      sessionStorage.removeItem('budgeup_graph_covered_expenses')
       const today = new Date()
       const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
       setGraphStart(todayStr)

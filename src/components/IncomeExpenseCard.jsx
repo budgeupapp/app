@@ -203,6 +203,7 @@ const FREQ_LABELS = {
     weekly: 'Per week',
     fortnightly: 'Per fortnight',
     monthly: 'Per month',
+    quarterly: 'Per quarter',
     yearly: 'Per year',
     irregular: 'Irregular',
     'one-off': 'One-off',
@@ -212,6 +213,7 @@ const SCHEDULE_FREQ_LABELS = {
     weekly: 'Weekly',
     fortnightly: 'Fortnightly',
     monthly: 'Monthly',
+    quarterly: 'Quarterly',
     yearly: 'Yearly',
     irregular: 'Irregular',
 }
@@ -831,7 +833,7 @@ function EntryCard({
                                         updateField('scheduleFrequency', v)
                                     }}
                                     options={(scheduleFreqOptions || (() => {
-                                        const order = ['weekly', 'fortnightly', 'monthly', 'yearly']
+                                        const order = ['weekly', 'fortnightly', 'monthly', 'quarterly', 'yearly']
                                         const idx = order.indexOf(frequency)
                                         return idx >= 0 ? order.slice(0, idx + 1) : order
                                     })()).map(f => ({ value: f, label: scheduleFreqLabels?.[f] || SCHEDULE_FREQ_LABELS[f] || FREQ_LABELS[f] }))}
