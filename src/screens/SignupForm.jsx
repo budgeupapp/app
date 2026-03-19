@@ -602,13 +602,11 @@ export default function SignupForm() {
             <button
               type="button"
               onClick={async () => {
-                if (isSignUp && !consentChecked) {
-                  setError('Please agree to the Terms and Privacy Policy')
-                  return
-                }
                 if (isSignUp) {
                   localStorage.setItem('budgeup_signup_university', university)
                   localStorage.setItem('budgeup_newsletter', newsletterChecked ? 'true' : 'false')
+                  localStorage.setItem('budgeup_google_consent', consentChecked ? 'true' : 'false')
+                  localStorage.setItem('budgeup_insights_consent', insightsChecked ? 'true' : 'false')
                 }
                 await supabase.auth.signInWithOAuth({
                   provider: 'google',

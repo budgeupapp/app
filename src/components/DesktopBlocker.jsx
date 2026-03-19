@@ -97,7 +97,7 @@ const styles = {
     },
     message: {
         fontSize: 16,
-        color: '#333',
+        color: '#147b75',
         lineHeight: 1.6,
         margin: '0 0 28px',
     },

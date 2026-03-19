@@ -157,7 +157,7 @@ function SettingsRow({ icon, label, value, onClick, last, children, expanded }) 
           width: '100%', display: 'flex', alignItems: 'center', gap: 14,
           padding: '15px 18px', background: 'transparent', border: 'none',
           borderBottom: last ? 'none' : '1px solid',
-          borderBottomColor: expanded ? 'transparent' : '#f0f0f0',
+          borderBottomColor: expanded ? 'transparent' : '#ddd',
           cursor: onClick ? 'pointer' : 'default', textAlign: 'left',
           transition: 'border-bottom-color 0.3s ease',
         }}

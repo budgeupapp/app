@@ -347,7 +347,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                         style={{
                                             background: 'none', border: 'none',
                                             cursor: 'pointer', padding: '12px 0 0',
-                                            fontSize: 12, fontWeight: 600, color: '#aaa',
+                                            fontSize: 12, fontWeight: 600, color: '#e06470',
                                             fontFamily: 'Nunito, sans-serif',
                                             width: '100%', textAlign: 'center',
                                         }}

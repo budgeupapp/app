@@ -18,7 +18,9 @@ import { SOURCE_ICONS } from '../config/categories'
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORY_MAP, SOURCE_ICONS as CATEGORY_SOURCE_ICONS } from '../config/categories'
 import { PiShuffle, PiShoppingCart, PiTrendUp, PiTrendDown } from 'react-icons/pi'
 import { supabase } from '../lib/supabaseClient'
+import { POLICY_URLS } from '../lib/policyVersions'
 import { saveCashflowForecast, saveUserFinances, saveTermDates, saveBalanceHistory } from '../lib/api'
+import { saveSignupConsents } from '../lib/api/saveSignupConsents'
 import {
     analytics,
     ONBOARDING_EVENTS,
@@ -903,8 +905,12 @@ export default function FinancialOnboardingForm({ onComplete }) {
             </div>
         )
     }
+    const needsConsent = !localStorage.getItem('signup_email')
     const buildPanelSteps = (sources, expSources) => {
-        const panels = ['termDates', 'balance', 'overdraft', 'regularIncome']
+        const panels = []
+        // Show consent step if user came via Google OAuth (no signup_email in localStorage)
+        if (needsConsent) panels.push('consent')
+        panels.push('termDates', 'balance', 'overdraft', 'regularIncome')
         const s = sources || []
         for (const cat of INCOME_CATEGORIES) {
             if (s.includes(cat.id)) panels.push(cat.panelId)
@@ -956,6 +962,20 @@ export default function FinancialOnboardingForm({ onComplete }) {
         if (signupUni) {
             data.university = signupUni
             localStorage.removeItem('budgeup_signup_university')
+        }
+        // If user came through email signup, they already agreed to terms
+        if (localStorage.getItem('signup_email')) {
+            data.consentAgreed = true
+        }
+        // Pre-fill consent values from Google OAuth signup page
+        if (localStorage.getItem('budgeup_google_consent') === 'true') {
+            data.consentAgreed = true
+        }
+        if (localStorage.getItem('budgeup_newsletter') === 'true') {
+            data.newsletterOptIn = true
+        }
+        if (localStorage.getItem('budgeup_insights_consent') === 'true') {
+            data.insightsConsent = true
         }
         // Migrate legacy flat other income fields to otherIncomes array
         if ((!data.otherIncomes || data.otherIncomes.length === 0) && data.otherIncomeAmount) {
@@ -1233,6 +1253,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const isCurrentStepBlank = () => {
         const stepId = currentStep.id
         switch (stepId) {
+            case 'consent':
+                return !formData.consentAgreed
             case 'university':
                 return !formData.university
             case 'termDates':
@@ -1296,6 +1318,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const checkRequiredFields = () => {
         // Only check required fields for the current step
         switch (currentStep.id) {
+            case 'consent':
+                if (!formData.consentAgreed) {
+                    return 'Please agree to the Terms and Privacy Policy'
+                }
+                break
             case 'university':
                 if (!formData.university || !UK_UNIVERSITIES.includes(formData.university)) {
                     return 'Please select your university'
@@ -1377,7 +1404,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
             return
         }
         goNext()
-        setTimeout(() => setActivePanel(1), 16)
+        const panels = buildPanelSteps(formData.incomeSources, formData.expenseSources)
+        const termIdx = panels.indexOf('termDates')
+        setTimeout(() => setActivePanel(termIdx + 1), 16)
     }
 
     const handlePanelBack = () => {
@@ -1566,6 +1595,13 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 referredBy: referredBy || null
             })
 
+            // Save consents (for Google OAuth users who agreed in onboarding)
+            if (formData.consentAgreed) {
+                localStorage.setItem('budgeup_newsletter', formData.newsletterOptIn ? 'true' : 'false')
+                localStorage.setItem('budgeup_insights_consent', formData.insightsConsent ? 'true' : 'false')
+                await saveSignupConsents(user.id)
+            }
+
             // Clear referral code from localStorage after saving
             if (referredBy) {
                 localStorage.removeItem('referral_code')
@@ -1617,6 +1653,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
     // mounted throughout the transition — prevents the flash on step switch
     const PANEL_STEPS = buildPanelSteps(formData.incomeSources, formData.expenseSources)
     const PANEL_LABEL_MAP = {
+        consent: 'Continue',
         termDates: 'Confirm Term Dates',
         balance: 'Confirm Bank Balance',
         overdraft: 'Confirm Overdraft',
@@ -1630,7 +1667,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
     }
     const PANEL_LABELS = PANEL_STEPS.map(id => PANEL_LABEL_MAP[id])
     const PANEL_HEADING_MAP = {
-        termDates: 'University Term Dates', balance: 'Bank Balance', overdraft: 'Overdraft Limit',
+        consent: 'Welcome to Budge Up!', termDates: 'University Term Dates', balance: 'Bank Balance', overdraft: 'Overdraft Limit',
         regularIncome: 'Income', regularExpenses: 'Expenses',
         weeklySpend: 'Weekly Spend', summary: 'Your Budget',
     }
@@ -1645,7 +1682,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
         const activeExpanded = expandedTerms
 
         // Determine which handler to use based on active panel
-        const panelOnNext = activePanel === 0 ? handleTermDatesNext : handlePanelNext
+        const currentPanelId = PANEL_STEPS[activePanel]
+        const panelOnNext = currentPanelId === 'termDates' ? handleTermDatesNext : handlePanelNext
         const panelOnBack = handlePanelBack
 
         const toastEl = toast && (
@@ -2167,6 +2205,112 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 background: '#f5f7f7',
                                 paddingBottom: 'calc(90px + env(safe-area-inset-bottom, 0px))',
                             }}>
+                                {panelId === 'consent' && (
+                                    <div style={{ padding: '16px 24px 0', display: 'flex', flexDirection: 'column', gap: 28 }}>
+                                        {/* University */}
+                                        <div>
+                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 8, letterSpacing: 0.3, textTransform: 'uppercase' }}>University</span>
+                                            <div style={{ position: 'relative' }}>
+                                                <select
+                                                    value={formData.university}
+                                                    onChange={(e) => {
+                                                        updateField('university', e.target.value)
+                                                        updateField('termDates', getTermDatesForUniversity(e.target.value))
+                                                    }}
+                                                    style={{
+                                                        width: '100%', boxSizing: 'border-box',
+                                                        border: 'none', borderRadius: 12,
+                                                        padding: '14px 36px 14px 14px',
+                                                        appearance: 'none', WebkitAppearance: 'none',
+                                                        cursor: 'pointer', background: '#fff',
+                                                        fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                                        color: '#333', outline: 'none',
+                                                    }}
+                                                >
+                                                    {UK_UNIVERSITIES.map(uni => (
+                                                        <option key={uni} value={uni}>{uni}</option>
+                                                    ))}
+                                                </select>
+                                                <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                                                    <path d="M1 1L5 5L9 1" stroke="#999" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                </svg>
+                                            </div>
+                                            <p style={{ fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#777', margin: '8px 0 0', lineHeight: 1.4 }}>
+                                                We use this to set your term dates automatically.
+                                            </p>
+                                        </div>
+
+                                        {/* Consents */}
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
+                                                <div
+                                                    onClick={(e) => { e.preventDefault(); updateField('consentAgreed', !formData.consentAgreed) }}
+                                                    style={{
+                                                        width: 24, height: 24, borderRadius: 7, flexShrink: 0, marginTop: 1,
+                                                        border: formData.consentAgreed ? '2px solid #147b75' : '1.5px solid #ccc',
+                                                        background: formData.consentAgreed ? '#147b75' : 'transparent',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        transition: 'all 0.15s ease',
+                                                    }}
+                                                >
+                                                    {formData.consentAgreed && (
+                                                        <svg width="13" height="10" viewBox="0 0 14 10" fill="none">
+                                                            <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                                <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333', lineHeight: 1.5 }}>
+                                                    I agree to the{' '}
+                                                    <a href={POLICY_URLS.terms} target="_blank" rel="noopener noreferrer" style={{ color: '#147b75', textDecoration: 'none', fontWeight: 700 }}>Terms</a>
+                                                    {' '}and{' '}
+                                                    <a href={POLICY_URLS.privacy} target="_blank" rel="noopener noreferrer" style={{ color: '#147b75', textDecoration: 'none', fontWeight: 700 }}>Privacy Policy</a>
+                                                </span>
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
+                                                <div
+                                                    onClick={(e) => { e.preventDefault(); updateField('newsletterOptIn', !formData.newsletterOptIn) }}
+                                                    style={{
+                                                        width: 24, height: 24, borderRadius: 7, flexShrink: 0, marginTop: 1,
+                                                        border: formData.newsletterOptIn ? '2px solid #147b75' : '1.5px solid #ccc',
+                                                        background: formData.newsletterOptIn ? '#147b75' : 'transparent',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        transition: 'all 0.15s ease',
+                                                    }}
+                                                >
+                                                    {formData.newsletterOptIn && (
+                                                        <svg width="13" height="10" viewBox="0 0 14 10" fill="none">
+                                                            <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                                <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333', lineHeight: 1.5 }}>
+                                                    Sign up for behind-the-scenes updates and features!
+                                                </span>
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
+                                                <div
+                                                    onClick={(e) => { e.preventDefault(); updateField('insightsConsent', !formData.insightsConsent) }}
+                                                    style={{
+                                                        width: 24, height: 24, borderRadius: 7, flexShrink: 0, marginTop: 1,
+                                                        border: formData.insightsConsent ? '2px solid #147b75' : '1.5px solid #ccc',
+                                                        background: formData.insightsConsent ? '#147b75' : 'transparent',
+                                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                        transition: 'all 0.15s ease',
+                                                    }}
+                                                >
+                                                    {formData.insightsConsent && (
+                                                        <svg width="13" height="10" viewBox="0 0 14 10" fill="none">
+                                                            <path d="M1 5L5 9L13 1" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                        </svg>
+                                                    )}
+                                                </div>
+                                                <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333', lineHeight: 1.5 }}>
+                                                    I'm happy for my anonymised data to be used for student finance insights
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
                                 {panelId === 'termDates' && (
                                     <TermDatesStep
                                         termData={formData.termDates}

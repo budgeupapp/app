@@ -2,6 +2,11 @@
 
 export const STEPS = [
     {
+        id: 'consent',
+        heading: 'Welcome to Budge Up!',
+        subtitle: 'Select your university and agree to our terms to get started.'
+    },
+    {
         id: 'termDates',
         heading: 'Have we got your term dates right?',
         subtitle: "These currently default to the University of Bristol term dates, but you can edit them if the dates are different for your uni"

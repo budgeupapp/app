@@ -2630,8 +2630,8 @@ export default function Dashboard() {
     // Build all events (ignoring source toggles) for computing yearly amounts when sources are off
     const allEvents = _allEventsForProjection
 
-    // Calculate totals (fixed only — exclude one-off items)
     // Calculate totals from formData, counting actual occurrences between start/end dates
+    const removedSet = new Set(formData.removedEvents || [])
     const calcEntryTotal = (entry, cat) => {
         const amt = parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0
         if (amt <= 0) return 0
