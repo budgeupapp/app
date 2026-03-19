@@ -1756,14 +1756,18 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                 for (let i = startIdx; i < steppedPath.points.length; i++) linePts.push(steppedPath.points[i])
                             }
                             linePts.sort((a, b) => a.x - b.x)
-                            // Find y% on the green line at a given x%
+                            // Find y% on the green line at a given x% (interpolate between points)
                             const getLineY = (xPct) => {
                                 if (!linePts.length) return toTopPct(balNum)
                                 if (xPct <= linePts[0].x) return linePts[0].y
                                 for (let j = 1; j < linePts.length; j++) {
                                     if (xPct <= linePts[j].x) {
-                                        // Stepped line: use previous segment's y
-                                        return linePts[j - 1].y
+                                        const p0 = linePts[j - 1], p1 = linePts[j]
+                                        const dx = p1.x - p0.x
+                                        if (dx === 0) return p0.y
+                                        // Linear interpolation between the two points
+                                        const t = (xPct - p0.x) / dx
+                                        return p0.y + (p1.y - p0.y) * t
                                     }
                                 }
                                 return linePts[linePts.length - 1].y
