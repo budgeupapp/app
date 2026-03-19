@@ -249,14 +249,21 @@ export const INITIAL_TERM_DATES = {
             name: 'Term 1',
             start: '2025-09-22',
             end: '2025-12-12',
-            breaks: [{ id: 'b1', start: '2025-10-27', end: '2025-10-31' }]
+            breaks: []
         },
         {
             id: 'term2',
             name: 'Term 2',
-            start: '2026-01-19',
-            end: '2026-05-01',
-            breaks: [{ id: 'b2', start: '2026-02-23', end: '2026-02-27' }]
+            start: '2026-01-12',
+            end: '2026-03-27',
+            breaks: []
+        },
+        {
+            id: 'term3',
+            name: 'Term 3',
+            start: '2026-04-20',
+            end: '2026-06-12',
+            breaks: []
         }
     ]
 }

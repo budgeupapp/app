@@ -19,8 +19,8 @@ export default function SignupForm() {
   const [university, setUniversity] = useState('University of Bristol')
   const [loading, setLoading] = useState(false)
   const [consentChecked, setConsentChecked] = useState(false)
-  const [newsletterChecked, setNewsletterChecked] = useState(true)
-  const [insightsChecked, setInsightsChecked] = useState(true)
+  const [newsletterChecked, setNewsletterChecked] = useState(false)
+  const [insightsChecked, setInsightsChecked] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
 

@@ -956,10 +956,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 nonTermAmount: data.otherIncomeNonTermAmount || '',
             }]
         }
-        // Sync term dates with university-specific dates if available
-        if (data.university && hasCustomTermDates(data.university)) {
+        // Sync term dates with university
+        if (data.university) {
             data.termDates = getTermDatesForUniversity(data.university)
-            defaultTermDatesRef.current = JSON.parse(JSON.stringify(data.termDates))
+            defaultTermDatesRef.current = hasCustomTermDates(data.university) ? JSON.parse(JSON.stringify(data.termDates)) : null
         }
         // Migrate legacy flat other expense fields to otherExpenses array
         if ((!data.otherExpenses || data.otherExpenses.length === 0) && data.otherExpenseAmount) {

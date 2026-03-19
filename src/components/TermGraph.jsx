@@ -46,6 +46,12 @@ export const datePct = (d) => {
     return datePctFromDate(dt)
 }
 
+// Start-of-day: for term/block start dates so they begin at the very start of the day
+export const datePctStart = (d) => {
+    const dt = new Date(d + 'T00:00:00')
+    return datePctFromDate(dt)
+}
+
 // End-of-day: for inclusive end dates (the block should cover the full last day)
 export const datePctEnd = (d) => {
     const dt = new Date(d + 'T12:00:00')
@@ -150,7 +156,7 @@ function fmtMoney(v) {
 
 /* ---------- TERM GRAPH ---------- */
 
-export default function TermGraph({ terms, expandedTerm, balance, actualBalance, balanceStartDate, overdraft, events = [], hiddenEventTypes = [], removedHiddenTypes = [], balanceHiddenTypes = [], currentEventType, onEventClick, onBalanceClick, onOverdraftClick, onTermClick, footer, showDotsToggle, onToggleDots, showIncome, onToggleIncome, showExpenses, onToggleExpenses, graphHeight = 108, marginTop = 16, graphHeightRef, forceGreenDots = false, forceDotColor = null, hideDots = false, balanceHistory = [], showBalanceHistory = true, activeEventDot = null, onZeroDate, onOverdraftBreachDate, showHolidays = true, onZoomChange, zoomOutRef, scrubNearLineOnly = false, onScrubStart }) {
+export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorDate, actualBalance, balanceStartDate, overdraft, events = [], allEvents: allEventsProp = [], weeklySpendRate = 0, hiddenEventTypes = [], removedHiddenTypes = [], balanceHiddenTypes = [], currentEventLabel = null, currentEventType, onEventClick, onBalanceClick, onOverdraftClick, onTermClick, footer, showDotsToggle, onToggleDots, showIncome, onToggleIncome, showExpenses, onToggleExpenses, graphHeight = 108, marginTop = 16, graphHeightRef, forceGreenDots = false, forceDotColor = null, hideDots = false, balanceHistory = [], showBalanceHistory = true, activeEventDot = null, onZeroDate, onOverdraftBreachDate, showHolidays = true, onZoomChange, zoomOutRef, scrubNearLineOnly = false }) {
     const today = new Date()
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate())
     const todayNoon = new Date(todayMidnight.getTime() + 12 * 60 * 60 * 1000)
@@ -284,8 +290,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
             projMax = Math.max(projMax, backRunning)
         }
 
-        // Retroactive past balance range: reverse ALL events before markerPct from balNum
-        const allPastEvts = sortedEvents.filter(e => datePct(e.date) < markerPct)
+        // Retroactive past balance range: reverse ALL events before today from balNum
+        const allPastEvts = sortedEvents.filter(e => datePct(e.date) <= todayPct)
         let pastBal = balNum
         for (let i = allPastEvts.length - 1; i >= 0; i--) {
             const evt = allPastEvts[i]
@@ -410,11 +416,15 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         const points = []
         const dots = []
 
-        // Helper: sum weekly spend between two x positions (post-signup only)
+        // Helper: compute proportional daily spend between two x positions
+        const totalMs = AY_END.getTime() - AY_START.getTime()
+        const dailySpendRate = weeklySpendRate / 7
         const weeklySpendBetween = (x1, x2) => {
-            return postWeekly
-                .filter(e => { const ex = datePct(e.date); return ex > x1 && ex <= x2 })
-                .reduce((sum, e) => sum + e.amount, 0)
+            if (dailySpendRate <= 0) return 0
+            const ms1 = (x1 / 100) * totalMs
+            const ms2 = (x2 / 100) * totalMs
+            const days = (ms2 - ms1) / (24 * 60 * 60 * 1000)
+            return dailySpendRate * Math.max(0, days)
         }
 
         // --- Compute balance at balStartX by reverse-walking from balNum at todayPct ---
@@ -445,6 +455,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
             let bal = backEntries[0].balBefore
             const startX = Math.max(0.5, datePct(backEntries[0].evt.date))
+            points.push({ x: 0, y: toTopPct(bal) })
             points.push({ x: startX, y: toTopPct(bal) })
 
             for (const entry of backEntries) {
@@ -462,6 +473,13 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         }
 
         // --- Walk FORWARDS from balAtStart at signup date for post-signup events ---
+        // Extend line to left edge of screen if no pre-signup events already did
+        if (points.length === 0 || points[0].x > -10) {
+            points.unshift({ x: 0, y: toTopPct(balAtStart) })
+        }
+        if (points.length > 0 && points[points.length - 1].x < balStartX) {
+            points.push({ x: balStartX, y: toTopPct(balAtStart) })
+        }
         let bal = balAtStart
         let prevX = balStartX
         // Track (x, balance) for zero/overdraft crossing detection
@@ -631,83 +649,100 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
     const pastPath = (() => {
         if (!hasBalance) return pastPathRef.current // keep last path during exit animation
 
-        // Get all non-weekly-spend events before markerPct
+        // Discrete (non-weekly) events before marker (for drawing the line)
+        // Exclude events on anchor date (already baked into starting balance)
         const pastDiscrete = activeEvents
             .filter(e => e.amount > 0 && e.editType !== 'weeklySpend' && datePct(e.date) < markerPct)
             .sort((a, b) => datePct(a.date) - datePct(b.date))
-        // Get weekly spend events before markerPct
-        const pastWeekly = activeEvents
-            .filter(e => e.amount > 0 && e.editType === 'weeklySpend' && datePct(e.date) < markerPct)
+        // All discrete events up to today (for reverse-walk — balNum is anchored at today)
+        const allPastDiscrete = activeEvents
+            .filter(e => e.amount > 0 && e.editType !== 'weeklySpend' && datePct(e.date) <= todayPct)
             .sort((a, b) => datePct(a.date) - datePct(b.date))
+        // Daily spend rate from weekly amount
+        const dailyRate = weeklySpendRate / 7
 
-        if (pastDiscrete.length === 0 && pastWeekly.length === 0) {
-            // No past events — flat line at balance
+        if (allPastDiscrete.length === 0 && dailyRate <= 0) {
             const y = toTopPct(balNum)
-            const points = [{ x: 0, y }, { x: markerPct, y }]
-            const linePath = `M 0 ${y} L ${markerPct} ${y}`
-            const fillPath = linePath + ` L ${markerPct} 100 L 0 100 Z`
+            const endPct = Math.max(markerPct, todayPct)
+            const points = [{ x: 0, y }, { x: endPct, y }]
+            const linePath = `M 0 ${y} L ${endPct} ${y}`
+            const fillPath = linePath + ` L ${endPct} 100 L 0 100 Z`
             return { linePath, fillPath, dots: [], points }
         }
 
-        // Weekly spend between two x positions
-        const weeklyBetween = (x1, x2) => pastWeekly
-            .filter(e => { const ex = datePct(e.date); return ex > x1 && ex <= x2 })
-            .reduce((sum, e) => sum + e.amount, 0)
+        const totalMs = AY_END.getTime() - AY_START.getTime()
+        const pctToMs = (p) => AY_START.getTime() + (p / 100) * totalMs
+        const markerDate = new Date(pctToMs(markerPct))
+        markerDate.setHours(0, 0, 0, 0)
 
-        // Reverse-walk from balNum at markerPct to find balance at each past event
-        const entries = []
+        // Reverse-walk from balNum at TODAY to find balance at graph start
+        // (balNum is always anchored at today, even when markerPct is earlier)
         let bal = balNum
-        // Walk backwards to build (event, balBefore, balAfter) pairs
-        for (let i = pastDiscrete.length - 1; i >= 0; i--) {
-            const evt = pastDiscrete[i]
-            const x = datePct(evt.date)
-            const nextX = i < pastDiscrete.length - 1 ? datePct(pastDiscrete[i + 1].date) : markerPct
-            // Add back weekly spend between this event and the next
-            const ws = weeklyBetween(x, nextX)
-            bal += ws // reverse weekly (was subtracted, add back)
-            const balAfter = bal
-            // Reverse the discrete event
-            bal -= evt.type === 'income' ? evt.amount : -evt.amount
-            entries.unshift({ evt, balBefore: bal, balAfter, x })
-        }
-        // Add back weekly spend before first event
-        if (entries.length > 0) {
-            const ws = weeklyBetween(0, entries[0].x)
-            bal += ws
+        // Reverse weekly spend (daily)
+        const graphStartDate = new Date(AY_START)
+        graphStartDate.setHours(0, 0, 0, 0)
+        for (let d = new Date(todayMidnight); d > graphStartDate; d.setDate(d.getDate() - 1)) {
+            const prev = new Date(d)
+            prev.setDate(prev.getDate() - 1)
+            const key = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}-${String(prev.getDate()).padStart(2, '0')}`
+            if (dailyRate > 0) {
+                bal += dailyRate
+            }
+            // Reverse discrete events on this day
+            for (const evt of allPastDiscrete) {
+                if (evt.date === key) {
+                    bal -= evt.type === 'income' ? evt.amount : -evt.amount
+                }
+            }
         }
         const balAtGraphStart = bal
 
-        // Now walk forward from graph start to build stepped path
+        // Forward walk day by day to build points (all the way to today, not just marker)
         const points = []
         const dots = []
         let running = balAtGraphStart
-        let prevX = 0
         points.push({ x: 0, y: toTopPct(running) })
 
-        for (const entry of entries) {
-            // Apply weekly spend between prevX and this event
-            const ws = weeklyBetween(prevX, entry.x)
-            if (ws > 0) {
-                running -= ws
-                points.push({ x: entry.x, y: toTopPct(running) })
+        // Walk to todayMidnight so the daily-rate gradient covers the full past
+        const walkEndDate = new Date(Math.max(markerDate.getTime(), todayMidnight.getTime()))
+        const walkEndPct = Math.max(markerPct, todayPct)
+
+        for (let d = new Date(graphStartDate); d < walkEndDate; d.setDate(d.getDate() + 1)) {
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            const x = datePct(key)
+            if (x >= walkEndPct) break
+
+            // Apply discrete events on this day
+            for (const evt of allPastDiscrete) {
+                if (evt.date === key) {
+                    points.push({ x, y: toTopPct(running) })
+                    const yBefore = toTopPct(running)
+                    running += evt.type === 'income' ? evt.amount : -evt.amount
+                    const yAfter = toTopPct(running)
+                    points.push({ x, y: yAfter })
+                    dots.push({ x, yBefore, yAfter, event: evt, balanceAfter: running })
+                }
             }
-            // Horizontal to event x
-            points.push({ x: entry.x, y: toTopPct(running) })
-            const yBefore = toTopPct(running)
-            running += entry.evt.type === 'income' ? entry.evt.amount : -entry.evt.amount
-            const yAfter = toTopPct(running)
-            points.push({ x: entry.x, y: yAfter })
-            dots.push({ x: entry.x, yBefore, yAfter, event: entry.evt, balanceAfter: running })
-            prevX = entry.x
+
+            // Apply daily weekly spend
+            if (dailyRate > 0) {
+                running -= dailyRate
+            }
+
+            // Add end-of-day point
+            const nextDay = new Date(d)
+            nextDay.setDate(nextDay.getDate() + 1)
+            const nextX = datePct(`${nextDay.getFullYear()}-${String(nextDay.getMonth() + 1).padStart(2, '0')}-${String(nextDay.getDate()).padStart(2, '0')}`)
+            if (nextX < walkEndPct) {
+                points.push({ x: nextX, y: toTopPct(running) })
+            }
         }
-        // Apply remaining weekly spend to markerPct
-        const ws = weeklyBetween(prevX, markerPct)
-        if (ws > 0) running -= ws
-        points.push({ x: markerPct, y: toTopPct(running) })
+        points.push({ x: walkEndPct, y: toTopPct(running) })
 
         const startX = points[0].x
+        const endX = walkEndPct
         const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-        const fillPath = linePath + ` L ${markerPct} 100 L ${startX} 100 Z`
+        const fillPath = linePath + ` L ${endX} 100 L ${startX} 100 Z`
         return { linePath, fillPath, dots, points }
     })()
     if (pastPath && hasBalance) pastPathRef.current = pastPath
@@ -729,6 +764,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
     const [scrubData, setScrubData] = useState(null)
     const scrubRef = useRef({ active: false, startX: 0, startY: 0 })
+    // Expose scrub state for parent components
+    useEffect(() => { window.__budgeup_scrubbing = scrubRef }, [])
     const scrubLineRef = useRef(null)
     const scrubDotRef = useRef(null)
     const scrubTooltipRef = useRef(null)
@@ -750,8 +787,17 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
         return pts
     })()
 
-    // All event dots combined
-    const allDots = [...(pastPath?.dots || []), ...(steppedPath?.dots || [])]
+    // All event dots combined — deduplicate by event date + editType
+    const allDots = (() => {
+        const combined = [...(pastPath?.dots || []), ...(steppedPath?.dots || [])]
+        const seen = new Set()
+        return combined.filter(dot => {
+            const key = `${dot.event?.date}:${dot.event?.editType}:${dot.event?.amount}`
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+        })
+    })()
 
     // Keep refs for scrubber calculations (avoids stale closures in touch handlers)
     const balancePointsRef = useRef(balancePoints)
@@ -1117,7 +1163,6 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                 } else {
                     s.active = true
                     if (navigator.vibrate) navigator.vibrate(10)
-                    onScrubStart?.()
                     e.preventDefault()
                     updateScrubPosition(e.touches[0].clientX)
                     return
@@ -1426,6 +1471,23 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
                 {/* Graph area — clip X so zoomed content doesn't bleed into y-axis */}
                 <div ref={graphAreaRef} onClick={() => setTappedHistDot(null)} style={{ flex: 1, position: 'relative', overflowX: isZoomed ? 'clip' : 'visible', overflowY: 'visible' }}>
+                    {/* Current source label */}
+                    {currentEventLabel && (
+                        <div style={{
+                            position: 'absolute', top: 4, left: 6, zIndex: 15,
+                            background: '#fff',
+                            borderRadius: 8, padding: '3px 10px',
+                            pointerEvents: 'none',
+                            boxShadow: '0 1px 6px rgba(0,0,0,0.1)',
+                        }}>
+                            <span style={{
+                                fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                                color: currentEventType ? (events.find(e => e.editType === currentEventType)?.type === 'income' ? '#147b75' : '#e06470') : '#999',
+                            }}>
+                                {currentEventLabel}
+                            </span>
+                        </div>
+                    )}
                     <div ref={zoomDivRef} style={{
                         overflowX: isZoomed ? 'clip' : 'visible', overflowY: 'visible',
                         position: 'absolute',
@@ -1500,7 +1562,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
                         {/* Term blocks */}
                         {terms.map((term) => {
-                            const sp = datePct(term.start)
+                            const sp = datePctStart(term.start)
                             const ep = datePctEnd(term.end)
                             const wp = ep - sp
                             const isExpanded = expandedTerm === term.id
@@ -1521,7 +1583,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                                         cursor: 'pointer',
                                     }}>
                                     {showHolidays && term.breaks.map((brk, j) => {
-                                        const bsp = datePct(brk.start)
+                                        const bsp = datePctStart(brk.start)
                                         const bep = datePctEnd(brk.end)
                                         const bl = ((bsp - sp) / wp) * 100
                                         const bw = ((bep - bsp) / wp) * 100
@@ -1543,8 +1605,8 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
                         {/* (Past line now rendered via pastPath SVG below) */}
 
-                        {/* Past events: dots */}
-                        {balanceVisible && !hideDots && pastPath && (
+                        {/* Past events: dots — only if steppedPath doesn't have its own past line */}
+                        {balanceVisible && !hideDots && pastPath && !steppedPath?.pastLinePath && (
                             <>
                                 {pastPath.dots.filter(dot => !dot.event.noDot).map((dot, i) => {
                                     const isIncome = dot.event.type === 'income'
@@ -1846,7 +1908,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
                         {/* Term labels at bottom — fade when zoomed, hide if clipped */}
                         {terms.map((term) => {
-                            const sp = datePct(term.start)
+                            const sp = datePctStart(term.start)
                             const ep = datePctEnd(term.end)
                             const mid = (sp + ep) / 2
                             // Estimate label width as ~50px; container is ~100% so convert
@@ -1882,7 +1944,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
 
                         {/* Past events: stepped line + fill (inside zoom div — no CSS scale so strokes stay clean) */}
                         {/* Past balance: flat line (no past events) — only show if steppedPath has no past line */}
-                        {balanceVisible && pastPath && pastPath.dots.length === 0 && !steppedPath?.pastLinePath && (
+                        {balanceVisible && pastPath && pastPath.points.length <= 2 && pastPath.dots.length === 0 && !steppedPath?.pastLinePath && (
                             <>
                                 <div style={{
                                     position: 'absolute',
@@ -1915,7 +1977,7 @@ export default function TermGraph({ terms, expandedTerm, balance, actualBalance,
                             </>
                         )}
                         {/* Past balance: stepped line (has past events) — uses SVG */}
-                        {balanceVisible && pastPath && pastPath.dots.length > 0 && !steppedPath?.pastLinePath && (
+                        {balanceVisible && pastPath && (pastPath.dots.length > 0 || pastPath.points.length > 2) && !steppedPath?.pastLinePath && (
                             <div style={{
                                 position: 'absolute', inset: 0,
                                 pointerEvents: 'none',

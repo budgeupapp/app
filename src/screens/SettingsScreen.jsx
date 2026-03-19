@@ -228,6 +228,9 @@ export default function SettingsScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showResetModal, setShowResetModal] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [showNewsletterPopup, setShowNewsletterPopup] = useState(false)
+  const [newsletterOn, setNewsletterOn] = useState(() => localStorage.getItem('budgeup_newsletter') !== 'false')
+  const [newsletterLoading, setNewsletterLoading] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [currency, setCurrencyState] = useState(getCurrency)
   const [graphStart, setGraphStartState] = useState(getGraphStart)
@@ -276,8 +279,6 @@ export default function SettingsScreen() {
       return [...terms].sort((a, b) => a.start.localeCompare(b.start))[0].start
     } catch { return null }
   })()
-  const [newsletterOn, setNewsletterOn] = useState(() => localStorage.getItem('budgeup_newsletter') !== 'false')
-  const [newsletterLoading, setNewsletterLoading] = useState(false)
   const [messageApi, contextHolder] = message.useMessage({ maxCount: 1 })
   const [linkCopied, setLinkCopied] = useState(false)
   const [toast, setToast] = useState(null)
@@ -552,6 +553,7 @@ export default function SettingsScreen() {
       window._iub.cs.api.openPreferences()
     }
   }
+
 
   const handleShare = async () => {
     analytics.track(SETTINGS_EVENTS.INVITE_FRIENDS_CLICKED)
@@ -844,7 +846,7 @@ export default function SettingsScreen() {
         </div>
 
         {/* FINANCIAL */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 24 }}>
           <div style={{
             fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
             color: '#1a1a1a',
@@ -1116,7 +1118,7 @@ export default function SettingsScreen() {
         </div>
 
         {/* UNIVERSITY & TERMS */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 24 }}>
           <div style={{
             fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
             color: '#1a1a1a',
@@ -1259,7 +1261,7 @@ export default function SettingsScreen() {
         </div>
 
         {/* LEGAL & PRIVACY */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 24 }}>
           <div style={{
             fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
             color: '#1a1a1a',
@@ -1291,7 +1293,6 @@ export default function SettingsScreen() {
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 14,
                 padding: '15px 18px', background: 'transparent', border: 'none',
-                borderBottom: '1px solid #f0f0f0',
                 cursor: 'pointer', textAlign: 'left',
               }}
             >
@@ -1306,7 +1307,7 @@ export default function SettingsScreen() {
         </div>
 
         {/* ACCOUNT ACTIONS */}
-        <div style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 24 }}>
           <div style={{
             fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
             color: '#1a1a1a',
@@ -1364,11 +1365,12 @@ export default function SettingsScreen() {
 
         {/* ABOUT */}
         <div style={{ marginTop: 24 }}>
-          <div style={{ background: '#f5f7f7', borderRadius: 14, padding: '18px 16px' }}>
-            <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: '0 0 8px' }}>About Budge Up</p>
-            <p style={{ fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#666', margin: 0, lineHeight: 1.6 }}>
-              Budge Up is an early-stage startup founded by current students at the University of Bristol (and the University of Costa Rica!). We realised that traditional budgeting is designed for adults on monthly salaries, not the irregularity of student finances. So, we're building a budgeting app that actually works for students! We're hoping to keep the app free for students by having universities pay for it (hence your feedback is so useful!). If you want to stay in the loop on our progress, you can sign up to our newsletter for behind-the-scenes updates.
-            </p>
+          <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: '0 0 10px', padding: '0 4px' }}>About Budge Up</p>
+          <div style={{ background: '#f5f7f7', borderRadius: 14, padding: '16px 16px' }}>
+            <p style={{ fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#555', margin: 0, lineHeight: 1.7 }}>Budge Up is an early-stage startup founded by current students at the <strong style={{ fontWeight: 700, color: '#444' }}>University of Bristol</strong> (and the University of Costa Rica!).</p>
+            <p style={{ fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#555', margin: '10px 0 0', lineHeight: 1.7 }}>We realised that traditional budgeting is designed for adults on monthly salaries, not the irregularity of student finances. So, we're building a budgeting app that actually works for students!</p>
+            <p style={{ fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#555', margin: '10px 0 0', lineHeight: 1.7 }}>We're hoping to keep the app free for students by having universities pay for it (hence your feedback is so useful!).</p>
+            <p style={{ fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#555', margin: '10px 0 0', lineHeight: 1.7 }}>If you want to stay in the loop on our progress, you can sign up to our <strong onClick={() => setShowNewsletterPopup(true)} style={{ fontWeight: 700, color: '#147b75', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }}>newsletter</strong> for behind-the-scenes updates.</p>
           </div>
         </div>
 
@@ -1391,6 +1393,54 @@ export default function SettingsScreen() {
       </div>
 
       {/* Term dates auto-set prompt */}
+      {/* Newsletter popup */}
+      {showNewsletterPopup && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => setShowNewsletterPopup(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} />
+          <div style={{
+            background: '#fff', borderRadius: 20, padding: '28px 24px', width: 'calc(100% - 48px)', maxWidth: 340,
+            position: 'relative', zIndex: 1, textAlign: 'center',
+            animation: 'authFadeIn 0.25s ease',
+          }}>
+            <Mail size={28} color="#147b75" style={{ marginBottom: 12 }} />
+            <p style={{ fontSize: 17, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: '0 0 6px' }}>
+              {newsletterOn ? 'Newsletter' : 'Join our newsletter'}
+            </p>
+            <p style={{ fontSize: 13, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#888', margin: '0 0 20px', lineHeight: 1.5 }}>
+              {newsletterOn
+                ? 'You\'re subscribed to behind-the-scenes updates from the Budge Up team.'
+                : 'Get behind-the-scenes updates on how we\'re building Budge Up, straight to your inbox.'}
+            </p>
+            <button
+              onClick={() => { handleNewsletterToggle(); setShowNewsletterPopup(false) }}
+              disabled={newsletterLoading}
+              style={{
+                width: '100%', height: 48, borderRadius: 99, border: 'none',
+                fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+                cursor: 'pointer',
+                background: newsletterOn ? '#f3f3f3' : '#147B75',
+                color: newsletterOn ? '#e06470' : '#fff',
+                marginBottom: 10,
+                opacity: newsletterLoading ? 0.6 : 1,
+              }}
+            >
+              {newsletterOn ? 'Unsubscribe' : 'Sign me up'}
+            </button>
+            <button
+              onClick={() => setShowNewsletterPopup(false)}
+              style={{
+                width: '100%', height: 44, borderRadius: 99, border: 'none',
+                fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                cursor: 'pointer', background: newsletterOn ? '#147B75' : '#f3f3f3',
+                color: newsletterOn ? '#fff' : '#1a1a1a',
+              }}
+            >
+              {newsletterOn ? 'Keep subscription' : 'No thanks'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {termDatesPrompt && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1100,

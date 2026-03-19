@@ -386,9 +386,11 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
         const catRows = (byCategory[catKey] || []).filter(r => !r.is_removed)
         if (catRows.length === 0) continue
         // Group by entry: irregular entries have subcategory=month, regular entries are standalone
-        const irregularRows = catRows.filter(r => r.recurrence === 'irregular')
+        // Irregular entries have subcategory set to a month name
+        const MONTH_NAMES = ['september', 'october', 'november', 'december', 'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august']
+        const irregularRows = catRows.filter(r => r.subcategory && MONTH_NAMES.includes(r.subcategory))
         const nonTermRows = catRows.filter(r => r.subcategory === 'non_term')
-        const regularRows = catRows.filter(r => r.recurrence !== 'irregular' && r.subcategory !== 'non_term')
+        const regularRows = catRows.filter(r => !MONTH_NAMES.includes(r.subcategory || '') && r.subcategory !== 'non_term')
         const entries = []
         // Regular entries — each row is one entry
         for (const r of regularRows) {

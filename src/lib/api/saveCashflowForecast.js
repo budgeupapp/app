@@ -13,7 +13,7 @@ const mapFrequencyToRecurrence = freq => {
     const mapping = {
         'one_off': 'once', 'once': 'once', 'one-off': 'once',
         'weekly': 'weekly', 'fortnightly': 'fortnightly', 'monthly': 'monthly',
-        'termly': 'termly', 'yearly': 'yearly',
+        'termly': 'termly', 'yearly': 'yearly', 'irregular': 'yearly',
         'quarterly': 'quarterly', 'other': 'monthly'
     }
     return mapping[freq] || 'monthly'
@@ -501,7 +501,7 @@ export async function saveCashflowForecast(userId, data) {
                     rows.push({
                         user_id: userId, direction: isIncome ? 'in' : 'out',
                         type: catId, title: `${catId} - ${month}`,
-                        amount: rowAmt || '0', currency: 'GBP', recurrence: 'irregular',
+                        amount: rowAmt || '0', currency: 'GBP', recurrence: 'yearly',
                         scheduled_date: date, end_date: null, source: 'manual',
                         category: `cat_${catId}`, subcategory: month,
                     })

@@ -111,14 +111,22 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
             const amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
             if (amt <= 0) continue
             const type = isIncome ? 'income' : 'expense'
-            const freq = entry.frequency || cat.defaultFrequency
+            const amtFreq = entry.frequency || cat.defaultFrequency
+            const paidFreq = entry.scheduleFrequency || amtFreq
+            // If paid frequency differs from amount frequency, convert the amount
+            const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, yearly: 1, irregular: 1, 'one-off': 1 }
+            const freq = (paidFreq === 'irregular' || paidFreq === 'one-off') ? amtFreq : paidFreq
+            const convertedAmt = (freq !== amtFreq && FREQ_PER_YEAR[amtFreq] && FREQ_PER_YEAR[freq])
+                ? Math.round(amt * FREQ_PER_YEAR[amtFreq] / FREQ_PER_YEAR[freq] * 100) / 100
+                : amt
             const entryLabel = multiEntry ? `${cat.label} ${ei + 1}` : cat.label
+            const entryEditType = entry.id ? `${cat.id}:${entry.id}` : cat.id
 
             if (freq === 'irregular') {
                 const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
                 if (months.length === 0) continue
                 const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
-                const amounts = distributeExcludingRemoved(amt, dateObjs, cat.id, removedSet)
+                const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet)
                 for (let mi = 0; mi < months.length; mi++) {
                     const month = months[mi]
                     const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
@@ -126,28 +134,27 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                     const instAmt = parseFloat(String(entry.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
                     const amount = instAmt > 0 ? instAmt : amounts[mi]
                     if (amount <= 0) continue
-                    events.push({ date, amount, type, label: entryLabel, sublabel: `${MONTH_SHORT[month]} ${entryLabel.toLowerCase()}`, editType: cat.id, editMonth: month })
+                    events.push({ date, amount, type, label: entryLabel, sublabel: `${MONTH_SHORT[month]} ${entryLabel.toLowerCase()}`, editType: entryEditType, editMonth: month })
                 }
             } else if (freq === 'one-off') {
                 if (entry.nextDate) {
-                    events.push({ date: entry.nextDate, amount: amt, type, label: entryLabel, sublabel: 'One-off', editType: cat.id })
+                    events.push({ date: entry.nextDate, amount: amt, type, label: entryLabel, sublabel: 'One-off', editType: entryEditType })
                 }
             } else if (freq === 'weekly' || freq === 'fortnightly') {
                 const interval = freq === 'weekly' ? 7 : 14
-                const startDate = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
-                let d = new Date(startDate)
-                if (!entry.nextDate) {
-                    while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
-                    while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
-                }
-                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : amt
+                const DAY_MAP = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
+                const targetDay = DAY_MAP[entry.dayOfWeek] ?? 1 // default Monday
+                let d = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
+                // Align to the target day of week (find next occurrence on or after start)
+                for (let i = 0; i < 7 && d.getDay() !== targetDay; i++) d = new Date(d.getTime() + 86400000)
+                const nonTermAmt = entry.variesByTerm ? Math.round(parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) * (FREQ_PER_YEAR[amtFreq] || 1) / (FREQ_PER_YEAR[freq] || 1) * 100) / 100 : convertedAmt
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
                 while (d <= endDate) {
                     if (d >= AY_START) {
                         const dateStr = toLocalDate(d)
-                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
+                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? convertedAmt : nonTermAmt) : convertedAmt
                         if (eventAmt > 0) {
-                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: cat.id })
+                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: entryEditType })
                         }
                     }
                     d = new Date(d.getTime() + interval * 86400000)
@@ -159,7 +166,7 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                 const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
                 const earliest = startFrom > AY_START ? startFrom : AY_START
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
-                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : amt
+                const nonTermAmt = entry.variesByTerm ? Math.round(parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) * (FREQ_PER_YEAR[amtFreq] || 1) / (FREQ_PER_YEAR[freq] || 1) * 100) / 100 : convertedAmt
                 let month = AY_START.getMonth()
                 let year = AY_START.getFullYear()
                 for (let i = 0; i < 13; i++) {
@@ -168,9 +175,9 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                     const d = new Date(year, month, day)
                     if (d >= earliest && d <= endDate) {
                         const dateStr = toLocalDate(d)
-                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
+                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? convertedAmt : nonTermAmt) : convertedAmt
                         if (eventAmt > 0) {
-                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: cat.id })
+                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: entryEditType })
                         }
                     }
                     month++
@@ -195,7 +202,7 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                     const perPayment = count > 0 ? Math.round(amt * 100 / count) / 100 : amt
                     while (d <= endDate) {
                         if (d >= AY_START) {
-                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${sf === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: cat.id })
+                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${sf === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: entryEditType })
                         }
                         d = new Date(d.getTime() + interval * 86400000)
                     }
@@ -223,12 +230,30 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                         const day = Math.min(domTarget, lastDay)
                         const d = new Date(year, month, day)
                         if (d >= earliest && d <= endDate) {
-                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: cat.id })
+                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: entryEditType })
                         }
                         month++; if (month > 11) { month = 0; year++ }
                     }
+                } else if (sf === 'irregular' || (!sf && entry.months?.length)) {
+                    // Yearly amount with irregular schedule — distribute across selected months
+                    const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
+                    if (months.length > 0) {
+                        const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
+                        const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet)
+                        for (let mi = 0; mi < months.length; mi++) {
+                            const month = months[mi]
+                            const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
+                            if (!date) continue
+                            const instAmt = parseFloat(String(entry.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
+                            const amount = instAmt > 0 ? instAmt : amounts[mi]
+                            if (amount <= 0) continue
+                            events.push({ date, amount, type, label: entryLabel, sublabel: `${MONTH_SHORT[month]} ${entryLabel.toLowerCase()}`, editType: entryEditType, editMonth: month })
+                        }
+                    } else {
+                        events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: entryEditType })
+                    }
                 } else {
-                    events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: cat.id })
+                    events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: entryEditType })
                 }
             }
         }
@@ -301,10 +326,12 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
     }
 
     // Filter out events before graph start month (unless disabled for yearly totals)
+    // Also filter out events on or after AY_END (Sep 1) — graph stops at Aug 31
     const graphStartMonth = getGraphStart().slice(0, 7) + '-01'
+    const ayEndStr = toLocalDate(AY_END)
     const filtered = filterByGraphStart
-        ? events.filter(e => e.date >= graphStartMonth)
-        : events
+        ? events.filter(e => e.date >= graphStartMonth && e.date < ayEndStr)
+        : events.filter(e => e.date < ayEndStr)
 
     const removed = formData.removedEvents || []
     const overrides = formData.amountOverrides || {}
@@ -913,10 +940,11 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
         <div ref={rowRef} data-source-row data-source-id={source.id} style={{
             borderRadius: 14,
             background: isInactive ? '#f5f5f5' : '#fff',
+            border: '1px solid #fff',
             overflow: 'hidden',
-            maxHeight: deleting ? 0 : naturalHeight != null ? naturalHeight : 1000,
+            maxHeight: deleting ? 0 : naturalHeight != null ? naturalHeight : 5000,
             opacity: deleting ? 0 : isInactive ? 0.55 : 1,
-            marginBottom: deleting ? 0 : 8,
+            marginBottom: deleting ? 0 : 12,
             boxShadow: expanded ? '0 2px 12px rgba(0,0,0,0.06)' : '0 1px 4px rgba(0,0,0,0.04)',
             transition: deleting
                 ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.25s ease, margin-bottom 0.4s cubic-bezier(0.22, 0.61, 0.36, 1)'
@@ -977,7 +1005,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                     }}>
                         {!isInactive && yearlyAmount > 0 && source._visibleAmount === 0
                             ? 'Not visible — change graph start date in Settings'
-                            : yearlyAmount === 0 ? `${getCurrencySymbol()}0/yr` : `${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString()}/yr`
+                            : yearlyAmount === 0 ? `${getCurrencySymbol()}0.00 total` : `${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total`
                         }
                     </p>
                     {removedCount > 0 && (
@@ -1023,6 +1051,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
 
             {/* Expanded section — animated height */}
             <div data-expand-content style={{
+                background: '#fff',
                 maxHeight: expanded ? (settled ? 'none' : (measuredHeight + 20) || 800) : 0,
                 opacity: expanded ? 1 : 0,
                 overflow: settled ? 'visible' : 'hidden',
@@ -1034,20 +1063,26 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
             }}>
                 <div ref={innerRef}>
                     {children && (
-                        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 14, background: '#fafafa' }}>
+                        <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: 14, background: '#fff' }}>
                             {children}
                         </div>
                     )}
                     {onDelete && (
-                        <div style={{ padding: '0 10px 14px', textAlign: 'center', background: '#fafafa' }}>
+                        <div style={{ padding: '0 10px 14px', textAlign: 'center', background: '#fff' }}>
                             <span
                                 onClick={(e) => {
                                     e.stopPropagation()
                                     if (deleting) return
-                                    if (rowRef.current) setNaturalHeight(rowRef.current.offsetHeight)
+                                    const rowH = rowRef.current?.offsetHeight || 0
+                                    if (rowRef.current) setNaturalHeight(rowH)
+                                    const sc = rowRef.current?.closest('[data-scroll-container]')
+                                    const rowTop = rowRef.current?.getBoundingClientRect().top || 0
+                                    const scTop = sc?.getBoundingClientRect().top || 0
+                                    const isAboveViewport = rowTop < scTop + 100
                                     requestAnimationFrame(() => {
                                         setDeleting(true)
                                         onDelete()
+
                                     })
                                 }}
                                 style={{
@@ -1060,7 +1095,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                                     const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
                                     const cat = allCats.find(c => c.id === source.id)
                                     const entries = cat ? (formData[cat.formKey] || []) : []
-                                    const count = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length
+                                    const count = entries.length
                                     const name = source.label.toLowerCase()
                                     if (count > 1) {
                                         const plural = name.endsWith('y') ? name.slice(0, -1) + 'ies' : name + 's'
@@ -1194,9 +1229,11 @@ export default function Dashboard() {
         })
     }
     const [visibleExpandedSource, setVisibleExpandedSource] = useState(null)
+    const [visibleEntryIndex, setVisibleEntryIndex] = useState(0)
     const [balanceToast, setBalanceToast] = useState(null)
     const balanceToastTimer = useRef(null)
     const [showInitialBalancePopup, setShowInitialBalancePopup] = useState(false)
+    const [joinDate, setJoinDate] = useState(null)
     const [balanceBannerDismissing, setBalanceBannerDismissing] = useState(false)
     const [initialBalanceRaw, setInitialBalanceRaw] = useState('')
     const [initialBalanceNegative, setInitialBalanceNegative] = useState(false)
@@ -1247,6 +1284,7 @@ export default function Dashboard() {
             }
         }
 
+        setVisibleEntryIndex(0)
         setExpandedSources(prev => {
             const next = new Set(prev)
             if (next.has(sourceId)) {
@@ -1303,7 +1341,8 @@ export default function Dashboard() {
         }
     }, [expandedSources])
     const [activeTab, setActiveTabRaw] = useState(() => localStorage.getItem('budgeup_active_tab') || 'goals')
-    const setActiveTab = (tab) => { localStorage.setItem('budgeup_active_tab', tab); setActiveTabRaw(tab) }
+    const activeTabRef = useRef(activeTab)
+    const setActiveTab = (tab) => { activeTabRef.current = tab; localStorage.setItem('budgeup_active_tab', tab); setActiveTabRaw(tab) }
     const [goalsShowMore, setGoalsShowMore] = useState(false)
     const [trackingShowAll, setTrackingShowAll] = useState(false)
     const [warningMinimised, setWarningMinimisedRaw] = useState(() => localStorage.getItem('budgeup_warning_minimised') === 'true')
@@ -1352,10 +1391,12 @@ export default function Dashboard() {
             if (isExpanded) {
                 graphEl.style.height = `${MIN_H}px`
                 if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+                setGraphCollapsed(true)
             } else {
                 graphEl.style.height = `${MAX_H}px`
                 gc.style.height = ''
                 if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
+                setGraphCollapsed(false)
                 if (graphCovered) {
                     setGraphCovered(false)
                     setThemeColor('#ffffff')
@@ -1367,7 +1408,7 @@ export default function Dashboard() {
         }
 
         // Switching to different tab — save scroll, keep graph state as-is
-        sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTab, String(el.scrollTop))
+        sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTabRef.current, String(el.scrollTop))
 
         // Check if tab is empty
         const isIncomeEmpty = tab === 'income' &&
@@ -1412,6 +1453,8 @@ export default function Dashboard() {
     const [editingEvent, setEditingEvent] = useState(null)
     const [editAmount, setEditAmount] = useState('')
     const [editWarning, setEditWarning] = useState('')
+    const [skipToast, setSkipToast] = useState(null) // { label, undoFn }
+    const skipToastTimerRef = useRef(null)
     const [nearbyEvents, setNearbyEvents] = useState([])
     const [nearbyIdx, setNearbyIdx] = useState(0)
     const [editingOverdraft, setEditingOverdraft] = useState(null)
@@ -1603,6 +1646,7 @@ export default function Dashboard() {
                     const joinDateStr = user.created_at
                         ? (() => { const d = new Date(user.created_at); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` })()
                         : null
+                    if (joinDateStr) setJoinDate(joinDateStr)
                     if (mode === 'first_term') {
                         // Will be handled by the termDates useEffect below
                     } else if (mode === 'custom' && localStorage.getItem('budgeup_graph_start')) {
@@ -1772,13 +1816,22 @@ export default function Dashboard() {
     const tabsBarRef = useRef(null)
     const themeColorRef = useRef('#ffffff')
     const [graphCovered, setGraphCoveredRaw] = useState(() => {
-        const tab = sessionStorage.getItem('budgeup_active_tab') || 'goals'
+        const tab = localStorage.getItem('budgeup_active_tab') || 'goals'
         return sessionStorage.getItem('budgeup_graph_covered_' + tab) === 'true'
     })
     const setGraphCovered = (v) => {
-        const tab = sessionStorage.getItem('budgeup_active_tab') || 'goals'
+        const tab = localStorage.getItem('budgeup_active_tab') || 'goals'
         sessionStorage.setItem('budgeup_graph_covered_' + tab, String(v))
         setGraphCoveredRaw(v)
+    }
+    const [graphCollapsed, setGraphCollapsedRaw] = useState(() => {
+        const tab = localStorage.getItem('budgeup_active_tab') || 'goals'
+        return sessionStorage.getItem('budgeup_graph_collapsed_' + tab) === 'true'
+    })
+    const setGraphCollapsed = (v) => {
+        const tab = localStorage.getItem('budgeup_active_tab') || 'goals'
+        sessionStorage.setItem('budgeup_graph_collapsed_' + tab, String(v))
+        setGraphCollapsedRaw(v)
     }
     const graphCardRef = useRef(null)
     const heroHeaderRef = useRef(null)
@@ -1834,6 +1887,7 @@ export default function Dashboard() {
         graphEl.style.height = `${MIN_H}px`
         gc.style.height = ''
         if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+        setGraphCollapsed(true)
         setTimeout(() => {
             gc.style.transition = ''
             graphEl.style.transition = ''
@@ -1843,6 +1897,8 @@ export default function Dashboard() {
 
     // Drag on tabs/handle: Phase 1 = shrink graph, Phase 2 = cover collapsed graph
     const onHandlePointerDown = useCallback((e) => {
+        // Don't expand graph while scrubbing
+        if (window.__budgeup_scrubbing?.current?.active) return
         const gc = graphCardRef.current
         const graphEl = graphContainerRef.current
         const heroEl = heroHeaderRef.current
@@ -1950,6 +2006,7 @@ export default function Dashboard() {
             }
 
             const isCovered = state === 'covered'
+            const isCollapsed = state === 'collapsed'
 
             // When expanding, lock scroll and reset to top so graph stays visible
 
@@ -1967,6 +2024,7 @@ export default function Dashboard() {
             }, 400)
 
             setGraphCovered(isCovered)
+            setGraphCollapsed(isCollapsed)
             setThemeColor('#ffffff')
             themeColorRef.current = '#ffffff'
         }
@@ -2011,6 +2069,7 @@ export default function Dashboard() {
 
         const onStart = (e) => {
             if (el.scrollTop > 1) return
+            if (window.__budgeup_scrubbing?.current?.active) return
             const gc = graphCardRef.current
             const graphEl = graphContainerRef.current
             if (!gc || !graphEl) return
@@ -2077,10 +2136,12 @@ export default function Dashboard() {
                         graphEl.style.height = `${MAX_H}px`
                         gc.style.height = ''
                         if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
+                        setGraphCollapsed(false)
                     } else {
                         graphEl.style.height = `${MIN_H}px`
                         gc.style.height = ''
                         if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+                        setGraphCollapsed(true)
                     }
                     setGraphCovered(false)
                 } else {
@@ -2092,6 +2153,7 @@ export default function Dashboard() {
                 if (progress > 0.3) {
                     graphEl.style.height = `${MAX_H}px`
                     if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
+                    setGraphCollapsed(false)
                 } else {
                     graphEl.style.height = `${MIN_H}px`
                     if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
@@ -2162,7 +2224,7 @@ export default function Dashboard() {
         const el = scrollRef.current
         if (!el) return
         applyScrollStyles(el.scrollTop)
-        sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTab, String(el.scrollTop))
+        sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTabRef.current, String(el.scrollTop))
 
         // Show/hide tab bar bottom line based on content scroll
         if (tabsBarRef.current && contentWrapRef.current) {
@@ -2182,7 +2244,7 @@ export default function Dashboard() {
                 const sourceId = row.dataset.sourceId
                 if (!expandedSources.has(sourceId)) continue
                 const rect = row.getBoundingClientRect()
-                // Row is in view if any part of it is visible between header and container bottom
+                // Row is in view if any part is visible between header and screen bottom
                 if (rect.bottom > headerBottom && rect.top < containerBottom) {
                     best = sourceId
                     break
@@ -2204,13 +2266,16 @@ export default function Dashboard() {
                 applyScrollStyles(pos)
             }
         }
-        // Restore graph visual state to match graphCovered
+        // Restore graph visual state to match graphCovered / graphCollapsed
         const gc = graphCardRef.current
         const graphEl = graphContainerRef.current
         const heroEl = heroHeaderRef.current
         if (graphCovered) {
             if (graphEl) graphEl.style.height = `${MIN_H}px`
             if (gc) { gc.style.height = '4px'; gc.style.marginTop = '0px' }
+            if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+        } else if (graphCollapsed) {
+            if (graphEl) graphEl.style.height = `${MIN_H}px`
             if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
         } else {
             const pos = parseInt(saved || '0', 10)
@@ -2238,6 +2303,9 @@ export default function Dashboard() {
         if (graphCovered) {
             if (graphEl) graphEl.style.height = `${MIN_H}px`
             if (gc) { gc.style.height = '4px'; gc.style.marginTop = '0px' }
+            if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+        } else if (graphCollapsed) {
+            if (graphEl) graphEl.style.height = `${MIN_H}px`
             if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
         } else {
             const pos = parseInt(saved || '0', 10)
@@ -2341,17 +2409,18 @@ export default function Dashboard() {
                     applyScrollStyles(savedScroll)
                 }
                 // Step 2: add source or add another entry if already exists
+                const key = isExp ? 'expenseSources' : 'incomeSources'
+                const sources = formData[key] || []
                 {
-                    const key = isExp ? 'expenseSources' : 'incomeSources'
-                    const sources = formData[key] || []
                     if (!sources.includes(sourceId)) {
                         updateField(key, [...sources, sourceId])
                     } else {
                         // Source already exists — add another entry
                         const cat = CATEGORY_MAP[sourceId]
                         if (cat) {
+                            const newEntryId = `${cat.id}_${Date.now()}`
                             const newEntry = {
-                                id: `${cat.id}_${Date.now()}`,
+                                id: newEntryId,
                                 amount: '',
                                 frequency: cat.defaultFrequency,
                                 nextDate: '',
@@ -2363,33 +2432,43 @@ export default function Dashboard() {
                                 ...prev,
                                 [cat.formKey]: [...(prev[cat.formKey] || []), newEntry],
                             }))
+                            // Scroll to the new entry after expand settles
+                            setTimeout(() => {
+                                const entryEl = document.querySelector(`[data-entry-id="${newEntryId}"]`)
+                                if (entryEl && el) {
+                                    const entryRect = entryEl.getBoundingClientRect()
+                                    const containerRect = el.getBoundingClientRect()
+                                    el.scrollBy({ top: entryRect.top - containerRect.top - 240, behavior: 'smooth' })
+                                }
+                            }, 100)
                         }
                     }
                     setExpandedSources(prev => new Set(prev).add(sourceId))
                 }
-                // Wait for render + collapse animation, then scroll to row
-                setTimeout(() => {
-                    if (!el) return
-                    const stickyHeader = el.querySelector('[data-sticky-header]')
-                    const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
-                    const sectionAttr = isExp ? 'expenses' : 'income'
-                    const sectionSources = isExp ? formData.expenseSources : formData.incomeSources
-                    const isFirstInSection = (sectionSources || []).filter(s => s !== sourceId).length === 0
-                    const scrollTarget = isFirstInSection
-                        ? el.querySelector(`[data-section="${sectionAttr}"]`)
-                        : el.querySelector(`[data-source-id="${sourceId}"]`)
-                    if (scrollTarget) {
-                        const target = scrollTarget.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
-                        el.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
+                // Scroll to the source row (only for NEW sources, not additional instances)
+                if (!sources.includes(sourceId)) {
+                    let scrollAttempts = 0
+                    const tryScroll = () => {
+                        if (!el) return
+                        isAnimatingRef.current = false
+                        const row = el.querySelector(`[data-source-id="${sourceId}"]`)
+                        if (row && row.offsetHeight > 50) {
+                            const stickyHeader = el.querySelector('[data-sticky-header]')
+                            const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
+                            const target = row.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
+                            el.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
+                        } else if (scrollAttempts++ < 20) {
+                            setTimeout(tryScroll, 100)
+                        }
                     }
-                }, 400)
+                    setTimeout(tryScroll, 200)
+                }
                 return
             }
 
             if (action.startsWith('add-flex:')) {
                 const [, sourceId, type] = action.split(':')
                 const isExp = type === 'expense'
-                analytics.track(DASHBOARD_EVENTS.FLEX_SOURCE_ADDED, { source_id: sourceId, source_type: isExp ? 'expense' : 'income' })
                 const targetTab = isExp ? 'expenses' : 'income'
                 if (activeTab !== targetTab) setActiveTab(targetTab)
                 collapseGraph()
@@ -2434,6 +2513,7 @@ export default function Dashboard() {
 
         window.addEventListener('nav-fab-action', handler)
         window.dispatchEvent(new CustomEvent('dashboard-ready'))
+
         return () => window.removeEventListener('nav-fab-action', handler)
     }, [animateScroll, handleTabChange, activeTab])
 
@@ -2463,25 +2543,30 @@ export default function Dashboard() {
     const originBalance = parseFloat(String(formData.balance || '0').replace(/,/g, ''))
     const overdraftNum = formData.overdraft ? parseFloat(String(formData.overdraft || '0').replace(/,/g, '')) : undefined
 
-    // Source lists from categories config
-    const INCOME_SOURCES = FIXED_INCOME_SOURCES
-    const EXPENSE_SOURCES = FIXED_EXPENSE_SOURCES
-
-    const events = buildGraphEvents(formData)
-
-    // Projection balance (green line): start from formData.balance at join date,
-    // walk forward through events to get predicted balance at today
+    // Projection balance (green line): anchored at join date, walked forward to today
+    const todayStr = toLocalDate(new Date())
+    const anchorDate = joinDate || getGraphStart()
+    const allSourceIds = [...FIXED_INCOME_SOURCES.map(s => s.id), ...FIXED_EXPENSE_SOURCES.map(s => s.id)]
+    const _allEventsForProjection = buildGraphEvents({ ...formData, incomeSources: allSourceIds, expenseSources: allSourceIds }, { filterByGraphStart: false })
     const projectionBalance = (() => {
-        const graphStart = getGraphStart()
-        const todayStr = toLocalDate(new Date())
-        let running = originBalance
-        const pastEvents = events.filter(e => !e.removed && e.date >= graphStart && e.date <= todayStr)
-            .sort((a, b) => a.date.localeCompare(b.date))
-        for (const evt of pastEvents) {
-            if (evt.type === 'income') running += evt.amount
-            else running -= evt.amount
+        // Walk forward from originBalance at anchor date through events to today
+        // Discrete events: applied on their date
+        const discreteEvents = _allEventsForProjection
+            .filter(e => !e.removed && e.date >= anchorDate && e.date <= todayStr && e.editType !== 'weeklySpend')
+        // Weekly spend: simple daily rate (weeklySpend / 7) — same as pastPath
+        const weeklyAmt = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, '')) || 0
+        const dailyRate = weeklyAmt / 7
+        const anchorD = new Date(anchorDate + 'T00:00:00')
+        const todayD = new Date(todayStr + 'T00:00:00')
+        const daysBetween = Math.max(0, Math.round((todayD - anchorD) / 86400000)) // include anchor day
+        const totalDailySpend = dailyRate * daysBetween
+        let bal = originBalance
+        for (const evt of discreteEvents) {
+            bal += evt.type === 'income' ? evt.amount : -evt.amount
         }
-        return running
+        bal -= totalDailySpend
+        // DEBUG
+        return bal
     })()
 
     // Actual balance: latest balance_history entry, or formData.balance if no history
@@ -2491,9 +2576,14 @@ export default function Dashboard() {
         }
         return originBalance
     })()
+
+    // Source lists from categories config
+    const INCOME_SOURCES = FIXED_INCOME_SOURCES
+    const EXPENSE_SOURCES = FIXED_EXPENSE_SOURCES
+
+    const events = buildGraphEvents(formData)
     // Build all events (ignoring source toggles) for computing yearly amounts when sources are off
-    const allSourceIds = [...INCOME_SOURCES.map(s => s.id), ...EXPENSE_SOURCES.map(s => s.id)]
-    const allEvents = buildGraphEvents({ ...formData, incomeSources: allSourceIds, expenseSources: allSourceIds }, { filterByGraphStart: false })
+    const allEvents = _allEventsForProjection
 
     // Calculate totals (fixed only — exclude one-off items)
     const fixedEvents = events.filter(e => e.editType !== 'oneOffIncome' && e.editType !== 'oneOffExpense')
@@ -2516,8 +2606,8 @@ export default function Dashboard() {
     // So green line value at today = projectionBalance, actual = balanceNum
     const projBal = parseFloat(String(projectionBalance || '0').replace(/,/g, '')) || 0
     const goalsData = (() => {
-        const diff = balanceNum - projBal
-        return { diff: Math.round(diff), isAhead: diff > 0, isOnTrack: Math.abs(diff) < 10 }
+        const diff = Math.round((balanceNum - projBal) * 100) / 100
+        return { diff, isAhead: diff > 0, isOnTrack: Math.abs(diff) < 10 }
     })()
 
     // Hero metric: actual balance vs predicted (green line) for today
@@ -2525,15 +2615,15 @@ export default function Dashboard() {
         const { diff, isAhead, isOnTrack } = goalsData
         const sym = getCurrencySymbol()
         if (isOnTrack) return { color: '#147b75', value: 'On track', label: 'vs projection' }
-        const absDiff = Math.abs(diff)
-        const formatted = `${sym}${absDiff.toLocaleString()}`
+        const absDiff = Math.round(Math.abs(diff) * 100) / 100
+        const formatted = `${sym}${absDiff.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
         if (isAhead) return { color: '#147b75', value: `+${formatted}`, label: 'above projection' }
         return { color: '#e06470', value: `\u2212${formatted}`, label: 'below projection' }
     })()
 
     // Calculate per-source yearly amounts
     const getSourceYearly = (editTypes) => {
-        return allEvents.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot).reduce((s, e) => s + e.amount, 0)
+        return events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot).reduce((s, e) => s + e.amount, 0)
     }
 
     const getSourceRemovedCount = (editTypes) => {
@@ -2562,11 +2652,9 @@ export default function Dashboard() {
 
     const clearSourceOverrides = (editTypes) => {
         const overrides = { ...(formData.amountOverrides || {}) }
-        let cleared = 0
         for (const key of Object.keys(overrides)) {
-            if (editTypes.some(et => key.startsWith(et + ':'))) { delete overrides[key]; cleared++ }
+            if (editTypes.some(et => key.startsWith(et + ':'))) delete overrides[key]
         }
-        analytics.track(DASHBOARD_EVENTS.OVERRIDES_CLEARED, { edit_types: editTypes, count: cleared })
         updateField('amountOverrides', overrides)
     }
 
@@ -2586,11 +2674,15 @@ export default function Dashboard() {
     }
 
     const deleteSource = (sourceId, isExpense) => {
+        const prevFormData = { ...formData }
+        const cat = CATEGORY_MAP[sourceId]
+        const entryCount = cat ? (formData[cat.formKey] || []).length : 1
+        const sourceLabel = cat?.label || sourceId
+        const deleteLabel = entryCount > 1 ? `${entryCount} ${sourceLabel}s deleted` : `${sourceLabel} deleted`
         analytics.track(DASHBOARD_EVENTS.SOURCE_REMOVED, {
             source_id: sourceId,
             source_type: isExpense ? 'expense' : 'income',
         })
-        const cat = CATEGORY_MAP[sourceId]
 
         const remainingSources = isExpense
             ? (formData.expenseSources || []).filter(s => s !== sourceId)
@@ -2656,6 +2748,14 @@ export default function Dashboard() {
                     })
                 }, 400)
             }
+            // Show undo toast
+            if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+            setSkipToast({
+                label: deleteLabel,
+                undoFn: () => setFormData(prevFormData),
+                sourceId,
+            })
+            skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
         }, 500)
     }
 
@@ -2738,10 +2838,16 @@ export default function Dashboard() {
 
     // Map source ids to editTypes for yearly calc (category editType = category id)
     const incomeEditTypeMap = Object.fromEntries(
-        INCOME_CATEGORIES.map(cat => [cat.id, [cat.id]])
+        INCOME_CATEGORIES.map(cat => {
+            const entries = formData[cat.formKey] || []
+            return [cat.id, entries.length > 0 ? entries.map((e, i) => e.id ? `${cat.id}:${e.id}` : cat.id) : [cat.id]]
+        })
     )
     const expenseEditTypeMap = Object.fromEntries(
-        EXPENSE_CATEGORIES.map(cat => [cat.id, [cat.id]])
+        EXPENSE_CATEGORIES.map(cat => {
+            const entries = formData[cat.formKey] || []
+            return [cat.id, entries.length > 0 ? entries.map((e, i) => e.id ? `${cat.id}:${e.id}` : cat.id) : [cat.id]]
+        })
     )
 
     // Map expandedSources to currentEventType for dot highlighting
@@ -2758,18 +2864,16 @@ export default function Dashboard() {
             : activeTab === 'expenses'
                 ? EXPENSE_SOURCES.map(s => s.id)
                 : []
-        // Prefer visible expanded source if it's in the current tab
+        // Only highlight if the expanded source is actually visible on screen
         if (visibleExpandedSource && expandedSources.has(visibleExpandedSource) && tabSources.includes(visibleExpandedSource)) {
             return visibleExpandedSource
-        }
-        // Fallback to first expanded source in current tab
-        for (const id of tabSources) {
-            if (expandedSources.has(id)) return id
         }
         return null
     })()
     const currentEventType = activeSource && sourceToEditType[activeSource]
-        ? sourceToEditType[activeSource][0]
+        ? (sourceToEditType[activeSource].length > 1
+            ? sourceToEditType[activeSource][visibleEntryIndex] || sourceToEditType[activeSource][0]
+            : sourceToEditType[activeSource][0])
         : null
 
     // No longer modify graph visibility when "show all" is toggled
@@ -2818,6 +2922,7 @@ export default function Dashboard() {
                     overflowX: 'hidden',
                     WebkitOverflowScrolling: 'touch',
                     overscrollBehavior: 'none',
+                    overflowAnchor: 'auto',
                     paddingBottom: 'calc(120px + env(safe-area-inset-bottom))',
                     background: '#ffffff',
                 }}
@@ -3092,11 +3197,14 @@ export default function Dashboard() {
                                 marginTop={0}
                                 terms={terms}
                                 balance={projectionBalance || undefined}
+                                balanceAnchorDate={anchorDate}
                                 balanceStartDate={getGraphStart()}
                                 actualBalance={balanceNum}
                                 overdraft={showOverdraft ? overdraftNum : undefined}
                                 onOverdraftClick={handleOverdraftClick}
                                 events={events}
+                                allEvents={allEvents}
+                                weeklySpendRate={parseFloat(String(formData.weeklySpend || '0').replace(/,/g, '')) || 0}
                                 hiddenEventTypes={[
                                     ...(!showIncome ? [...INCOME_CATEGORIES.map(c => c.id), 'oneOffIncome', ...(formData.flexIncomeSources || [])] : []),
                                     ...(!showExpenses ? [...EXPENSE_CATEGORIES.map(c => c.id), 'weeklySpend', 'oneOffExpense', ...(formData.flexExpenseSources || [])] : []),
@@ -3129,6 +3237,14 @@ export default function Dashboard() {
                                     return allMaps[id] || []
                                 })}
                                 currentEventType={currentEventType}
+                                currentEventLabel={(() => {
+                                    if (!activeSource) return null
+                                    const cat = CATEGORY_MAP[activeSource]
+                                    if (!cat) return null
+                                    const entries = formData[cat.formKey] || []
+                                    const hasMulti = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
+                                    return hasMulti ? `${cat.label} ${visibleEntryIndex + 1}` : cat.label
+                                })()}
                                 onEventClick={handleEventClick}
                                 activeEventDot={editingEvent}
                                 balanceHistory={balanceHistory}
@@ -3136,7 +3252,6 @@ export default function Dashboard() {
                                 onZeroDate={setGraphZeroDate}
                                 onOverdraftBreachDate={setGraphOverdraftDate}
                                 showHolidays={showHolidays}
-                                onScrubStart={() => analytics.track(DASHBOARD_EVENTS.GRAPH_SCRUBBED)}
                                 onZoomChange={(zoomed) => {
                                     setGraphIsZoomed(zoomed)
                                     if (zoomed) analytics.track(DASHBOARD_EVENTS.GRAPH_ZOOMED)
@@ -3152,6 +3267,7 @@ export default function Dashboard() {
                         background: '#f5f7f7',
                         borderRadius: '28px 28px 0 0',
                         padding: '0 14px 8px',
+                        borderTop: '4px solid #fff',
                         boxShadow: 'none',
                         transition: 'box-shadow 0.2s ease',
                     }}>
@@ -3334,11 +3450,24 @@ export default function Dashboard() {
                                                             entries = [defaultEntry]
                                                             setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
                                                         }
+                                                        const hasMulti = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
+                                                        const entryTotals = hasMulti ? entries.map((e, i) => {
+                                                            const et = `${cat.id}:${e.id || i}`
+                                                            return events.filter(ev => ev.editType === et && !ev.removed && !ev.noDot).reduce((s, ev) => s + ev.amount, 0)
+                                                        }) : null
                                                         return (
                                                             <CategoryStep
                                                                 categoryId={cat.id} compact
                                                                 entries={entries}
+                                                                entryTotals={entryTotals}
                                                                 updateEntries={(val) => setFormData(prev => ({ ...prev, [cat.formKey]: typeof val === 'function' ? val(prev[cat.formKey] || []) : val }))}
+                                                                onVisibleEntryChange={entries.length > 1 ? setVisibleEntryIndex : null}
+                                                                onDeleteEntry={({ label, entryId }) => {
+                                                                    const prevFormData = { ...formData }
+                                                                    if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+                                                                    setSkipToast({ label, undoFn: () => setFormData(prevFormData), sourceId: source.id, entryId })
+                                                                    skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
+                                                                }}
                                                             />
                                                         )
                                                     })()}
@@ -3527,11 +3656,24 @@ export default function Dashboard() {
                                                             entries = [defaultEntry]
                                                             setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
                                                         }
+                                                        const hasMulti = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
+                                                        const entryTotals = hasMulti ? entries.map((e, i) => {
+                                                            const et = `${cat.id}:${e.id || i}`
+                                                            return events.filter(ev => ev.editType === et && !ev.removed && !ev.noDot).reduce((s, ev) => s + ev.amount, 0)
+                                                        }) : null
                                                         return (
                                                             <CategoryStep
                                                                 categoryId={cat.id} compact
                                                                 entries={entries}
+                                                                entryTotals={entryTotals}
                                                                 updateEntries={(val) => setFormData(prev => ({ ...prev, [cat.formKey]: typeof val === 'function' ? val(prev[cat.formKey] || []) : val }))}
+                                                                onVisibleEntryChange={entries.length > 1 ? setVisibleEntryIndex : null}
+                                                                onDeleteEntry={({ label, entryId }) => {
+                                                                    const prevFormData = { ...formData }
+                                                                    if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+                                                                    setSkipToast({ label, undoFn: () => setFormData(prevFormData), sourceId: source.id, entryId })
+                                                                    skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
+                                                                }}
                                                             />
                                                         )
                                                     })()}
@@ -3857,7 +3999,7 @@ export default function Dashboard() {
                                         const latestActual = balanceHistory[0]
                                         const actualBal = Number(latestActual.balance)
                                         const forecastBal = projectionBalance
-                                        const diff = actualBal - forecastBal
+                                        const diff = Math.round((actualBal - forecastBal) * 100) / 100
                                         const absDiff = Math.abs(diff)
                                         const isAhead = diff > 0
                                         const isClose = absDiff < 50
@@ -3920,11 +4062,11 @@ export default function Dashboard() {
                                                             position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
                                                             textAlign: 'center', width: gW * 0.45,
                                                         }}>
-                                                            <p style={{ margin: 0, fontSize: 24, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1.1 }}>
+                                                             <p style={{ margin: 0, fontSize: (isClose || isAhead) ? 30 : 22, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1.1 }}>
                                                                 {isClose ? 'On Track!' : isAhead ? 'Ahead!' : isDanger ? 'Needs Attention' : 'Watch Spending'}
                                                             </p>
-                                                            <p style={{ margin: '10px 0 0 -8px', fontSize: 17, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1 }}>
-                                                                {isAhead || absDiff === 0 ? '+' : '\u2212'}{sym}{absDiff.toLocaleString()}
+                                                            <p style={{ margin: '10px 0 0 -8px', fontSize: 17, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
+                                                                {isAhead || absDiff === 0 ? '+' : '\u2212'}{sym}{absDiff.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                                                             </p>
                                                             <p style={{ margin: '3px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999', whiteSpace: 'nowrap' }}>
                                                                 compared to forecast
@@ -4102,7 +4244,7 @@ export default function Dashboard() {
                                                                 const isTapped = tappedSegment?.label === label && tappedSegment?.type === key
                                                                 return (
                                                                     <div key={label}
-                                                                        onClick={() => { if (!isTapped) analytics.track(DASHBOARD_EVENTS.BREAKDOWN_TAPPED, { label, type: key }); setTappedSegment(isTapped ? null : { label, amt, color, type: key }) }}
+                                                                        onClick={() => setTappedSegment(isTapped ? null : { label, amt, color, type: key })}
                                                                         style={{
                                                                             width: `${(amt / totalAmt) * 100}%`,
                                                                             background: color, minWidth: 2,
@@ -4507,35 +4649,43 @@ export default function Dashboard() {
                 const isIncome = editingEvent.type === 'income'
                 const color = isIncome ? '#147b75' : '#e06470'
                 // Look up frequency for this event's source
-                const eventFreq = (() => {
-                    if (!editingEvent.editType) return 'monthly'
-                    // Check category entries
+                // Find the correct entry for this event (handles multi-instance like job:0, job:entry_123)
+                const findEntry = () => {
+                    const et = editingEvent.editType || ''
+                    const baseId = et.includes(':') ? et.split(':')[0] : et
+                    const entrySuffix = et.includes(':') ? et.split(':')[1] : null
                     const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
-                    const cat = allCats.find(c => c.id === editingEvent.editType)
-                    if (cat) {
-                        const entries = formData[cat.formKey] || []
-                        if (entries.length > 0) return entries[0].frequency || cat.defaultFrequency
-                        return cat.defaultFrequency
-                    }
-                    // Legacy flat fields
+                    const cat = allCats.find(c => c.id === baseId)
+                    if (!cat) return { cat: null, entry: null }
+                    const entries = formData[cat.formKey] || []
+                    if (!entrySuffix) return { cat, entry: entries[0] || null }
+                    // Match by id or index
+                    const byId = entries.find(e => e.id === entrySuffix)
+                    if (byId) return { cat, entry: byId }
+                    const byIdx = parseInt(entrySuffix)
+                    if (!isNaN(byIdx) && entries[byIdx]) return { cat, entry: entries[byIdx] }
+                    return { cat, entry: entries[0] || null }
+                }
+                const { cat: eventCat, entry: eventEntry } = findEntry()
+                const eventFreq = (() => {
+                    if (eventEntry) return eventEntry.frequency || eventCat?.defaultFrequency || 'monthly'
+                    if (!editingEvent.editType) return 'monthly'
                     const freqMap = { family: formData.familyFrequency, work: formData.workFrequency, rent: formData.rentFrequency }
                     return freqMap[editingEvent.editType] || 'monthly'
                 })()
                 const FREQ_LABEL_MAP = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly', yearly: 'Yearly', irregular: 'Irregular', 'one-off': 'One-off' }
-                // For yearly with schedule frequency, show the schedule freq (e.g. "Monthly" not "Yearly")
                 const displayFreq = (() => {
-                    if (eventFreq !== 'yearly') return eventFreq
-                    const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
-                    const cat = allCats.find(c => c.id === editingEvent.editType)
-                    const entries = cat ? (formData[cat.formKey] || []) : []
-                    const sf = entries[0]?.scheduleFrequency
-                    return sf || eventFreq
+                    const sf = eventEntry?.scheduleFrequency
+                    if (sf && sf !== eventFreq) return sf
+                    if (eventFreq === 'yearly') return sf || eventFreq
+                    return eventFreq
                 })()
                 const freqLabel = FREQ_LABEL_MAP[displayFreq] || ''
                 const skipLabel = (() => {
                     if (!editingEvent.date) return ''
-                    if (eventFreq === 'weekly') return 'week'
-                    if (eventFreq === 'fortnightly') return 'fortnight'
+                    const df = displayFreq
+                    if (df === 'weekly') return 'week'
+                    if (df === 'fortnightly') return 'fortnight'
                     return new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' })
                 })()
                 const handleSave = () => {
@@ -4543,41 +4693,20 @@ export default function Dashboard() {
                     const parsedAmount = parseFloat(val) || 0
                     if (parsedAmount <= 0) { setEditWarning('Amount must be greater than zero'); return }
                     setEditWarning('')
-                    if (editingEvent.editType === 'loan' && editingEvent.editMonth) {
-                        const newVal = parseFloat(val) || 0
-                        const oldVal = editingEvent.amount || 0
-                        const oldTotal = parseFloat(String(formData.loanAmount || '0').replace(/,/g, '')) || 0
-                        const newTotal = Math.round((oldTotal - oldVal + newVal) * 100) / 100
-                        setFormData(prev => ({
-                            ...prev,
-                            instalmentAmounts: { ...(prev.instalmentAmounts || {}), [editingEvent.editMonth]: val },
-                            loanAmount: String(newTotal),
-                        }))
-                    } else if (editingEvent.editType === 'bursary' && editingEvent.editMonth) {
-                        const newVal = parseFloat(val) || 0
-                        const oldVal = editingEvent.amount || 0
-                        const oldTotal = parseFloat(String(formData.bursaryAmount || '0').replace(/,/g, '')) || 0
-                        const newTotal = Math.round((oldTotal - oldVal + newVal) * 100) / 100
-                        setFormData(prev => ({
-                            ...prev,
-                            bursaryInstalmentAmounts: { ...(prev.bursaryInstalmentAmounts || {}), [editingEvent.editMonth]: val },
-                            bursaryAmount: String(newTotal),
-                        }))
-                    } else if (editingEvent.editMonth && eventFreq === 'irregular') {
-                        // Irregular: keep total, set this month's amount, redistribute remainder across others
-                        const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
-                        const cat = allCats.find(c => c.id === editingEvent.editType)
-                        if (cat) {
-                            const entries = formData[cat.formKey] || []
-                            const entry = entries[0]
+                    if (editingEvent.editMonth) {
+                        // Has editMonth = irregular instalment — save this month's amount
+                        const saveCat = eventCat || CATEGORY_MAP[(editingEvent.editType || '').includes(':') ? editingEvent.editType.split(':')[0] : editingEvent.editType]
+                        if (saveCat) {
+                            const entries = formData[saveCat.formKey] || []
+                            const entry = eventEntry || entries[0]
                             const total = entry ? (parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0) : 0
                             const parsedVal = parseFloat(val) || 0
                             if (parsedVal > total) { setEditWarning(`Can't exceed total of ${getCurrencySymbol()}${total.toLocaleString()}`); return }
                             if (parsedVal <= 0) { setEditWarning('Instalment amount must be greater than zero'); return }
                             setEditWarning('')
                             setFormData(prev => {
-                                const entries = prev[cat.formKey] || []
-                                return { ...prev, [cat.formKey]: entries.map(e => {
+                                const entries = prev[saveCat.formKey] || []
+                                return { ...prev, [saveCat.formKey]: entries.map(e => {
                                     const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
                                     const newVal = parseFloat(val) || 0
                                     const otherMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
@@ -4608,33 +4737,18 @@ export default function Dashboard() {
                     setEditingEvent(null)
                 }
                 const handleSkip = () => {
+                    // Save snapshot for undo
+                    const prevFormData = { ...formData }
+                    const prevRemovedEvents = [...(formData.removedEvents || [])]
+                    const eventLabel = editingEvent.label || editingEvent.sublabel
+                    const eventDate = editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
+
                     analytics.track(DASHBOARD_EVENTS.EVENT_SKIPPED, {
                         edit_type: editingEvent.editType,
                         event_type: editingEvent.type,
                         date: editingEvent.date,
                     })
-                    const isLoan = editingEvent.editType === 'loan' && editingEvent.editMonth
-                    const isBursary = editingEvent.editType === 'bursary' && editingEvent.editMonth
-                    if (isLoan || isBursary) {
-                        const month = editingEvent.editMonth
-                        const monthsKey = isLoan ? 'loanMonths' : 'bursaryMonths'
-                        const amountKey = isLoan ? 'loanAmount' : 'bursaryAmount'
-                        const defaultMonths = isLoan ? DEFAULT_LOAN_MONTHS : ['october', 'february', 'march']
-                        const instKey = isLoan ? 'instalmentAmounts' : 'bursaryInstalmentAmounts'
-                        const datesKey = isLoan ? 'loanDates' : 'bursaryDates'
-                        setFormData(prev => {
-                            const newMonths = (prev[monthsKey] || defaultMonths).filter(m => m !== month)
-                            const newDates = { ...(prev[datesKey] || {}) }; delete newDates[month]
-                            const total = parseFloat(String(prev[amountKey] || '0').replace(/,/g, ''))
-                            const newInst = {}
-                            if (total > 0 && newMonths.length > 0) {
-                                const base = Math.floor(total * 100 / newMonths.length) / 100
-                                const remainder = Math.round((total - base * newMonths.length) * 100)
-                                newMonths.forEach((m, i) => { newInst[m] = String(Math.round((base + (i < remainder ? 0.01 : 0)) * 100) / 100) })
-                            }
-                            return { ...prev, [monthsKey]: newMonths, [instKey]: newInst, [datesKey]: newDates }
-                        })
-                    } else if (editingEvent.editType === 'oneOffIncome' || editingEvent.editType === 'oneOffExpense') {
+                    if (editingEvent.editType === 'oneOffIncome' || editingEvent.editType === 'oneOffExpense') {
                         const dir = editingEvent.editType === 'oneOffIncome' ? 'in' : 'out'
                         const updated = (formData.oneOffItems || []).filter(item => {
                             const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
@@ -4648,14 +4762,14 @@ export default function Dashboard() {
                             const key = isExp ? 'flexExpenseSources' : 'flexIncomeSources'
                             return { ...prev, [key]: (prev[key] || []).filter(s => s !== srcId), flexSourceData: { ...prev.flexSourceData, [srcId]: undefined } }
                         })
-                    } else if (editingEvent.editMonth && eventFreq === 'irregular') {
-                        // Irregular: remove month and redistribute total across remaining months
-                        const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
-                        const cat = allCats.find(c => c.id === editingEvent.editType)
-                        if (cat) {
+                    } else if (editingEvent.editMonth) {
+                        // Has editMonth = irregular instalment — remove month and redistribute
+                        const baseId = (editingEvent.editType || '').includes(':') ? editingEvent.editType.split(':')[0] : editingEvent.editType
+                        const irregCat = CATEGORY_MAP[baseId]
+                        if (irregCat) {
                             setFormData(prev => {
-                                const entries = prev[cat.formKey] || []
-                                return { ...prev, [cat.formKey]: entries.map(e => {
+                                const entries = prev[irregCat.formKey] || []
+                                return { ...prev, [irregCat.formKey]: entries.map(e => {
                                     const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
                                     const newMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
                                     const newDates = { ...(e.dates || {}) }; delete newDates[editingEvent.editMonth]
@@ -4669,15 +4783,50 @@ export default function Dashboard() {
                                 })}
                             })
                         }
+                    } else if (displayFreq === 'one-off' || displayFreq === 'yearly' || (eventFreq === 'yearly' && !eventEntry?.scheduleFrequency)) {
+                        // One-off or yearly (no schedule): delete the entire entry + source if last
+                        if (eventCat) {
+                            const et = editingEvent.editType || ''
+                            const baseId = et.includes(':') ? et.split(':')[0] : et
+                            const entrySuffix = et.includes(':') ? et.split(':')[1] : null
+                            const isExp = EXPENSE_CATEGORIES.some(c => c.id === baseId)
+                            setFormData(prev => {
+                                const entries = prev[eventCat.formKey] || []
+                                let filtered
+                                if (entrySuffix) {
+                                    filtered = entries.filter(e => e.id !== entrySuffix && entries.indexOf(e) !== parseInt(entrySuffix))
+                                } else {
+                                    filtered = entries.filter(e => e.nextDate !== editingEvent.date)
+                                }
+                                if (filtered.length === entries.length) filtered = entries.slice(0, -1)
+                                const next = { ...prev, [eventCat.formKey]: filtered }
+                                if (filtered.length === 0) {
+                                    const sourceKey = isExp ? 'expenseSources' : 'incomeSources'
+                                    next[sourceKey] = (prev[sourceKey] || []).filter(s => s !== baseId)
+                                }
+                                return next
+                            })
+                        }
                     } else {
                         const key = `${editingEvent.editType}:${editingEvent.date}`
                         updateField('removedEvents', [...(formData.removedEvents || []), key])
                     }
                     setEditingEvent(null)
+                    // Show undo toast
+                    if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+                    const baseId = (editingEvent.editType || '').includes(':') ? editingEvent.editType.split(':')[0] : editingEvent.editType
+                    const isDelete = displayFreq === 'one-off' || displayFreq === 'yearly' || displayFreq === 'irregular' || eventFreq === 'irregular' || eventFreq === 'one-off'
+                    setSkipToast({
+                        label: `${eventLabel} (${eventDate}) ${isDelete ? 'deleted' : 'skipped'}`,
+                        undoFn: () => setFormData(prevFormData),
+                        sourceId: baseId,
+                        entryId: eventEntry?.id,
+                    })
+                    skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
                 }
                 const isLoan = editingEvent.editType === 'loan' && editingEvent.editMonth
                 const isBursary = editingEvent.editType === 'bursary' && editingEvent.editMonth
-                const canSkip = (isLoan || isBursary) ? (formData[isLoan ? 'loanMonths' : 'bursaryMonths'] || (isLoan ? DEFAULT_LOAN_MONTHS : ['october', 'february', 'march'])).length > 1 : true
+                const canSkip = true
                 return (
                     <>
                         <div
@@ -4699,11 +4848,11 @@ export default function Dashboard() {
                             <div
                                 onClick={() => { setEditingEvent(null); setNearbyEvents([]); setNearbyIdx(0) }}
                                 style={{
-                                    position: 'absolute', top: 10, right: 10,
+                                    position: 'absolute', top: 8, right: 10,
                                     width: 28, height: 28, borderRadius: '50%',
                                     background: '#f0f0f0',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    cursor: 'pointer', zIndex: 1,
+                                    cursor: 'pointer', zIndex: 2,
                                 }}
                             >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#bbb" strokeWidth="2.5" strokeLinecap="round">
@@ -4713,7 +4862,13 @@ export default function Dashboard() {
 
                             {/* Nearby event pills */}
                             {nearbyEvents.length > 1 && (
-                                <div style={{ display: 'flex', gap: 5, marginBottom: 10, overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingRight: 36 }}>
+                                <div style={{
+                                    display: 'flex', gap: 5, marginBottom: 10,
+                                    overflowX: 'auto', WebkitOverflowScrolling: 'touch',
+                                    paddingRight: 40,
+                                    maskImage: 'linear-gradient(to right, black calc(100% - 48px), transparent calc(100% - 8px))',
+                                    WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 48px), transparent calc(100% - 8px))',
+                                }}>
                                     {nearbyEvents.map((ev, idx) => {
                                         const active = idx === nearbyIdx
                                         const evColor = ev.type === 'income' ? '#147b75' : '#e06470'
@@ -4742,13 +4897,58 @@ export default function Dashboard() {
 
                             {/* Header: title + date */}
                             <div style={{ marginBottom: 8, paddingRight: 36 }}>
-                                <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222', display: 'flex', alignItems: 'center', gap: 7 }}>
+                                <div
+                                    onClick={() => {
+                                        const baseId = editingEvent.editType?.includes(':') ? editingEvent.editType.split(':')[0] : editingEvent.editType
+                                        const entrySuffix = editingEvent.editType?.includes(':') ? editingEvent.editType.split(':')[1] : null
+                                        const isExp = EXPENSE_CATEGORIES.some(c => c.id === baseId)
+                                        setEditingEvent(null)
+                                        setNearbyEvents([])
+                                        setNearbyIdx(0)
+                                        handleTabChange(isExp ? 'expenses' : 'income')
+                                        collapseGraph()
+                                        setExpandedSources(prev => new Set(prev).add(baseId))
+                                        // Scroll to the correct instance
+                                        setTimeout(() => {
+                                            const el = scrollRef.current
+                                            if (!el) return
+                                            isAnimatingRef.current = false
+                                            // Find the specific entry element if multi-instance
+                                            let scrollTarget = null
+                                            if (entrySuffix) {
+                                                scrollTarget = el.querySelector(`[data-entry-id="${entrySuffix}"]`)
+                                                    || el.querySelector(`[data-entry-id="${baseId}_${entrySuffix}"]`)
+                                            }
+                                            if (!scrollTarget) scrollTarget = el.querySelector(`[data-source-id="${baseId}"]`)
+                                            if (scrollTarget) {
+                                                const stickyHeader = el.querySelector('[data-sticky-header]')
+                                                const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
+                                                const target = scrollTarget.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
+                                                el.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
+                                            }
+                                        }, 500)
+                                    }}
+                                    style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222', display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}
+                                >
                                     <div style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
                                     {editingEvent.label || editingEvent.sublabel}
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginLeft: 2 }}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
                                 </div>
                                 <div style={{ fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 1 }}>
-                                    {editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
-                                    {freqLabel ? <> · {freqLabel}</> : ''}
+                                    {editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                                    {freqLabel ? <> · {(() => {
+                                        if (displayFreq === 'monthly') {
+                                            const dom = eventEntry?.dayOfMonth || '1'
+                                            const suffix = dom === 'last' ? '' : (() => { const d = parseInt(dom); return d === 1 || d === 21 || d === 31 ? 'st' : d === 2 || d === 22 ? 'nd' : d === 3 || d === 23 ? 'rd' : 'th' })()
+                                            return `Monthly on ${dom === 'last' ? 'last day' : `${dom}${suffix}`}`
+                                        }
+                                        if (displayFreq === 'weekly' || displayFreq === 'fortnightly') {
+                                            const day = eventEntry?.dayOfWeek || 'monday'
+                                            const dayLabel = day.charAt(0).toUpperCase() + day.slice(1) + 's'
+                                            return `${freqLabel} on ${dayLabel}`
+                                        }
+                                        return freqLabel
+                                    })()}</> : ''}
                                 </div>
                             </div>
 
@@ -4768,6 +4968,18 @@ export default function Dashboard() {
                                     }}
                                 >
                                     <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Restore payment</span>
+                                </button>
+                            ) : (false /* yearly/one-off handled by skip button label */) ? (
+                                <button
+                                    onClick={() => { handleSkip() }}
+                                    style={{
+                                        width: '100%', height: 40, border: 'none', borderRadius: 10,
+                                        background: '#e06470',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Delete payment</span>
                                 </button>
                             ) : (<>
                                 {/* Balance after row — live updated */}
@@ -4858,7 +5070,7 @@ export default function Dashboard() {
                                             cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
                                         }}>
                                             <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                {eventFreq === 'irregular' ? 'Delete' : `Skip ${skipLabel}`}
+                                                {eventFreq === 'irregular' || eventFreq === 'one-off' || displayFreq === 'irregular' || displayFreq === 'yearly' || displayFreq === 'one-off' ? 'Delete' : `Skip ${skipLabel}`}
                                             </span>
                                         </button>
                                     )}
@@ -4979,6 +5191,64 @@ export default function Dashboard() {
                 )
             })()}
 
+            {/* Skip undo toast */}
+            {skipToast && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: `calc(90px + env(safe-area-inset-bottom, 0px))`,
+                    left: 20, right: 20,
+                    background: '#1a1a1a', borderRadius: 14,
+                    padding: '12px 18px',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    zIndex: 200,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+                }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#ccc', flex: 1 }}>
+                        {skipToast.label}
+                    </span>
+                    <button
+                        onClick={() => {
+                            skipToast.undoFn()
+                            // Scroll restored item into view — try entry first, fallback to source row
+                            if (skipToast.sourceId) {
+                                let attempts = 0
+                                const tryScroll = () => {
+                                    const el = scrollRef.current
+                                    if (!el) return
+                                    // Try to find the specific entry
+                                    let target = skipToast.entryId ? el.querySelector(`[data-entry-id="${skipToast.entryId}"]`) : null
+                                    // Fallback to source row
+                                    if (!target) target = el.querySelector(`[data-source-id="${skipToast.sourceId}"]`)
+                                    if (target && target.offsetHeight > 0) {
+                                        const stickyHeader = el.querySelector('[data-sticky-header]')
+                                        const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
+                                        const pos = target.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
+                                        el.scrollTo({ top: Math.max(0, pos), behavior: 'smooth' })
+                                    } else if (attempts++ < 10) {
+                                        setTimeout(tryScroll, 100)
+                                    }
+                                }
+                                setTimeout(tryScroll, 200)
+                            }
+                            setSkipToast(null)
+                            if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+                        }}
+                        style={{
+                            background: '#147b75', border: 'none', cursor: 'pointer',
+                            padding: '5px 14px', borderRadius: 8, flexShrink: 0,
+                        }}
+                    >
+                        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Undo</span>
+                    </button>
+                    <button
+                        onClick={() => { setSkipToast(null); if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current) }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0 }}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                    </button>
+                </div>
+            )}
+
             {/* FAB Balance Update Popup */}
             {fabBalanceOpen && (() => {
                 const sym = getCurrencySymbol()
@@ -5075,11 +5345,11 @@ export default function Dashboard() {
             {showGraphFilter && (() => {
                 const rect = graphFilterRef.current?.getBoundingClientRect()
                 const items = [
-                    { label: 'Expenses', active: showExpenses, color: '#e06470', toggle: () => setShowExpenses(prev => { analytics.track(DASHBOARD_EVENTS.GRAPH_FILTER_TOGGLED, { filter: 'expenses', visible: !prev }); localStorage.setItem('budgeup_show_expenses', String(!prev)); return !prev }) },
-                    { label: 'Income', active: showIncome, color: '#147b75', toggle: () => setShowIncome(prev => { analytics.track(DASHBOARD_EVENTS.GRAPH_FILTER_TOGGLED, { filter: 'income', visible: !prev }); localStorage.setItem('budgeup_show_income', String(!prev)); return !prev }) },
-                    { label: 'History', active: showBalanceHistory, color: '#EC8C17', toggle: () => { setShowBalanceHistory(prev => { analytics.track(DASHBOARD_EVENTS.GRAPH_FILTER_TOGGLED, { filter: 'history', visible: !prev }); localStorage.setItem('budgeup_show_balance_history', String(!prev)); return !prev }) } },
-                    ...(overdraftNum ? [{ label: 'Overdraft', active: showOverdraft, color: '#c0392b', toggle: () => setShowOverdraft(prev => { analytics.track(DASHBOARD_EVENTS.GRAPH_FILTER_TOGGLED, { filter: 'overdraft', visible: !prev }); localStorage.setItem('budgeup_show_overdraft', String(!prev)); return !prev }) }] : []),
-                    { label: 'Breaks', active: showHolidays, color: '#7c8ab8', toggle: () => setShowHolidays(prev => { analytics.track(DASHBOARD_EVENTS.GRAPH_FILTER_TOGGLED, { filter: 'breaks', visible: !prev }); localStorage.setItem('budgeup_show_holidays', String(!prev)); return !prev }) },
+                    { label: 'Expenses', active: showExpenses, color: '#e06470', toggle: () => setShowExpenses(prev => { localStorage.setItem('budgeup_show_expenses', String(!prev)); return !prev }) },
+                    { label: 'Income', active: showIncome, color: '#147b75', toggle: () => setShowIncome(prev => { localStorage.setItem('budgeup_show_income', String(!prev)); return !prev }) },
+                    { label: 'History', active: showBalanceHistory, color: '#EC8C17', toggle: () => { setShowBalanceHistory(prev => { analytics.track(DASHBOARD_EVENTS.BALANCE_HISTORY_TOGGLED, { visible: !prev }); localStorage.setItem('budgeup_show_balance_history', String(!prev)); return !prev }) } },
+                    ...(overdraftNum ? [{ label: 'Overdraft', active: showOverdraft, color: '#c0392b', toggle: () => setShowOverdraft(prev => { localStorage.setItem('budgeup_show_overdraft', String(!prev)); return !prev }) }] : []),
+                    { label: 'Breaks', active: showHolidays, color: '#7c8ab8', toggle: () => setShowHolidays(prev => { localStorage.setItem('budgeup_show_holidays', String(!prev)); return !prev }) },
                 ]
                 return (
                     <div ref={graphFilterDropdownRef} style={{

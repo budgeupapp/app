@@ -267,13 +267,14 @@ export default function BottomNav() {
             pointerEvents: visible ? 'auto' : 'none',
             cursor: 'pointer',
             position: 'absolute',
+            bottom: 0,
             visibility: visible ? 'visible' : 'hidden',
             transitionProperty: 'opacity, transform',
         }}>
             <div style={{ width: 60, height: 60, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: shadow || 'none' }}>
                 {icon}
             </div>
-            <span style={{ fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#333', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>{label}</span>
+            <span style={{ fontSize: 10, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#333', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>{label}</span>
         </div>
     )
 
@@ -288,7 +289,7 @@ export default function BottomNav() {
             <div ref={fabRef} style={{
                 position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1001,
                 pointerEvents: fabOpen ? 'auto' : 'none',
-                padding: `30px 0 calc(90px + env(safe-area-inset-bottom, 0px))`,
+                padding: `30px 0 calc(94px + env(safe-area-inset-bottom, 0px))`,
                 display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
                 width: '100%', boxSizing: 'border-box',
                 overflow: 'visible',
@@ -366,7 +367,7 @@ export default function BottomNav() {
                     display: 'flex',
                     alignItems: 'flex-end',
                     justifyContent: 'center',
-                    padding: '12px 20px',
+                    padding: '4px 0',
                     pointerEvents: (showPicker && !pickerClosing && !fabClosing) ? 'auto' : 'none',
                     overflow: 'visible',
                     opacity: (showPicker && !pickerClosing && !fabClosing) ? 1 : 0,
@@ -376,67 +377,62 @@ export default function BottomNav() {
                         : `all ${tOut}`,
                 }}
             >
-                {/* Scrollable source list */}
+                {/* Scrollable source list — tripled for infinite scroll */}
                 <div
                     ref={pickerInnerRef}
                     style={{
                         flex: 1, minWidth: 0,
-                        overflow: 'visible',
+                        overflow: 'hidden',
                         padding: '20px 0',
                         margin: '-20px 0',
-                        maskImage: 'linear-gradient(to right, rgba(0,0,0,0.05) 0%, black 8%, black 92%, rgba(0,0,0,0.05) 100%)',
-                        WebkitMaskImage: 'linear-gradient(to right, rgba(0,0,0,0.05) 0%, black 8%, black 92%, rgba(0,0,0,0.05) 100%)',
-                        maskSize: '100% 300%',
-                        WebkitMaskSize: '100% 300%',
-                        maskPosition: 'center',
-                        WebkitMaskPosition: 'center',
                     }}
                 >
                     <div style={{
-                        display: 'flex', alignItems: 'flex-end',
-                        ...(sources.length > 4 ? {
-                            gap: 12,
-                            transform: `translateX(${pickerOffset}px)`,
-                            width: 'max-content',
-                        } : {
-                            width: '100%',
-                        }),
+                        display: 'flex', alignItems: 'flex-start',
+                        gap: 0,
+                        width: 'max-content',
+                        transform: `translateX(${pickerOffset}px)`,
+                        willChange: 'transform',
                     }}>
-                        {showPicker && (sources.length > 4 ? [...sources, ...sources, ...sources] : sources).map((src, i) => (
-                            <div key={`${src.id}-${i}`}
-                                onClick={(e) => {
-                                    const el = e.currentTarget
-                                    el.style.transition = 'transform 0.15s ease, opacity 0.15s ease'
-                                    el.style.transform = 'scale(0.85)'
-                                    el.style.opacity = '0.6'
-                                    setTimeout(() => {
-                                        el.style.transition = 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease'
-                                        el.style.transform = 'scale(1.1)'
-                                        el.style.opacity = '0'
-                                        setTimeout(() => {
-                                            handleAction(`add-source:${src.id}:${fabSourcePicker}`)
-                                        }, 150)
-                                    }, 120)
-                                }}
-                                style={{
-                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-                                    flexShrink: 0,
-                                    width: sources.length <= 4 ? `${100 / sources.length}%` : undefined,
-                                    cursor: 'pointer',
-                                    opacity: 0,
-                                    animation: `fabSourceIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.04 + (i % sources.length) * 0.03}s forwards`,
-                                }}
-                            >
-                                <div style={{
-                                    width: 60, height: 60, borderRadius: '50%',
-                                    background: accentColor,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    boxShadow: `0 4px 12px ${accentColor}35`,
-                                    transition: 'transform 0.15s ease',
-                                }}>
-                                    <src.Icon size={22} color="#fff" />
-                                </div>
-                                <span style={{ fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#333', letterSpacing: 0.5, whiteSpace: 'nowrap' }}>{src.label}</span>
+                        {showPicker && [0, 1, 2].map(copy => (
+                            <div key={copy} style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                                {sources.map((src, i) => (
+                                    <div key={`${src.id}-${copy}-${i}`}
+                                        onClick={(e) => {
+                                            const el = e.currentTarget
+                                            el.style.transition = 'transform 0.15s ease, opacity 0.15s ease'
+                                            el.style.transform = 'scale(0.85)'
+                                            el.style.opacity = '0.6'
+                                            setTimeout(() => {
+                                                el.style.transition = 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease'
+                                                el.style.transform = 'scale(1.1)'
+                                                el.style.opacity = '0'
+                                                setTimeout(() => {
+                                                    handleAction(`add-source:${src.id}:${fabSourcePicker}`)
+                                                }, 150)
+                                            }, 120)
+                                        }}
+                                        style={{
+                                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                                            flexShrink: 0,
+                                            width: 76,
+                                            cursor: 'pointer',
+                                            opacity: 0,
+                                            animation: `fabSourceIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) ${0.04 + i * 0.03}s forwards`,
+                                        }}
+                                    >
+                                        <div style={{
+                                            width: 60, height: 60, borderRadius: '50%',
+                                            background: accentColor,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            boxShadow: `0 4px 12px ${accentColor}35`,
+                                            transition: 'transform 0.15s ease',
+                                        }}>
+                                            <src.Icon size={22} color="#fff" />
+                                        </div>
+                                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333', letterSpacing: 0.3, textAlign: 'center', lineHeight: 1.2, textTransform: 'uppercase' }}>{src.label}</span>
+                                    </div>
+                                ))}
                             </div>
                         ))}
                     </div>
