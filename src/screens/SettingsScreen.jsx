@@ -3,7 +3,7 @@ import { Typography, message } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { POLICY_URLS } from '../lib/policyVersions'
-import { analytics, AUTH_EVENTS, SETTINGS_EVENTS, FEEDBACK_EVENTS, getErrorProperties } from '../lib/analytics/index.js'
+import { analytics, AUTH_EVENTS, SETTINGS_EVENTS, SCREEN_EVENTS, FEEDBACK_EVENTS, getErrorProperties } from '../lib/analytics/index.js'
 import { CURRENCIES, getCurrency, setCurrency, getGraphStart, setGraphStart, getCurrencySymbol } from '../lib/settings'
 import { refreshAY } from '../components/TermGraph'
 import { fetchUserData, saveTermDates, saveUserFinances, saveCashflowForecast } from '../lib/api'
@@ -338,6 +338,7 @@ export default function SettingsScreen() {
     if (!trackedRef.current) {
       trackedRef.current = true
       analytics.track(SETTINGS_EVENTS.VIEWED)
+      analytics.track(SCREEN_EVENTS.SETTINGS_VIEWED)
     }
 
     const loadUser = async () => {
@@ -474,6 +475,8 @@ export default function SettingsScreen() {
       parsed.formData = resetData
       localStorage.setItem('budgeup_onboarding_state', JSON.stringify(parsed))
       localStorage.removeItem('budgeup_balance_last_date')
+      localStorage.removeItem('budgeup_pending_save')
+      localStorage.removeItem('budgeup_hidden_sources')
       // Reset graph expanded/collapsed state so it starts expanded
       sessionStorage.removeItem('budgeup_graph_collapsed_goals')
       sessionStorage.removeItem('budgeup_graph_collapsed_income')
@@ -495,7 +498,11 @@ export default function SettingsScreen() {
           .from('user_profiles')
           .update({ graph_start: todayStr, updated_at: new Date().toISOString() })
           .eq('user_id', userIdRef.current)
-        await saveCashflowForecast(userIdRef.current, [])
+        await supabase
+          .from('cashflow_forecast')
+          .delete()
+          .eq('user_id', userIdRef.current)
+          .eq('source', 'manual')
         await supabase
           .from('balance_history')
           .delete()

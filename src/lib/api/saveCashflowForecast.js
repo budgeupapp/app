@@ -29,6 +29,9 @@ export async function saveCashflowForecast(userId, data) {
 
     if (delError) throw delError
 
+    // Default start date: 1st September
+    const firstTermDate = '2025-09-01'
+
     const rows = []
 
     /* --- Maintenance loan --- */
@@ -373,20 +376,20 @@ export async function saveCashflowForecast(userId, data) {
     const weeklyAmt = stripCommas(data.weeklySpend)
     if (weeklyAmt) {
         rows.push({
-            user_id: userId, direction: 'out', type: 'weekly_spend',
+            user_id: userId, direction: 'out', type: 'weeklySpend',
             title: 'Weekly Spend', amount: weeklyAmt, currency: 'GBP',
             recurrence: 'weekly',
-            scheduled_date: '2025-09-01',
+            scheduled_date: firstTermDate,
             end_date: null, source: 'manual',
             category: 'weeklySpend',
             term_specific: data.weeklySpendVariesByTerm || false,
         })
         if (data.weeklySpendVariesByTerm && data.weeklySpendNonTerm) {
             rows.push({
-                user_id: userId, direction: 'out', type: 'weekly_spend_non_term',
+                user_id: userId, direction: 'out', type: 'weeklySpend_non_term',
                 title: 'Weekly Spend (non-term)', amount: stripCommas(data.weeklySpendNonTerm),
                 currency: 'GBP', recurrence: 'weekly',
-                scheduled_date: '2025-09-01',
+                scheduled_date: firstTermDate,
                 end_date: null, source: 'manual',
                 category: 'weeklySpend', subcategory: 'non_term',
                 term_specific: true,
@@ -478,6 +481,17 @@ export async function saveCashflowForecast(userId, data) {
     }
 
     /* --- New category entries (studentFinanceEntries, rentEntries, etc.) --- */
+    const CAT_LABELS = {
+        studentFinance: 'Student Finance', bursary: 'Bursary', job: 'Job',
+        familySupport: 'Family Support', savingsIncome: 'Savings', sideHustles: 'Side Hustle',
+        benefits: 'Benefits', otherIncome: 'Other Income',
+        uniFees: 'University Fees', rent: 'Rent', bills: 'Bills',
+        phoneSubscriptions: 'Subscriptions', holidayTrips: 'Holiday & Trips',
+        savingsGoals: 'Savings Goals', predictableTravel: 'Predictable Travel',
+        bigGifts: 'Big Gifts', rentalDeposit: 'Rental Deposit', insurance: 'Insurance',
+        sendingMoneyHome: 'Sending Money Home', councilTax: 'Council Tax',
+        loanRepayment: 'Loan Repayment', graduation: 'Graduation', otherExpense: 'Other Expense',
+    }
     const CATEGORY_FORM_KEYS = [
         'studentFinanceEntries', 'bursaryEntries', 'jobEntries', 'familySupportEntries',
         'savingsIncomeEntries', 'sideHustlesEntries', 'benefitsEntries', 'otherIncomeEntries',
@@ -496,37 +510,46 @@ export async function saveCashflowForecast(userId, data) {
         for (const entry of entries) {
             const amt = stripCommas(entry.amount)
             if (!amt && !entry.months?.length) continue
-            const freq = entry.frequency || 'monthly'
+            const amtFreq = entry.frequency || 'monthly'
+            const paidFreq = entry.scheduleFrequency || amtFreq
+            const freq = paidFreq === 'irregular' ? 'irregular' : paidFreq === 'one-off' ? amtFreq : paidFreq
+            // Build metadata for cross-device sync
+            const meta = {}
+            if (entry.scheduleFrequency) meta.sf = entry.scheduleFrequency
+            if (entry.frequency) meta.af = entry.frequency
+            if (entry.dayOfWeek && entry.dayOfWeek !== 'monday') meta.dow = entry.dayOfWeek
+            if (entry.dayOfMonth && entry.dayOfMonth !== '1') meta.dom = entry.dayOfMonth
+            if (entry.variesByTerm) meta.vbt = true
+            if (entry.nonTermAmount) meta.nta = entry.nonTermAmount
+            if (entry.id && entries.length > 1) meta.eid = entry.id
+
+            const catLabel = entry.label || CAT_LABELS[catId] || catId
+
             if (freq === 'irregular' && entry.months?.length) {
                 // Irregular: save each month as a separate row
+                const titleBase = Object.keys(meta).length > 0
+                    ? JSON.stringify({ n: catLabel, ...meta })
+                    : catLabel
                 for (const month of entry.months) {
                     const date = entry.dates?.[month] || MONTH_TO_DEFAULT_DATE[month] || '2025-09-15'
                     const instalmentAmt = entry.instalmentAmounts?.[month]
                     const rowAmt = instalmentAmt ? stripCommas(String(instalmentAmt)) : null
                     rows.push({
                         user_id: userId, direction: isIncome ? 'in' : 'out',
-                        type: catId, title: `${catId} - ${month}`,
+                        type: catId, title: titleBase,
                         amount: rowAmt || '0', currency: 'GBP', recurrence: 'yearly',
                         scheduled_date: date, end_date: null, source: 'manual',
                         category: `cat_${catId}`, subcategory: month,
                     })
                 }
             } else {
-                // Build title with schedule metadata for cross-device sync
-                const meta = {}
-                if (entry.scheduleFrequency) meta.sf = entry.scheduleFrequency
-                if (entry.dayOfWeek && entry.dayOfWeek !== 'monday') meta.dow = entry.dayOfWeek
-                if (entry.dayOfMonth && entry.dayOfMonth !== '1') meta.dom = entry.dayOfMonth
-                if (entry.variesByTerm) meta.vbt = true
-                if (entry.nonTermAmount) meta.nta = entry.nonTermAmount
-                if (entry.id) meta.eid = entry.id
-                const title = Object.keys(meta).length > 0 ? JSON.stringify({ n: entry.label || catId, ...meta }) : (entry.label || catId)
+                const title = Object.keys(meta).length > 0 ? JSON.stringify({ n: catLabel, ...meta }) : catLabel
                 rows.push({
                     user_id: userId, direction: isIncome ? 'in' : 'out',
                     type: catId, title,
                     amount: amt || '0', currency: 'GBP',
                     recurrence: mapFrequencyToRecurrence(freq),
-                    scheduled_date: isValidDate(entry.nextDate) ? entry.nextDate : '2025-09-01',
+                    scheduled_date: isValidDate(entry.nextDate) ? entry.nextDate : firstTermDate,
                     end_date: isValidDate(entry.endDate) ? entry.endDate : null,
                     source: 'manual',
                     category: `cat_${catId}`,
@@ -535,10 +558,10 @@ export async function saveCashflowForecast(userId, data) {
                 if (entry.variesByTerm && entry.nonTermAmount) {
                     rows.push({
                         user_id: userId, direction: isIncome ? 'in' : 'out',
-                        type: `${catId}_non_term`, title: (entry.label || catId) + ' (non-term)',
+                        type: `${catId}_non_term`, title: catLabel + ' (non-term)',
                         amount: stripCommas(entry.nonTermAmount), currency: 'GBP',
                         recurrence: mapFrequencyToRecurrence(freq),
-                        scheduled_date: isValidDate(entry.nextDate) ? entry.nextDate : '2025-09-01',
+                        scheduled_date: isValidDate(entry.nextDate) ? entry.nextDate : firstTermDate,
                         end_date: isValidDate(entry.endDate) ? entry.endDate : null,
                         source: 'manual',
                         category: `cat_${catId}`, subcategory: 'non_term',

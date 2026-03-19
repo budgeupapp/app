@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react
 import { supabase } from '../lib/supabaseClient'
 import { useLocation } from 'react-router-dom'
 import { POLICY_URLS } from '../lib/policyVersions'
-import { analytics, AUTH_EVENTS, getEmailDomain } from '../lib/analytics/index.js'
+import { analytics, AUTH_EVENTS, SCREEN_EVENTS, getEmailDomain } from '../lib/analytics/index.js'
 import { UK_UNIVERSITIES } from '../config/onboardingConfig'
 import PasswordField from '../components/PasswordField'
 
@@ -62,11 +62,13 @@ export default function SignupForm() {
     }
   }, [showForm])
 
-  // Clear errors on view switch
+  // Clear errors on view switch + track screen view
   useEffect(() => {
     setError(null)
     setSuccess(null)
     setResetSent(false)
+    if (view === 'signup') analytics.track(SCREEN_EVENTS.SIGNUP_VIEWED)
+    else if (view === 'login') analytics.track(SCREEN_EVENTS.LOGIN_VIEWED)
   }, [view])
 
   /* ---------- LOGIN ---------- */
@@ -600,6 +602,10 @@ export default function SignupForm() {
             <button
               type="button"
               onClick={async () => {
+                if (isSignUp && !consentChecked) {
+                  setError('Please agree to the Terms and Privacy Policy')
+                  return
+                }
                 if (isSignUp) {
                   localStorage.setItem('budgeup_signup_university', university)
                   localStorage.setItem('budgeup_newsletter', newsletterChecked ? 'true' : 'false')

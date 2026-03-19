@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Check, MessageSquare } from 'react-feather'
 import { PiThumbsDown, PiMinus, PiThumbsUp, PiHeart, PiHeartBreak } from 'react-icons/pi'
 import posthog from 'posthog-js'
-import { analytics, FEEDBACK_EVENTS } from '../lib/analytics/index.js'
+import { analytics, FEEDBACK_EVENTS, SCREEN_EVENTS } from '../lib/analytics/index.js'
 
 const POSTHOG_SURVEY_ID = import.meta.env.VITE_POSTHOG_FEEDBACK_SURVEY_ID
 
@@ -237,8 +237,18 @@ export default function FeedbackScreen() {
         if (saved && scrollRef.current) scrollRef.current.scrollTop = parseInt(saved, 10)
     }, [])
 
+    // Scroll to top when tapping the already-active feedback tab
+    useEffect(() => {
+        const handler = () => {
+            if (scrollRef.current) scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+        window.addEventListener('nav-tap-again', handler)
+        return () => window.removeEventListener('nav-tap-again', handler)
+    }, [])
+
     useEffect(() => {
         analytics.track(FEEDBACK_EVENTS.VIEWED)
+        analytics.track(SCREEN_EVENTS.FEEDBACK_VIEWED)
 
         if (!POSTHOG_SURVEY_ID) return
         posthog.getSurveys((surveys) => {
@@ -265,8 +275,16 @@ export default function FeedbackScreen() {
         })
     }
 
+    const [planeAnim, setPlaneAnim] = useState(null) // { x, y } start position
     const handleSubmit = () => {
         if (!hasAnyResponse()) return
+        // Launch paper airplane from button position
+        const btn = document.querySelector('[data-submit-btn]')
+        if (btn) {
+            const rect = btn.getBoundingClientRect()
+            setPlaneAnim({ x: rect.left + 20, y: rect.top + rect.height / 2 })
+            setTimeout(() => setPlaneAnim(null), 800)
+        }
         setSubmitting(true)
 
         const payload = { $survey_id: POSTHOG_SURVEY_ID }
@@ -321,6 +339,26 @@ export default function FeedbackScreen() {
             height: '100%',
             background: '#fff',
         }}>
+            {/* Flying paper airplane animation */}
+            {planeAnim && (
+                <div style={{
+                    position: 'fixed',
+                    left: planeAnim.x,
+                    top: planeAnim.y,
+                    zIndex: 99999,
+                    pointerEvents: 'none',
+                    animation: 'paperPlaneFly 0.7s cubic-bezier(0.2, 0, 0.15, 1) forwards',
+                }}>
+                    <Send size={26} color="#147B75" />
+                </div>
+            )}
+            <style>{`
+                @keyframes paperPlaneFly {
+                    0% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+                    40% { transform: translate(30vw, -25vh) rotate(-15deg) scale(1.3); opacity: 1; }
+                    100% { transform: translate(85vw, -70vh) rotate(-25deg) scale(0.8); opacity: 0; }
+                }
+            `}</style>
             {/* Header */}
             <div style={{
                 paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
@@ -387,6 +425,7 @@ export default function FeedbackScreen() {
                                     transition: 'max-height 0.3s ease, opacity 0.25s ease',
                                 }}>
                                     <button
+                                        data-submit-btn
                                         onClick={handleSubmit}
                                         disabled={submitting}
                                         style={{
@@ -402,11 +441,9 @@ export default function FeedbackScreen() {
                                             cursor: submitting ? 'default' : 'pointer',
                                             display: 'flex', alignItems: 'center',
                                             justifyContent: 'center', gap: 8,
-                                            opacity: submitting ? 0.7 : 1,
-                                            transition: 'opacity 0.2s ease',
                                         }}
                                     >
-                                        <Send size={16} />
+                                        {!submitting && <Send size={16} />}
                                         {submitting ? 'Sending...' : 'Send feedback'}
                                     </button>
                                 </div>
@@ -483,7 +520,7 @@ export default function FeedbackScreen() {
 
                 {/* Quick Survey (PostHog) */}
                 {(() => {
-                    const QUICK_SURVEY_ID = '019cf78b-c626-0000-535f-e578d85fbcd5'
+                    const QUICK_SURVEY_ID = import.meta.env.VITE_POSTHOG_QUICK_SURVEY_ID
                     const quickSurveyQuestions = [
                         { id: 'ec6c53c0', type: 'open', question: 'How did you feel when you saw your graph (1-2 words)?', optional: true },
                         { id: 'ddaa270f', type: 'rating', scale: 7, display: 'number', question: 'I understood what the graph was showing me', lowerBoundLabel: 'Strongly disagree', upperBoundLabel: 'Strongly agree', optional: true },
@@ -499,9 +536,15 @@ export default function FeedbackScreen() {
                     const storageKey = 'budgeup_quick_survey_submitted'
                     const [quickResponses, setQuickResponses] = useState({})
                     const [quickSubmitted, setQuickSubmitted] = useState(() => localStorage.getItem(storageKey) === 'true')
-                    const [quickSubmitting, setQuickSubmitting] = useState(false)
                     const hasAny = Object.values(quickResponses).some(v => v !== undefined && v !== null && v !== '')
+                    const [quickSubmitting, setQuickSubmitting] = useState(false)
                     const handleQuickSubmit = () => {
+                        const btn = document.querySelector('[data-quick-submit-btn]')
+                        if (btn) {
+                            const rect = btn.getBoundingClientRect()
+                            setPlaneAnim({ x: rect.left + 20, y: rect.top + rect.height / 2 })
+                            setTimeout(() => setPlaneAnim(null), 800)
+                        }
                         setQuickSubmitting(true)
                         const payload = { $survey_id: QUICK_SURVEY_ID }
                         quickSurveyQuestions.forEach((_, i) => {
@@ -536,13 +579,12 @@ export default function FeedbackScreen() {
                                 {quickSurveyQuestions.map((q, i) => renderQuestion(q, i, quickResponses, (idx, val) => setQuickResponses(prev => ({ ...prev, [idx]: val }))))}
                             </div>
                             <div style={{ marginTop: 4 }}>
-                                <button onClick={handleQuickSubmit} disabled={quickSubmitting} style={{
+                                <button data-quick-submit-btn onClick={handleQuickSubmit} disabled={quickSubmitting} style={{
                                     width: '100%', marginTop: 18, padding: '13px', borderRadius: 12, border: 'none',
                                     background: '#147B75', color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
                                     cursor: quickSubmitting ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                                    opacity: quickSubmitting ? 0.7 : 1, transition: 'opacity 0.2s ease',
                                 }}>
-                                    <Send size={16} />
+                                    {!quickSubmitting && <Send size={16} />}
                                     {quickSubmitting ? 'Sending...' : 'Submit survey'}
                                 </button>
                             </div>

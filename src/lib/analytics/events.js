@@ -78,6 +78,17 @@ export const MONEY_ADVICE_EVENTS = {
   BUTTON_CLICKED: 'money_advice_clicked'
 }
 
+// Screen View Events
+export const SCREEN_EVENTS = {
+  DASHBOARD_VIEWED: 'screen_dashboard_viewed',
+  SETTINGS_VIEWED: 'screen_settings_viewed',
+  FEEDBACK_VIEWED: 'screen_feedback_viewed',
+  SUPPORT_VIEWED: 'screen_support_viewed',
+  ONBOARDING_VIEWED: 'screen_onboarding_viewed',
+  SIGNUP_VIEWED: 'screen_signup_viewed',
+  LOGIN_VIEWED: 'screen_login_viewed',
+}
+
 // Session Events
 export const SESSION_EVENTS = {
   STARTED: 'session_started',

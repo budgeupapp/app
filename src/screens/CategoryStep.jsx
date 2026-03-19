@@ -21,6 +21,7 @@ export default function CategoryStep({ categoryId, entries = [], entryTotals = n
             entries={entries}
             updateEntries={updateEntries}
             subtitle={cat.subtitle}
+            categoryLabel={cat.label}
             entryLabel={cat.entryLabel}
             addLabel={cat.addLabel}
             frequencyOptions={cat.frequencyOptions}

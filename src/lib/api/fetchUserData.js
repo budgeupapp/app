@@ -389,6 +389,32 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
         cat_graduation: 'graduationEntries',
         cat_otherExpense: 'otherExpenseEntries',
     }
+    // Map camelCase catId → snake_case category id (used by INCOME_CATEGORIES/EXPENSE_CATEGORIES)
+    const CAT_ID_TO_SOURCE_ID = {
+        studentFinance: 'student_finance',
+        bursary: 'bursary',
+        job: 'job',
+        familySupport: 'family_support',
+        savingsIncome: 'savings_income',
+        sideHustles: 'side_hustles',
+        benefits: 'benefits',
+        otherIncome: 'other_income',
+        uniFees: 'uni_fees',
+        rent: 'rent',
+        bills: 'bills',
+        phoneSubscriptions: 'phone_subscriptions',
+        holidayTrips: 'holiday_trips',
+        savingsGoals: 'savings_goals',
+        predictableTravel: 'predictable_travel',
+        bigGifts: 'big_gifts',
+        rentalDeposit: 'rental_deposit',
+        insurance: 'insurance',
+        sendingMoneyHome: 'sending_money_home',
+        councilTax: 'council_tax',
+        loanRepayment: 'loan_repayment',
+        graduation: 'graduation',
+        otherExpense: 'other_expense',
+    }
     for (const [catKey, formKey] of Object.entries(CATEGORY_KEY_MAP)) {
         const catRows = (byCategory[catKey] || []).filter(r => !r.is_removed)
         if (catRows.length === 0) continue
@@ -414,7 +440,7 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
             entries.push({
                 id: meta.eid || `${r.type}_${entries.length}`,
                 amount: String(r.amount),
-                frequency: r.recurrence || 'monthly',
+                frequency: meta.af || r.recurrence || 'monthly',
                 scheduleFrequency: meta.sf || undefined,
                 dayOfWeek: meta.dow || undefined,
                 dayOfMonth: meta.dom || undefined,
@@ -428,36 +454,78 @@ function reconstructFormData(profile, cashflows, termDatesRows) {
                 nonTermAmount: meta.nta || (nonTerm ? String(nonTerm.amount) : ''),
             })
         }
-        // Irregular entries — group months into one entry
+        // Irregular entries — group months by entry ID (eid)
         if (irregularRows.length > 0) {
-            const months = []
-            const dates = {}
-            const instalmentAmounts = {}
+            // Parse eid from title metadata to group rows by entry
+            const groups = {}
             for (const r of irregularRows) {
-                if (r.subcategory) {
-                    months.push(r.subcategory)
-                    dates[r.subcategory] = r.scheduled_date
-                    if (Number(r.amount) > 0) instalmentAmounts[r.subcategory] = String(r.amount)
-                }
+                let eid = '_default'
+                try {
+                    const parsed = JSON.parse(r.title)
+                    if (parsed && typeof parsed === 'object' && parsed.eid) eid = parsed.eid
+                } catch { /* plain title — single entry */ }
+                if (!groups[eid]) groups[eid] = []
+                groups[eid].push(r)
             }
-            entries.push({
-                id: `${irregularRows[0].type}_irr`,
-                amount: '',
-                frequency: 'irregular',
-                nextDate: '',
-                label: '',
-                months,
-                dates,
-                instalmentAmounts,
-            })
+            for (const [eid, groupRows] of Object.entries(groups)) {
+                const months = []
+                const dates = {}
+                const instalmentAmounts = {}
+                let label = '', meta = {}
+                for (const r of groupRows) {
+                    if (r.subcategory) {
+                        months.push(r.subcategory)
+                        dates[r.subcategory] = r.scheduled_date
+                        if (Number(r.amount) > 0) instalmentAmounts[r.subcategory] = String(r.amount)
+                    }
+                    if (!label) {
+                        try {
+                            const parsed = JSON.parse(r.title)
+                            if (parsed && typeof parsed === 'object' && parsed.n) {
+                                label = parsed.n
+                                meta = parsed
+                            }
+                        } catch { /* plain title */ }
+                    }
+                }
+                const instValues = Object.values(instalmentAmounts).map(v => Number(v) || 0).filter(v => v > 0)
+                // Use per-instalment value if all equal, otherwise leave empty (individual amounts shown separately)
+                const allEqual = instValues.length > 0 && instValues.every(v => v === instValues[0])
+                const perInstalmentAmount = allEqual ? instValues[0] : 0
+                // Restore original amount frequency from metadata
+                const origFreq = meta.af || 'irregular'
+                const origSf = meta.sf || undefined
+                // If original freq was yearly, amount is the total (sum of instalments)
+                let entryAmt
+                if (origFreq === 'yearly') {
+                    const total = instValues.reduce((s, v) => s + v, 0)
+                    entryAmt = total > 0 ? String(total) : ''
+                } else {
+                    entryAmt = perInstalmentAmount > 0 ? String(perInstalmentAmount) : ''
+                }
+                entries.push({
+                    id: eid !== '_default' ? eid : `${groupRows[0].type}_irr`,
+                    amount: entryAmt,
+                    frequency: origFreq,
+                    scheduleFrequency: origSf,
+                    nextDate: '',
+                    label,
+                    months,
+                    dates,
+                    instalmentAmounts,
+                    variesByTerm: meta.vbt || false,
+                    nonTermAmount: meta.nta || '',
+                })
+            }
         }
         if (entries.length > 0) {
             fd[formKey] = entries
             // Also add to incomeSources/expenseSources if not already there
             const catId = catKey.replace('cat_', '')
-            const isIncome = ['studentFinance', 'bursary', 'job', 'familySupport', 'savingsIncome', 'sideHustles', 'benefits', 'otherIncome'].includes(catId)
+            const sourceId = CAT_ID_TO_SOURCE_ID[catId] || catId
+            const isIncome = ['student_finance', 'bursary', 'job', 'family_support', 'savings_income', 'side_hustles', 'benefits', 'other_income'].includes(sourceId)
             const sourceList = isIncome ? incomeSources : expenseSources
-            if (!sourceList.includes(catId)) sourceList.push(catId)
+            if (!sourceList.includes(sourceId)) sourceList.push(sourceId)
         }
     }
 

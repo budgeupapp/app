@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import './LoadingScreen.css'
 
 const STEPS = [
@@ -11,6 +11,8 @@ export default function LoadingScreen({ onComplete }) {
     const [activeStep, setActiveStep] = useState(0)
     const [done, setDone] = useState(false)
     const [fadeOut, setFadeOut] = useState(false)
+    const onCompleteRef = useRef(onComplete)
+    useEffect(() => { onCompleteRef.current = onComplete }, [onComplete])
 
     useEffect(() => {
         const timers = []
@@ -23,9 +25,9 @@ export default function LoadingScreen({ onComplete }) {
         timers.push(setTimeout(() => setDone(true), 2400))
         // Fade out then navigate — hold "You're all set" a bit longer
         timers.push(setTimeout(() => setFadeOut(true), 3800))
-        timers.push(setTimeout(() => onComplete(), 4200))
+        timers.push(setTimeout(() => onCompleteRef.current(), 4200))
         return () => timers.forEach(clearTimeout)
-    }, [onComplete])
+    }, []) // stable — runs once on mount
 
     return (
         <div className="loading-screen" style={{ opacity: fadeOut ? 0 : 1, transition: 'opacity 0.4s ease' }}>

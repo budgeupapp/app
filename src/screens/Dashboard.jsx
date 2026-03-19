@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabaseClient'
 import { fetchUserData, saveCashflowForecast, saveUserFinances, saveTermDates, saveBalanceHistory } from '../lib/api'
 import { getCurrencySymbol, getGraphStart, setGraphStart } from '../lib/settings'
 import { toLocalDate, MONTH_KEY_TO_DATE, MONTH_SHORT, isInTerm, distributeEvenly, addMonths } from '../lib/helpers'
-import { analytics, DASHBOARD_EVENTS, getBalanceRange } from '../lib/analytics/index.js'
+import { analytics, DASHBOARD_EVENTS, SCREEN_EVENTS, getBalanceRange } from '../lib/analytics/index.js'
 import {
     INITIAL_FORM_DATA,
     DEFAULT_LOAN_MONTHS,
@@ -97,6 +97,9 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
     const events = []
     const terms = formData.termDates?.terms || []
     const removedSet = new Set(formData.removedEvents || [])
+    // Default start: 1st September
+    const firstTermStart = AY_START
+    const firstTermStartStr = toLocalDate(firstTermStart)
 
     // Generic category events
     for (const cat of [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]) {
@@ -108,14 +111,19 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
         const multiEntry = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
         for (let ei = 0; ei < entries.length; ei++) {
             const entry = entries[ei]
-            const amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
+            let amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
+            const isIrregularEntry = (entry.frequency || cat.defaultFrequency) === 'irregular'
+            // For irregular entries, sum instalment amounts if top-level amount is 0
+            if (amt <= 0 && isIrregularEntry && entry.instalmentAmounts) {
+                amt = Object.values(entry.instalmentAmounts).reduce((s, v) => s + (parseFloat(String(v || '0').replace(/,/g, '')) || 0), 0)
+            }
             if (amt <= 0) continue
             const type = isIncome ? 'income' : 'expense'
             const amtFreq = entry.frequency || cat.defaultFrequency
             const paidFreq = entry.scheduleFrequency || amtFreq
             // If paid frequency differs from amount frequency, convert the amount
             const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, quarterly: 4, yearly: 1, irregular: 1, 'one-off': 1 }
-            const freq = (paidFreq === 'irregular' || paidFreq === 'one-off') ? amtFreq : paidFreq
+            const freq = paidFreq === 'one-off' ? amtFreq : paidFreq === 'irregular' ? 'irregular' : paidFreq
             const convertedAmt = (freq !== amtFreq && FREQ_PER_YEAR[amtFreq] && FREQ_PER_YEAR[freq])
                 ? Math.round(amt * FREQ_PER_YEAR[amtFreq] / FREQ_PER_YEAR[freq] * 100) / 100
                 : amt
@@ -144,7 +152,7 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                 const interval = freq === 'weekly' ? 7 : 14
                 const DAY_MAP = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
                 const targetDay = DAY_MAP[entry.dayOfWeek] ?? 1 // default Monday
-                let d = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
+                let d = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(firstTermStart)
                 // Align to the target day of week (find next occurrence on or after start)
                 for (let i = 0; i < 7 && d.getDay() !== targetDay; i++) d = new Date(d.getTime() + 86400000)
                 const nonTermAmt = entry.variesByTerm ? Math.round(parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) * (FREQ_PER_YEAR[amtFreq] || 1) / (FREQ_PER_YEAR[freq] || 1) * 100) / 100 : convertedAmt
@@ -159,17 +167,18 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                     }
                     d = new Date(d.getTime() + interval * 86400000)
                 }
-            } else if (freq === 'monthly') {
+            } else if (freq === 'monthly' || freq === 'quarterly') {
+                const monthStep = freq === 'quarterly' ? 3 : 1
                 const domRaw = entry.dayOfMonth || '1'
                 const isLast = domRaw === 'last'
                 const domTarget = isLast ? 31 : parseInt(domRaw) || 1
-                const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
+                const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : firstTermStart
                 const earliest = startFrom > AY_START ? startFrom : AY_START
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
                 const nonTermAmt = entry.variesByTerm ? Math.round(parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) * (FREQ_PER_YEAR[amtFreq] || 1) / (FREQ_PER_YEAR[freq] || 1) * 100) / 100 : convertedAmt
                 let month = AY_START.getMonth()
                 let year = AY_START.getFullYear()
-                for (let i = 0; i < 13; i++) {
+                for (let i = 0; i < (freq === 'quarterly' ? 5 : 13); i++) {
                     const lastDay = new Date(year, month + 1, 0).getDate()
                     const day = Math.min(domTarget, lastDay)
                     const d = new Date(year, month, day)
@@ -180,15 +189,15 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                             events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: entryEditType })
                         }
                     }
-                    month++
-                    if (month > 11) { month = 0; year++ }
+                    month += monthStep
+                    while (month > 11) { month -= 12; year++ }
                 }
             } else if (freq === 'yearly') {
                 const sf = entry.scheduleFrequency
                 if (sf === 'weekly' || sf === 'fortnightly') {
                     // Divide yearly total across weekly/fortnightly payments
                     const interval = sf === 'weekly' ? 7 : 14
-                    const startDate = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
+                    const startDate = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(firstTermStart)
                     let d = new Date(startDate)
                     if (!entry.nextDate) {
                         while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
@@ -211,7 +220,7 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                     const domRaw = entry.dayOfMonth || '1'
                     const isLast = domRaw === 'last'
                     const domTarget = isLast ? 31 : parseInt(domRaw) || 1
-                    const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
+                    const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : firstTermStart
                     const earliest = startFrom > AY_START ? startFrom : AY_START
                     const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
                     // Count months to divide amount
@@ -814,7 +823,7 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
                     {amt > 0 && (
                         <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
                             {isExpense ? '\u2212' : '+'}{getCurrencySymbol()}{amt.toLocaleString()}
-                            {frequency && frequency !== 'one-off' ? `/${frequency === 'weekly' ? 'wk' : frequency === 'fortnightly' ? '2wk' : frequency === 'monthly' ? 'mo' : frequency === 'quarterly' ? 'qtr' : frequency === 'termly' ? 'term' : 'yr'}` : ''}
+                            {frequency && frequency !== 'one-off' ? `/${frequency === 'weekly' ? 'wk' : frequency === 'fortnightly' ? '2wk' : frequency === 'monthly' ? 'mo' : frequency === 'termly' ? 'term' : 'yr'}` : ''}
                         </span>
                     )}
                     {removedCount > 0 && (
@@ -939,10 +948,10 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
     return (
         <div ref={rowRef} data-source-row data-source-id={source.id} style={{
             borderRadius: 14,
-            background: isInactive ? '#f0f0f0' : '#fff',
+            background: isInactive ? '#eee' : '#fff',
             overflow: 'hidden',
             maxHeight: deleting ? 0 : naturalHeight != null ? naturalHeight : 5000,
-            opacity: deleting ? 0 : isInactive ? 0.7 : 1,
+            opacity: deleting ? 0 : 1,
             marginBottom: deleting ? 0 : 12,
             boxShadow: expanded ? '0 2px 12px rgba(0,0,0,0.06)' : '0 1px 4px rgba(0,0,0,0.04)',
             transition: deleting
@@ -1004,7 +1013,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                     }}>
                         {!isInactive && yearlyAmount > 0 && source._visibleAmount === 0
                             ? 'Not visible — change graph start date in Settings'
-                            : yearlyAmount === 0 ? `${getCurrencySymbol()}0.00 total` : `${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total`
+                            : yearlyAmount === 0 ? `${getCurrencySymbol()}0.00/yr` : `${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/yr`
                         }
                     </p>
                     {removedCount > 0 && (
@@ -1190,6 +1199,7 @@ function migrateOtherFields(data) {
 export default function Dashboard() {
     const navigate = useNavigate()
     useSurveySequence()
+    useEffect(() => { analytics.track(SCREEN_EVENTS.DASHBOARD_VIEWED) }, [])
 
     const [formData, setFormData] = useState(() => {
         try {
@@ -1570,6 +1580,9 @@ export default function Dashboard() {
     const [dbLoaded, setDbLoaded] = useState(false)
     const saveTimerRef = useRef(null)
     const userIdRef = useRef(null)
+    const formDataRef = useRef(formData)
+    const hiddenSourcesRef = useRef(hiddenSources)
+    const dbLoadedRef = useRef(false)
     const [userJoinDate, setUserJoinDate] = useState(null)
 
     // Refresh graph start date on mount (picks up changes from Settings)
@@ -1673,30 +1686,11 @@ export default function Dashboard() {
                     }
                     if (cancelled) return
                     if (result.formData) {
-                        // Merge Supabase with localStorage to preserve unsaved local changes
-                        let localFD = {}
-                        try { const ls = localStorage.getItem(STORAGE_KEY); localFD = (ls ? JSON.parse(ls) : {}).formData || {} } catch { }
-                        const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
-                        // Preserve local sources not yet synced to Supabase
-                        for (const k of ['incomeSources', 'expenseSources', 'flexIncomeSources', 'flexExpenseSources']) {
-                            if (localFD[k]?.length) merged[k] = [...new Set([...(merged[k] || []), ...localFD[k]])]
-                        }
-                        if (localFD.flexSourceData) merged.flexSourceData = { ...(merged.flexSourceData || {}), ...localFD.flexSourceData }
-                        // Preserve all category entries (e.g. studentFinanceEntries, rentEntries, etc.)
-                        for (const key of Object.keys(localFD)) {
-                            if (key.endsWith('Entries') && Array.isArray(localFD[key]) && localFD[key].length > 0) {
-                                merged[key] = localFD[key]
-                            }
-                        }
-                        if (localFD.otherIncomes?.length) merged.otherIncomes = [...new Set([...(merged.otherIncomes || []).map(i => JSON.stringify(i)), ...localFD.otherIncomes.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
-                        if (localFD.otherExpenses?.length) merged.otherExpenses = [...new Set([...(merged.otherExpenses || []).map(i => JSON.stringify(i)), ...localFD.otherExpenses.map(i => JSON.stringify(i))])].map(s => JSON.parse(s))
-                        // Prefer localStorage balance (Settings saves there immediately, DB may lag)
-                        if (localFD.balance) merged.balance = localFD.balance
-                        if (localFD.overdraft != null && (!merged.overdraft || merged.overdraft === '')) merged.overdraft = localFD.overdraft
-                        if (localFD.weeklySpend && (!merged.weeklySpend || merged.weeklySpend === '')) merged.weeklySpend = localFD.weeklySpend
-                        if (localFD.weeklySpendNonTerm && (!merged.weeklySpendNonTerm || merged.weeklySpendNonTerm === '')) merged.weeklySpendNonTerm = localFD.weeklySpendNonTerm
-                        if (localFD.weeklySpendVariesByTerm != null) merged.weeklySpendVariesByTerm = localFD.weeklySpendVariesByTerm || merged.weeklySpendVariesByTerm
-                        if (localFD.amountOverrides) merged.amountOverrides = { ...(merged.amountOverrides || {}), ...localFD.amountOverrides }
+                        const hasPendingSave = localStorage.getItem('budgeup_pending_save') === 'true'
+                        // If there was a pending save (e.g. quick reload), prefer localStorage over stale DB
+                        const merged = hasPendingSave
+                            ? migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData, ...(() => { try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s).formData || {} : {} } catch { return {} } })() })
+                            : migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
                         // Prefer localStorage term dates (Settings saves there immediately, Supabase may lag)
                         try {
                             const saved = localStorage.getItem(STORAGE_KEY)
@@ -1746,6 +1740,9 @@ export default function Dashboard() {
                         })
                     }
                     setDbLoaded(true)
+                    // If there was a pending save from a quick reload, the debounced save
+                    // will fire automatically since dbLoaded just turned true and formData
+                    // has the localStorage data merged in
                 } catch (err) {
                     console.error('Failed to load from Supabase:', err)
                     setDbLoaded(true) // still mark loaded so localStorage data is used
@@ -1767,6 +1764,43 @@ export default function Dashboard() {
         }
     }, [formData.termDates])
 
+    // Keep refs in sync for pagehide handler
+    useEffect(() => { formDataRef.current = formData }, [formData])
+    useEffect(() => { hiddenSourcesRef.current = hiddenSources }, [hiddenSources])
+    useEffect(() => { dbLoadedRef.current = dbLoaded }, [dbLoaded])
+
+    // Flush pending save when page loses visibility, unloads, or reloads
+    useEffect(() => {
+        const flush = () => {
+            if (!saveTimerRef.current || !dbLoadedRef.current || !userIdRef.current) return
+            clearTimeout(saveTimerRef.current)
+            saveTimerRef.current = null
+            const fd = formDataRef.current
+            const userId = userIdRef.current
+            const hs = [...hiddenSourcesRef.current]
+            saveCashflowForecast(userId, { ...fd, hiddenSources: hs }).catch(() => { })
+            saveUserFinances(userId, {
+                university: fd.university,
+                overdraft: fd.overdraft,
+                savings: fd.savings,
+                weeklySpend: fd.weeklySpend,
+                weeklySpendNonTerm: fd.weeklySpendNonTerm,
+                weeklySpendVariesByTerm: fd.weeklySpendVariesByTerm,
+                balance: fd.balance,
+            }).catch(() => { })
+            saveTermDates(userId, fd.termDates).catch(() => { })
+        }
+        const onVisChange = () => { if (document.hidden) flush() }
+        document.addEventListener('visibilitychange', onVisChange)
+        window.addEventListener('pagehide', flush)
+        window.addEventListener('beforeunload', flush)
+        return () => {
+            document.removeEventListener('visibilitychange', onVisChange)
+            window.removeEventListener('pagehide', flush)
+            window.removeEventListener('beforeunload', flush)
+        }
+    }, [])
+
     // Debounce save to Supabase when formData changes (after initial DB load)
     useEffect(() => {
         if (!dbLoaded || !userIdRef.current) return
@@ -1774,6 +1808,8 @@ export default function Dashboard() {
         const invalidOneOff = (formData.oneOffItems || []).some(i => i.amount && !i.name?.trim())
         if (invalidOneOff) return
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+        // Mark that we have unsaved changes
+        localStorage.setItem('budgeup_pending_save', 'true')
         saveTimerRef.current = setTimeout(async () => {
             try {
                 const userId = userIdRef.current
@@ -1790,6 +1826,7 @@ export default function Dashboard() {
                     }),
                     saveTermDates(userId, formData.termDates),
                 ])
+                localStorage.removeItem('budgeup_pending_save')
             } catch (err) {
                 console.error('Failed to save to Supabase:', err)
             }
@@ -2594,9 +2631,92 @@ export default function Dashboard() {
     const allEvents = _allEventsForProjection
 
     // Calculate totals (fixed only — exclude one-off items)
-    const fixedEvents = events.filter(e => e.editType !== 'oneOffIncome' && e.editType !== 'oneOffExpense')
-    const yearlyIncome = calcYearlyTotal(fixedEvents, 'income')
-    const yearlyExpense = calcYearlyTotal(fixedEvents, 'expense')
+    // Calculate totals from formData, counting actual occurrences between start/end dates
+    const calcEntryTotal = (entry, cat) => {
+        const amt = parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0
+        if (amt <= 0) return 0
+        const freq = entry.frequency || cat.defaultFrequency
+        const paidFreq = entry.scheduleFrequency || freq
+        const effectiveFreq = paidFreq === 'one-off' ? freq : paidFreq === 'irregular' ? 'irregular' : paidFreq
+        const entryEditType = entry.id ? `${cat.id}:${entry.id}` : cat.id
+        const isRemoved = (dateStr) => removedSet.has(`${entryEditType}:${dateStr}`)
+
+        if (freq === 'irregular' || effectiveFreq === 'irregular') {
+            const months = entry.months || []
+            let instTotal = 0
+            for (const m of months) {
+                const date = entry.dates?.[m] || MONTH_KEY_TO_DATE[m]
+                if (date && isRemoved(date)) continue
+                const v = parseFloat(String(entry.instalmentAmounts?.[m] || '0').replace(/,/g, '')) || 0
+                instTotal += v > 0 ? v : (amt / (months.length || 1))
+            }
+            return instTotal > 0 ? instTotal : amt
+        }
+        if (freq === 'one-off' || effectiveFreq === 'one-off') {
+            if (entry.nextDate && isRemoved(entry.nextDate)) return 0
+            return amt
+        }
+        if (freq === 'yearly') {
+            if (entry.nextDate && isRemoved(entry.nextDate)) return 0
+            return amt
+        }
+
+        // Count occurrences between start and end dates (use entry dates, not graph view)
+        const defaultStart = new Date('2025-09-01T00:00:00')
+        const defaultEnd = new Date('2026-08-31T00:00:00')
+        const start = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : defaultStart
+        const end = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : defaultEnd
+        if (start > end) return 0
+
+        // For yearly amount with sub-frequency schedule, convert amount
+        const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, yearly: 1 }
+        const perOccurrence = (freq === 'yearly' && effectiveFreq !== 'yearly' && FREQ_PER_YEAR[effectiveFreq])
+            ? Math.round(amt / FREQ_PER_YEAR[effectiveFreq] * 100) / 100
+            : amt
+
+        const nonTermAmt = entry.variesByTerm ? (parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) || 0) : amt
+        const nonTermPerOcc = (freq === 'yearly' && effectiveFreq !== 'yearly' && FREQ_PER_YEAR[effectiveFreq])
+            ? Math.round(nonTermAmt / FREQ_PER_YEAR[effectiveFreq] * 100) / 100
+            : nonTermAmt
+
+        if (effectiveFreq === 'weekly' || effectiveFreq === 'fortnightly') {
+            const interval = effectiveFreq === 'weekly' ? 7 : 14
+            let total = 0
+            let d = new Date(start)
+            while (d <= end) {
+                const dateStr = toLocalDate(d)
+                if (!isRemoved(dateStr)) {
+                    total += (entry.variesByTerm && !isInTerm(dateStr, terms)) ? nonTermPerOcc : perOccurrence
+                }
+                d = new Date(d.getTime() + interval * 86400000)
+            }
+            return total
+        }
+        if (effectiveFreq === 'monthly') {
+            let total = 0
+            let m = start.getMonth(), y = start.getFullYear()
+            for (let i = 0; i < 24; i++) {
+                const d = new Date(y, m, Math.min(parseInt(entry.dayOfMonth) || 1, new Date(y, m + 1, 0).getDate()))
+                if (d >= start && d <= end) {
+                    const dateStr = toLocalDate(d)
+                    if (!isRemoved(dateStr)) {
+                        total += (entry.variesByTerm && !isInTerm(dateStr, terms)) ? nonTermPerOcc : perOccurrence
+                    }
+                }
+                m++; if (m > 11) { m = 0; y++ }
+                if (new Date(y, m, 1) > end) break
+            }
+            return total
+        }
+        return amt
+    }
+
+    const yearlyIncome = INCOME_CATEGORIES.reduce((total, cat) => {
+        return total + (formData[cat.formKey] || []).reduce((s, entry) => s + calcEntryTotal(entry, cat), 0)
+    }, 0)
+    const yearlyExpense = EXPENSE_CATEGORIES.reduce((total, cat) => {
+        return total + (formData[cat.formKey] || []).reduce((s, entry) => s + calcEntryTotal(entry, cat), 0)
+    }, 0)
     const weeklySpendTotal = events.filter(e => e.editType === 'weeklySpend' && !e.removed).reduce((s, e) => s + e.amount, 0)
     const fixedNet = yearlyIncome - yearlyExpense
 
@@ -2629,9 +2749,18 @@ export default function Dashboard() {
         return { color: '#e06470', value: `\u2212${formatted}`, label: 'below projection' }
     })()
 
-    // Calculate per-source yearly amounts
+    // Calculate per-source yearly amounts (full year from first term, regardless of graph view)
     const getSourceYearly = (editTypes) => {
-        return events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot).reduce((s, e) => s + e.amount, 0)
+        let total = 0
+        for (const cat of [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]) {
+            const entries = formData[cat.formKey] || []
+            for (const entry of entries) {
+                const entryEditType = entry.id ? `${cat.id}:${entry.id}` : cat.id
+                if (!editTypes.includes(entryEditType)) continue
+                total += calcEntryTotal(entry, cat)
+            }
+        }
+        return total
     }
 
     const getSourceRemovedCount = (editTypes) => {
@@ -3463,10 +3592,7 @@ export default function Dashboard() {
                                                             setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
                                                         }
                                                         const hasMulti = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
-                                                        const entryTotals = hasMulti ? entries.map((e, i) => {
-                                                            const et = `${cat.id}:${e.id || i}`
-                                                            return events.filter(ev => ev.editType === et && !ev.removed && !ev.noDot).reduce((s, ev) => s + ev.amount, 0)
-                                                        }) : null
+                                                        const entryTotals = hasMulti ? entries.map(e => calcEntryTotal(e, cat)) : null
                                                         return (
                                                             <CategoryStep
                                                                 categoryId={cat.id} compact
@@ -3669,10 +3795,7 @@ export default function Dashboard() {
                                                             setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
                                                         }
                                                         const hasMulti = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
-                                                        const entryTotals = hasMulti ? entries.map((e, i) => {
-                                                            const et = `${cat.id}:${e.id || i}`
-                                                            return events.filter(ev => ev.editType === et && !ev.removed && !ev.noDot).reduce((s, ev) => s + ev.amount, 0)
-                                                        }) : null
+                                                        const entryTotals = hasMulti ? entries.map(e => calcEntryTotal(e, cat)) : null
                                                         return (
                                                             <CategoryStep
                                                                 categoryId={cat.id} compact
@@ -4072,9 +4195,9 @@ export default function Dashboard() {
                                                         {/* Content inside the arc */}
                                                         <div style={{
                                                             position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-                                                            textAlign: 'center', width: gW * 0.45,
+                                                            textAlign: 'center', width: gW * 0.5,
                                                         }}>
-                                                             <p style={{ margin: 0, fontSize: (isClose || isAhead) ? 30 : 22, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1.1 }}>
+                                                             <p style={{ margin: 0, fontSize: (isClose || isAhead) ? 27 : 22, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1.1 }}>
                                                                 {isClose ? 'On Track!' : isAhead ? 'Ahead!' : isDanger ? 'Needs Attention' : 'Watch Spending'}
                                                             </p>
                                                             <p style={{ margin: '10px 0 0 -8px', fontSize: 17, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
@@ -4181,15 +4304,22 @@ export default function Dashboard() {
 
                                     {/* Spend & Income Breakdown */}
                                     {(() => {
-                                        const activeEvents = events.filter(e => !e.removed && !e.noDot)
-                                        // Group by label for expenses
-                                        const expenseGroups = {}
+                                        // Group by category using calcEntryTotal (same as dropdown headers)
                                         const incomeGroups = {}
-                                        for (const e of activeEvents) {
-                                            const map = e.type === 'expense' ? expenseGroups : incomeGroups
-                                            const key = e.label || e.editType
-                                            map[key] = (map[key] || 0) + e.amount
+                                        const expenseGroups = {}
+                                        for (const cat of INCOME_CATEGORIES) {
+                                            if (!(formData.incomeSources || []).includes(cat.id)) continue
+                                            const total = (formData[cat.formKey] || []).reduce((s, e) => s + calcEntryTotal(e, cat), 0)
+                                            if (total > 0) incomeGroups[cat.label] = total
                                         }
+                                        for (const cat of EXPENSE_CATEGORIES) {
+                                            if (!(formData.expenseSources || []).includes(cat.id)) continue
+                                            const total = (formData[cat.formKey] || []).reduce((s, e) => s + calcEntryTotal(e, cat), 0)
+                                            if (total > 0) expenseGroups[cat.label] = total
+                                        }
+                                        // Add weekly spend
+                                        const wkSpend = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, '')) || 0
+                                        if (wkSpend > 0) expenseGroups['Weekly Spend'] = wkSpend * 52
                                         const expEntries = Object.entries(expenseGroups).sort((a, b) => b[1] - a[1])
                                         const incEntries = Object.entries(incomeGroups).sort((a, b) => b[1] - a[1])
                                         const totalExp = expEntries.reduce((s, [, v]) => s + v, 0)
@@ -4685,7 +4815,7 @@ export default function Dashboard() {
                     const freqMap = { family: formData.familyFrequency, work: formData.workFrequency, rent: formData.rentFrequency }
                     return freqMap[editingEvent.editType] || 'monthly'
                 })()
-                const FREQ_LABEL_MAP = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly', yearly: 'Yearly', irregular: 'Irregular', 'one-off': 'One-off' }
+                const FREQ_LABEL_MAP = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly', yearly: 'Yearly', irregular: 'Per instalment', 'one-off': 'One-off' }
                 const displayFreq = (() => {
                     const sf = eventEntry?.scheduleFrequency
                     if (sf && sf !== eventFreq) return sf
@@ -4783,13 +4913,24 @@ export default function Dashboard() {
                                 const entries = prev[irregCat.formKey] || []
                                 return { ...prev, [irregCat.formKey]: entries.map(e => {
                                     const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                    const entryFreq = e.frequency || irregCat.defaultFrequency
+                                    const isPerInst = entryFreq === 'irregular'
                                     const newMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
                                     const newDates = { ...(e.dates || {}) }; delete newDates[editingEvent.editMonth]
                                     const newInst = {}
-                                    if (newMonths.length > 0 && total > 0) {
+                                    if (isPerInst) {
+                                        // Per instalment: keep existing amounts, just remove the month
+                                        for (const m of newMonths) {
+                                            newInst[m] = e.instalmentAmounts?.[m] || String(total)
+                                        }
+                                    } else if (newMonths.length > 0 && total > 0) {
+                                        // Per year: redistribute yearly total across remaining months
                                         const perMonth = Math.round(total * 100 / newMonths.length) / 100
-                                        const leftover = Math.round((total - perMonth * newMonths.length) * 100)
-                                        newMonths.forEach((m, i) => { newInst[m] = String(Math.round((perMonth + (i < leftover ? 0.01 : 0)) * 100) / 100) })
+                                        let remainder = Math.round((total - perMonth * newMonths.length) * 100)
+                                        newMonths.forEach((m, i) => {
+                                            const extra = i < remainder ? 0.01 : 0
+                                            newInst[m] = String(Math.round((perMonth + extra) * 100) / 100)
+                                        })
                                     }
                                     return { ...e, months: newMonths, dates: newDates, instalmentAmounts: newInst }
                                 })}
@@ -4828,8 +4969,14 @@ export default function Dashboard() {
                     if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
                     const baseId = (editingEvent.editType || '').includes(':') ? editingEvent.editType.split(':')[0] : editingEvent.editType
                     const isDelete = displayFreq === 'one-off' || displayFreq === 'yearly' || displayFreq === 'irregular' || eventFreq === 'irregular' || eventFreq === 'one-off'
+                    const monthName = editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' }) : ''
+                    const toastLabel = editingEvent.editMonth
+                        ? `${eventLabel} – ${editingEvent.editMonth.charAt(0).toUpperCase() + editingEvent.editMonth.slice(1)} deleted`
+                        : isDelete
+                            ? `${eventLabel} (${eventDate}) deleted`
+                            : `${eventLabel} – ${monthName} skipped`
                     setSkipToast({
-                        label: `${eventLabel} (${eventDate}) ${isDelete ? 'deleted' : 'skipped'}`,
+                        label: toastLabel,
                         undoFn: () => setFormData(prevFormData),
                         sourceId: baseId,
                         entryId: eventEntry?.id,
@@ -5044,45 +5191,53 @@ export default function Dashboard() {
                                 )}
                                 {/* Amount + Save + Skip on one row */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <div style={{
-                                        display: 'flex', alignItems: 'center', flex: 1, minWidth: 0,
-                                        border: '1px solid #e8e8e8', borderRadius: 8,
-                                        padding: '0 8px', height: 34, gap: 3, background: '#fff',
-                                        overflow: 'hidden',
-                                    }}>
-                                        <span style={{ fontSize: 14, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>{getCurrencySymbol()}</span>
-                                        <input
-                                            type="text"
-                                            inputMode="decimal"
-                                            value={formatDisplay(editAmount)}
-                                            onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                                            readOnly
-                                            onTouchEnd={(e) => { e.target.readOnly = false; e.target.focus({ preventScroll: true }) }}
-                                            onBlur={(e) => { e.target.readOnly = true }}
-                                            style={{
-                                                flex: 1, minWidth: 0, border: 'none', background: 'transparent',
-                                                fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                                color: '#000', outline: 'none', padding: 0,
-                                            }}
-                                        />
-                                    </div>
-                                    <button onClick={handleSave} style={{
-                                        height: 34, borderRadius: 8, border: 'none',
-                                        background: color, padding: '0 12px',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        cursor: 'pointer', flexShrink: 0,
-                                    }}>
-                                        <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
-                                    </button>
+                                    {eventFreq === 'irregular' && (
+                                        <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333', flex: 1 }}>
+                                            {getCurrencySymbol()}{formatDisplay(editAmount)}
+                                        </span>
+                                    )}
+                                    {eventFreq !== 'irregular' && (<>
+                                        <div style={{
+                                            display: 'flex', alignItems: 'center', flex: 1, minWidth: 0,
+                                            border: '1px solid #e8e8e8', borderRadius: 8,
+                                            padding: '0 8px', height: 34, gap: 3, background: '#fff',
+                                            overflow: 'hidden',
+                                        }}>
+                                            <span style={{ fontSize: 14, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>{getCurrencySymbol()}</span>
+                                            <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={formatDisplay(editAmount)}
+                                                onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                readOnly
+                                                onTouchEnd={(e) => { e.target.readOnly = false; e.target.focus({ preventScroll: true }) }}
+                                                onBlur={(e) => { e.target.readOnly = true }}
+                                                style={{
+                                                    flex: 1, minWidth: 0, border: 'none', background: 'transparent',
+                                                    fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                                    color: '#000', outline: 'none', padding: 0,
+                                                }}
+                                            />
+                                        </div>
+                                        <button onClick={handleSave} style={{
+                                            height: 34, borderRadius: 8, border: 'none',
+                                            background: color, padding: '0 12px',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer', flexShrink: 0,
+                                        }}>
+                                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
+                                        </button>
+                                    </>)}
                                     {canSkip && (
                                         <button onClick={handleSkip} style={{
                                             height: 34, borderRadius: 8, border: 'none',
-                                            background: '#f5f5f5', padding: '0 8px',
+                                            background: '#f5f5f5',
+                                            padding: '0 16px', flex: eventFreq === 'irregular' ? 1 : undefined,
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
                                         }}>
                                             <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                {eventFreq === 'irregular' || eventFreq === 'one-off' || displayFreq === 'irregular' || displayFreq === 'yearly' || displayFreq === 'one-off' ? 'Delete' : `Skip ${skipLabel}`}
+                                                {eventFreq === 'irregular' ? 'Delete instalment' : (eventFreq === 'one-off' || displayFreq === 'irregular' || displayFreq === 'yearly' || displayFreq === 'one-off' ? 'Delete' : `Skip ${skipLabel}`)}
                                             </span>
                                         </button>
                                     )}

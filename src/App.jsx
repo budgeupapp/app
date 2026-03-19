@@ -50,10 +50,11 @@ import SettingsScreen from './screens/SettingsScreen'
 import FeedbackScreen from './screens/FeedbackScreen'
 import NotFound from './screens/NotFound'
 import BottomNav from './components/BottomNav'
+import DesktopBlocker from './components/DesktopBlocker'
 import MoneyAdviceSvg from './assets/money-advice.svg'
 import { saveSignupConsents } from './lib/api'
 
-export default function App() {
+function AppContent() {
     const sessionTrackedRef = useRef(false)
     const [session, setSession] = useState(null)
     const [loading, setLoading] = useState(true)
@@ -337,5 +338,13 @@ export default function App() {
                 <Route path="*" element={<NotFound />} />
             </Routes>
         </BrowserRouter>
+    )
+}
+
+export default function App() {
+    return (
+        <DesktopBlocker>
+            <AppContent />
+        </DesktopBlocker>
     )
 }

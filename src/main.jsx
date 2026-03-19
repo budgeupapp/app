@@ -37,6 +37,7 @@ posthog.init(import.meta.env.VITE_PUBLIC_POSTHOG_KEY, {
   capture_pageview: true,
   capture_pageleave: true,
   opt_in_site_apps: true,
+  enable_surveys: true,
 })
 
 

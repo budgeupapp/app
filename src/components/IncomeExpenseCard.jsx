@@ -147,7 +147,7 @@ function CustomSelect({ value, onChange, options, minWidth = 120, triggerStyle }
                         transition: open
                             ? 'transform 0.25s cubic-bezier(.175,.885,.32,1.275), opacity 0.15s ease'
                             : 'transform 0.2s cubic-bezier(.4,0,1,1), opacity 0.15s ease',
-                        minWidth: Math.max(minWidth, 160),
+                        minWidth: Math.max(minWidth + 40, 180),
                         pointerEvents: open ? 'auto' : 'none',
                         overflow: 'hidden',
                         zIndex: 100000,
@@ -203,9 +203,8 @@ const FREQ_LABELS = {
     weekly: 'Per week',
     fortnightly: 'Per fortnight',
     monthly: 'Per month',
-    quarterly: 'Per quarter',
     yearly: 'Per year',
-    irregular: 'Irregular',
+    irregular: 'Per instalment',
     'one-off': 'One-off',
 }
 
@@ -213,9 +212,9 @@ const SCHEDULE_FREQ_LABELS = {
     weekly: 'Weekly',
     fortnightly: 'Fortnightly',
     monthly: 'Monthly',
-    quarterly: 'Quarterly',
     yearly: 'Yearly',
-    irregular: 'Irregular',
+    irregular: 'In instalments',
+    'one-off': 'One-off',
 }
 
 /* ==========================================================================
@@ -226,6 +225,7 @@ export default function IncomeExpenseCard({
     entries = [],
     updateEntries,
     subtitle = '',
+    categoryLabel = '',           // "Student Finance", "Rent" etc (for delete toast)
     entryLabel = 'Entry',        // "Loan", "Bursary", "Payment" etc
     addLabel = 'Add another',    // "Add another loan"
     compact = false,              // hide add button + spacer (Dashboard mode)
@@ -310,7 +310,8 @@ export default function IncomeExpenseCard({
     const removeEntry = (idx) => {
         if (entries.length <= 1) return
         const prevEntries = [...entries]
-        const label = entries.length > 1 ? `${entryLabel} ${idx + 1}` : entryLabel
+        const name = categoryLabel || entryLabel
+        const label = entries.length > 1 ? `${name} – ${entryLabel.toLowerCase()} ${idx + 1}` : name
         // Animate out then remove
         setDeletingIdx(idx)
         setTimeout(() => {
@@ -345,7 +346,7 @@ export default function IncomeExpenseCard({
                 flex: 1, overflowY: 'auto', overflowX: 'hidden',
                 WebkitOverflowScrolling: 'touch',
                 padding: compact ? '0 16px 12px' : '0 24px 24px',
-                background: '#fff',
+                background: compact ? '#fff' : '#f5f7f7',
                 minHeight: 0,
             }}>
                 {entries.map((entry, idx) => {
@@ -371,7 +372,7 @@ export default function IncomeExpenseCard({
                                         {entryLabel} {idx + 1}
                                     </span>
                                     {entryTotals && entryTotals[idx] != null && (
-                                        <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                                        <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: compact ? '#999' : '#777' }}>
                                             {isExpense ? '\u2212' : '+'}{getCurrencySymbol()}{entryTotals[idx].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total
                                         </span>
                                     )}
@@ -384,7 +385,7 @@ export default function IncomeExpenseCard({
                         )}
                         {nameEditable && (
                             <div style={{ marginBottom: 10 }}>
-                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: compact ? '#888' : '#666', display: 'block', marginBottom: 6 }}>
                                     Name
                                 </span>
                                 <input
@@ -393,7 +394,7 @@ export default function IncomeExpenseCard({
                                     value={entry.label || ''}
                                     onChange={(e) => updateEntry(idx, 'label', e.target.value)}
                                     style={{
-                                        width: '100%', border: 'none', borderRadius: 10, background: '#f5f5f5',
+                                        width: '100%', border: compact ? 'none' : '1px solid #e8e8e8', borderRadius: 10, background: compact ? '#f5f5f5' : '#fff',
                                         padding: '0 14px', height: 44, fontSize: 14, fontWeight: 500,
                                         fontFamily: 'Nunito, sans-serif', color: '#000',
                                         outline: 'none', boxSizing: 'border-box',
@@ -466,16 +467,24 @@ function EntryCard({
     const {
         amount = '',
         frequency = 'monthly',
-        nextDate = '',
+        nextDate: nextDateRaw = '',
         months: monthsProp = defaultMonths,
         dates: datesProp = defaultDates,
         instalmentAmounts = {},
         variesByTerm = false,
         nonTermAmount = '',
     } = entry
+    const nextDate = nextDateRaw || '2025-09-01'
 
     const accent = isExpense ? '#e06470' : '#147b75'
     const accentBg = isExpense ? 'rgba(224,100,112,0.06)' : 'rgba(20,123,117,0.06)'
+    // Input styling: compact (dashboard) uses borderless grey bg, onboarding uses bordered white bg
+    const inputBg = compact ? '#f5f5f5' : '#fff'
+    const inputBorder = compact ? 'none' : '1px solid #e8e8e8'
+    // Grey text: darker in onboarding for contrast against grey card bg
+    const grey1 = compact ? '#999' : '#777' // section headers, light labels
+    const grey2 = compact ? '#888' : '#666' // field labels
+    const grey3 = compact ? '#aaa' : '#888' // currency symbols, hints
 
     const [rawAmount, setRawAmount] = useState(() => {
         const n = parseFloat(String(amount || '').replace(/,/g, ''))
@@ -514,26 +523,28 @@ function EntryCard({
         setRawInstalments(obj)
     }, [instalmentAmounts])
 
-    const [nextDateExpanded, setNextDateExpanded] = useState(!!nextDate)
+    const [nextDateExpanded, setNextDateExpanded] = useState(true)
     const [customAmounts, setCustomAmounts] = useState(
         () => Object.values(instalmentAmounts || {}).some(v => parseFloat(String(v || '0').replace(/,/g, '')) > 0)
     )
     const dateActiveRef = useRef(false)
     const [showFreqPicker, setShowFreqPicker] = useState(frequency === 'yearly')
-    // Default schedule frequency: use custom options if provided, else prefer monthly
+    // Default schedule frequency: use custom options if provided, else per instalment for yearly, monthly otherwise
     const defaultScheduleFreq = entry.scheduleFrequency
         || (scheduleFreqOptions ? scheduleFreqOptions.find(f => f !== 'yearly') || scheduleFreqOptions[0] : null)
+        || (frequency === 'yearly' ? (freqLabelOverrides ? 'irregular' : 'monthly') : null)
         || (frequencyOptions.includes('monthly') ? 'monthly' : frequencyOptions.find(f => f !== 'yearly' && f !== 'one-off'))
         || 'monthly'
     const [scheduleFreq, setScheduleFreq] = useState(defaultScheduleFreq)
 
-    const isIrregular = frequency === 'irregular'
+    const sf0 = entry.scheduleFrequency || (frequency === 'yearly' ? scheduleFreq : frequency)
+    const isIrregular = frequency === 'irregular' || (frequency === 'yearly' && sf0 === 'irregular')
     const months = (monthsProp || defaultMonths)
         .slice()
         .sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
 
-    // When freqLabelOverrides maps irregular to 'Per instalment', amount is per-instalment (not total)
-    const isPerInstalment = freqLabelOverrides?.irregular === 'Per instalment'
+    // Per instalment only when amount freq is irregular (not yearly with irregular schedule)
+    const isPerInstalment = frequency === 'irregular'
 
     const handleAmountChange = (e) => {
         const val = cleanNum(e.target.value)
@@ -566,34 +577,54 @@ function EntryCard({
 
     const handleInstalmentChange = (month, e) => {
         const val = cleanNum(e.target.value)
-        const parsedVal = parseFloat(val) || 0
-        const totalAmt = parseFloat(String(amount || '0').replace(/,/g, '')) || 0
-        // Don't allow instalment to exceed total
-        if (parsedVal > totalAmt) return
         const newInstalments = { ...instalmentAmounts, [month]: val }
         setRawInstalments(prev => ({ ...prev, [month]: val }))
         updateField('instalmentAmounts', newInstalments)
     }
 
     const toggleMonth = (month) => {
-        const next = months.includes(month)
+        const isRemoving = months.includes(month)
+        const next = isRemoving
             ? months.filter(m => m !== month)
             : [...months, month]
         if (next.length === 0) return
         updateField('months', next)
         const numVal = parseFloat(String(amount || '').replace(/,/g, '')) || 0
-        if (numVal > 0 && next.length > 0) {
-            const sortedNext = next.slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
-            const ni = {}, nr = {}
+        if (isRemoving) {
             if (isPerInstalment) {
-                const amtStr = String(numVal)
-                sortedNext.forEach(m => { ni[m] = amtStr; nr[m] = amtStr })
+                // Per instalment: just remove the month, keep everything else
+                const { [month]: _a, ...ni } = instalmentAmounts || {}
+                const { [month]: _b, ...nr } = rawInstalments || {}
+                updateField('instalmentAmounts', ni)
+                setRawInstalments(nr)
             } else {
+                // Per year: redistribute total evenly across remaining months
+                const sortedNext = next.slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
+                const ni = {}, nr = {}
+                if (numVal > 0) {
+                    const amounts = splitEvenly(numVal, sortedNext.length)
+                    sortedNext.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
+                }
+                updateField('instalmentAmounts', ni)
+                setRawInstalments(nr)
+            }
+        } else if (numVal > 0 && next.length > 0) {
+            if (isPerInstalment) {
+                // Per instalment: keep existing amounts, set new month to the amount value
+                const amtStr = String(numVal)
+                const ni = { ...instalmentAmounts, [month]: amtStr }
+                const nr = { ...rawInstalments, [month]: amtStr }
+                updateField('instalmentAmounts', ni)
+                setRawInstalments(nr)
+            } else {
+                // Per year: redistribute total evenly across all months
+                const sortedNext = next.slice().sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
+                const ni = {}, nr = {}
                 const amounts = splitEvenly(numVal, sortedNext.length)
                 sortedNext.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
+                updateField('instalmentAmounts', ni)
+                setRawInstalments(nr)
             }
-            updateField('instalmentAmounts', ni)
-            setRawInstalments(nr)
         }
         if (!next.includes(month) && datesProp?.[month]) {
             const { [month]: __, ...rest } = datesProp
@@ -625,14 +656,14 @@ function EntryCard({
         <div>
             {/* Amount + frequency */}
             <div style={{ marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#999', display: 'block', marginTop: 4, marginBottom: 10, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: grey1, display: 'block', marginTop: 4, marginBottom: 10, letterSpacing: 0.5, textTransform: 'uppercase' }}>
                     Amount
                 </span>
                 <div style={{ display: 'flex', gap: 8, height: showTermSplit ? 89 : 44, transition: 'height 0.3s ease' }}>
                     <div style={{ flex: '1 1 0', minWidth: 0, height: '100%' }}>
                         <div style={{
-                            border: 'none',
-                            borderRadius: 10, background: '#f5f5f5',
+                            border: inputBorder,
+                            borderRadius: 10, background: inputBg,
                             overflow: 'hidden',
                             height: '100%',
                         }}>
@@ -642,7 +673,7 @@ function EntryCard({
                                 padding: '0 14px', height: 44, gap: 6,
                             }}>
                                 {showTermSplit && (
-                                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#aaa', whiteSpace: 'nowrap' }}>
+                                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey3, whiteSpace: 'nowrap' }}>
                                         Term
                                     </span>
                                 )}
@@ -671,7 +702,7 @@ function EntryCard({
                                     padding: '0 14px', height: 44, gap: 6,
                                     borderTop: '1px solid #f0f0f0',
                                 }}>
-                                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#aaa', whiteSpace: 'nowrap' }}>
+                                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey3, whiteSpace: 'nowrap' }}>
                                         Hols
                                     </span>
                                     <span style={{ fontSize: 16, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>
@@ -698,16 +729,44 @@ function EntryCard({
                     <CustomSelect
                         value={frequency}
                         onChange={(v) => {
+                            const prevFreq = frequency
+                            const currentAmt = parseFloat(String(amount || '0').replace(/,/g, '')) || 0
                             updateField('frequency', v)
                             setShowFreqPicker(v === 'yearly')
-                            // Save schedule frequency to match the amount frequency
-                            if (v === 'yearly') {
-                                const sf = entry.scheduleFrequency || (scheduleFreqOptions ? scheduleFreqOptions.find(f => f !== 'yearly') || scheduleFreqOptions[0] : null) || (frequencyOptions.includes('monthly') ? 'monthly' : frequencyOptions.find(f => f !== 'yearly' && f !== 'one-off')) || 'monthly'
-                                updateField('scheduleFrequency', sf)
-                            } else {
-                                // Default paid frequency matches amount frequency
-                                if (!entry.scheduleFrequency) updateField('scheduleFrequency', v)
+
+                            // Recalculate instalment amounts only (never change the amount field)
+                            if (currentAmt > 0 && months.length > 0) {
+                                if (prevFreq === 'yearly' && v === 'irregular') {
+                                    // Per year → Per instalment: each instalment = the amount
+                                    const amtStr = String(currentAmt)
+                                    const ni = {}, nr = {}
+                                    months.forEach(m => { ni[m] = amtStr; nr[m] = amtStr })
+                                    updateField('instalmentAmounts', ni)
+                                    setRawInstalments(nr)
+                                } else if (prevFreq === 'irregular' && v === 'yearly') {
+                                    // Per instalment → Per year: split total evenly
+                                    const ni = {}, nr = {}
+                                    const amounts = splitEvenly(currentAmt, months.length)
+                                    months.forEach((m, i) => { ni[m] = String(amounts[i]); nr[m] = String(amounts[i]) })
+                                    updateField('instalmentAmounts', ni)
+                                    setRawInstalments(nr)
+                                }
                             }
+
+                            // Reset schedule frequency to default for the new amount frequency
+                            if (v === 'yearly') {
+                                const newSf = freqLabelOverrides ? 'irregular' : 'monthly'
+                                updateField('scheduleFrequency', newSf)
+                                setScheduleFreq(newSf)
+                            } else {
+                                updateField('scheduleFrequency', v)
+                                setScheduleFreq(v)
+                            }
+                            // Reset schedule dates
+                            updateField('nextDate', '')
+                            updateField('endDate', '')
+                            updateField('dayOfWeek', '')
+                            updateField('dayOfMonth', '')
                             if (v !== 'weekly' && v !== 'fortnightly' && v !== 'monthly') {
                                 if (variesByTerm) {
                                     updateField('variesByTerm', false)
@@ -719,12 +778,12 @@ function EntryCard({
                         options={frequencyOptions.map(f => ({ value: f, label: freqLabelOverrides?.[f] || FREQ_LABELS[f] }))}
                         minWidth={100}
                         triggerStyle={{
-                            width: '100%', border: 'none',
+                            width: '100%', border: inputBorder,
                             borderRadius: 10,
                             padding: '0 28px 0 12px',
                             fontSize: 14, fontWeight: 600,
                             fontFamily: 'Nunito, sans-serif',
-                            color: '#333', background: '#f5f5f5',
+                            color: '#333', background: inputBg,
                             cursor: 'pointer',
                             display: 'flex', alignItems: 'center',
                             boxSizing: 'border-box',
@@ -764,7 +823,7 @@ function EntryCard({
                                 boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                             }} />
                         </div>
-                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: variesByTerm ? '#333' : '#bbb' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: variesByTerm ? '#333' : (compact ? '#bbb' : '#999') }}>
                             Different amount outside term
                         </span>
                     </button>
@@ -772,98 +831,86 @@ function EntryCard({
             </div>
 
             {/* Divider between Amount and Schedule */}
-            {frequency !== 'irregular' && <div style={{ height: 1, background: '#f0f0f0', margin: '0 0 16px' }} />}
 
             {/* === ONE-OFF MODE: just a date picker === */}
             {frequency === 'one-off' && (<>
-                <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#999', display: 'block', marginBottom: 10, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                    Schedule
+                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
+                    On
                 </span>
-                <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    border: 'none', borderRadius: 12, background: '#f5f5f5',
-                    padding: '12px 14px', marginBottom: 16,
-                }}>
-                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                        Date
-                    </span>
-                    <div style={{ position: 'relative' }}>
-                        <span style={{
-                            fontSize: 14, fontWeight: 600, color: '#888',
-                            fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                            background: '#f8f8f8', padding: '6px 12px', borderRadius: 8,
-                            display: 'inline-block', whiteSpace: 'nowrap',
-                            minWidth: 120, textAlign: 'center',
-                        }}>
-                            {nextDate ? fmt(nextDate) : 'Select date'}
+                <div style={{ position: 'relative', marginBottom: 16 }}>
+                    <div style={{
+                        height: 44, border: inputBorder, borderRadius: 10,
+                        display: 'flex', alignItems: 'center', padding: '0 14px',
+                        background: inputBg,
+                    }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: nextDateRaw ? '#333' : '#bbb' }}>
+                            {nextDateRaw ? fmt(nextDateRaw) : 'Select date'}
                         </span>
-                        <input
-                            type="date"
-                            value={nextDate || ''}
-                            onFocus={() => { dateActiveRef.current = true }}
-                            onBlur={() => { dateActiveRef.current = false }}
-                            onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
-                            style={{
-                                position: 'absolute', inset: 0,
-                                opacity: 0, width: '100%', height: '100%',
-                                cursor: 'pointer', fontSize: 16,
-                            }}
-                        />
                     </div>
+                    <input
+                        type="date"
+                        value={nextDateRaw || ''}
+                        onFocus={() => { dateActiveRef.current = true }}
+                        onBlur={() => { dateActiveRef.current = false }}
+                        onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
+                        style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
+                    />
                 </div>
             </>)}
 
             {/* === WEEKLY/FORTNIGHTLY/MONTHLY/YEARLY: schedule card === */}
             {(frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly' || frequency === 'yearly' || showFreqPicker) && frequency !== 'irregular' && frequency !== 'one-off' && (<>
-                <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#999', display: 'block', marginBottom: 10, letterSpacing: 0.5, textTransform: 'uppercase' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: grey1, display: 'block', marginBottom: 10, letterSpacing: 0.5, textTransform: 'uppercase' }}>
                     Schedule
                 </span>
                 <div style={{ marginBottom: 16 }}>
-                    {/* Paid + On the row */}
-                    {(sf === 'weekly' || sf === 'fortnightly' || sf === 'monthly' || sf === 'yearly' || showFreqPicker) && sf !== 'irregular' && (
+                    {/* Paid dropdown row (only for yearly — others skip straight to day selector) */}
+                    {frequency === 'yearly' && (sf === 'weekly' || sf === 'fortnightly' || sf === 'monthly' || sf === 'yearly' || showFreqPicker || sf === 'irregular') && (
                         <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                             <div style={{ flex: 1 }}>
-                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
                                     Paid
                                 </span>
                                 <CustomSelect
-                                    value={entry.scheduleFrequency || frequency}
+                                    value={entry.scheduleFrequency || (frequency === 'yearly' ? (scheduleFreq || 'irregular') : frequency)}
                                     onChange={(v) => {
                                         setScheduleFreq(v)
                                         updateField('scheduleFrequency', v)
                                     }}
                                     options={(scheduleFreqOptions || (() => {
-                                        const order = ['weekly', 'fortnightly', 'monthly', 'quarterly', 'yearly']
+                                        const order = ['weekly', 'fortnightly', 'monthly', 'yearly']
                                         const idx = order.indexOf(frequency)
-                                        return idx >= 0 ? order.slice(0, idx + 1) : order
+                                        const opts = idx >= 0 ? order.slice(0, idx + 1) : order
+                                        if (frequency === 'yearly') opts.push('irregular')
+                                        return opts
                                     })()).map(f => ({ value: f, label: scheduleFreqLabels?.[f] || SCHEDULE_FREQ_LABELS[f] || FREQ_LABELS[f] }))}
                                     triggerStyle={{
-                                        width: '100%', height: 44, border: 'none',
+                                        width: '100%', height: 44, border: inputBorder,
                                         borderRadius: 10, padding: '0 28px 0 14px',
                                         fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                        color: '#333', background: '#f5f5f5', cursor: 'pointer',
+                                        color: '#333', background: inputBg, cursor: 'pointer',
                                         display: 'flex', alignItems: 'center', boxSizing: 'border-box',
                                     }}
                                 />
                             </div>
-                            <div style={{ flex: 1 }}>
-                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                            {sf !== 'irregular' && <div style={{ flex: 1 }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
                                     {sf === 'monthly' ? 'On the' : 'On'}
                                 </span>
-                            {sf === 'yearly' ? (
+                            {sf === 'yearly' || sf === 'one-off' ? (
                                 <div style={{ position: 'relative' }}>
                                     <div style={{
-                                        height: 44, border: 'none', borderRadius: 10,
+                                        height: 44, border: inputBorder, borderRadius: 10,
                                         display: 'flex', alignItems: 'center', padding: '0 14px',
-                                        background: '#f5f5f5',
+                                        background: inputBg,
                                     }}>
-                                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: nextDate ? '#333' : '#bbb' }}>
-                                            {nextDate ? fmt(nextDate) : 'Select date'}
+                                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: nextDateRaw ? '#333' : '#bbb' }}>
+                                            {nextDateRaw ? fmt(nextDateRaw) : 'Select date'}
                                         </span>
                                     </div>
                                     <input
                                         type="date"
-                                        value={nextDate || ''}
+                                        value={nextDateRaw || ''}
                                         onFocus={() => { dateActiveRef.current = true }}
                                         onBlur={() => { dateActiveRef.current = false }}
                                         onChange={(e) => e.target.value && updateField('nextDate', e.target.value)}
@@ -876,10 +923,10 @@ function EntryCard({
                                     onChange={(v) => updateField('dayOfWeek', v)}
                                     options={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => ({ value: d.toLowerCase(), label: d + 's' }))}
                                     triggerStyle={{
-                                        width: '100%', height: 44, border: 'none',
+                                        width: '100%', height: 44, border: inputBorder,
                                         borderRadius: 10, padding: '0 28px 0 14px',
                                         fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                        color: '#333', background: '#f5f5f5', cursor: 'pointer',
+                                        color: '#333', background: inputBg, cursor: 'pointer',
                                         display: 'flex', alignItems: 'center', boxSizing: 'border-box',
                                     }}
                                 />
@@ -896,33 +943,82 @@ function EntryCard({
                                         { value: 'last', label: 'Last day' },
                                     ]}
                                     triggerStyle={{
-                                        width: '100%', height: 44, border: 'none',
+                                        width: '100%', height: 44, border: inputBorder,
                                         borderRadius: 10, padding: '0 28px 0 14px',
                                         fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                        color: '#333', background: '#f5f5f5', cursor: 'pointer',
+                                        color: '#333', background: inputBg, cursor: 'pointer',
                                         display: 'flex', alignItems: 'center', boxSizing: 'border-box',
                                     }}
                                 />
                             )}
-                            </div>
+                            </div>}
                         </div>
                     )}
 
-                    {/* From / End dates (weekly/fortnightly/monthly) */}
+                    {/* Simple "Paid on" for monthly amount frequency */}
+                    {frequency === 'monthly' && (
+                        <div style={{ marginBottom: 10 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
+                                Paid on the
+                            </span>
+                            <CustomSelect
+                                value={entry.dayOfMonth || '1'}
+                                onChange={(v) => updateField('dayOfMonth', v)}
+                                options={[
+                                    ...Array.from({ length: 31 }, (_, i) => {
+                                        const d = i + 1
+                                        const suffix = d === 1 || d === 21 || d === 31 ? 'st' : d === 2 || d === 22 ? 'nd' : d === 3 || d === 23 ? 'rd' : 'th'
+                                        return { value: String(d), label: `${d}${suffix}` }
+                                    }),
+                                    { value: 'last', label: 'Last day' },
+                                ]}
+                                triggerStyle={{
+                                    width: '100%', height: 44, border: inputBorder,
+                                    borderRadius: 10, padding: '0 28px 0 14px',
+                                    fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                    color: '#333', background: inputBg, cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', boxSizing: 'border-box',
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* Simple "Paid on" for weekly/fortnightly amount frequency */}
+                    {(frequency === 'weekly' || frequency === 'fortnightly') && (
+                        <div style={{ marginBottom: 10 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
+                                Paid on
+                            </span>
+                            <CustomSelect
+                                value={entry.dayOfWeek || 'monday'}
+                                onChange={(v) => updateField('dayOfWeek', v)}
+                                options={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => ({ value: d.toLowerCase(), label: d + 's' }))}
+                                triggerStyle={{
+                                    width: '100%', height: 44, border: inputBorder,
+                                    borderRadius: 10, padding: '0 28px 0 14px',
+                                    fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                    color: '#333', background: inputBg, cursor: 'pointer',
+                                    display: 'flex', alignItems: 'center', boxSizing: 'border-box',
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {/* From / Until dates (weekly/fortnightly/monthly) */}
                     {(sf === 'weekly' || sf === 'fortnightly' || sf === 'monthly') && (
                         <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
                             <div style={{ flex: 1 }}>
-                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
+                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
                                     From
                                 </span>
                                 <div style={{ position: 'relative' }}>
                                     <div style={{
-                                        height: 44, border: 'none', borderRadius: 10,
+                                        height: 44, border: inputBorder, borderRadius: 10,
                                         display: 'flex', alignItems: 'center', padding: '0 14px',
-                                        background: '#f5f5f5',
+                                        background: inputBg,
                                     }}>
                                         <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: nextDate ? '#333' : '#bbb' }}>
-                                            {nextDate ? fmt(nextDate) : 'Optional'}
+                                            {nextDate ? fmt(nextDate) : 'Select date'}
                                         </span>
                                     </div>
                                     <input
@@ -936,22 +1032,22 @@ function EntryCard({
                                 </div>
                             </div>
                             <div style={{ flex: 1 }}>
-                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
-                                    End
+                                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
+                                    Until
                                 </span>
                                 <div style={{ position: 'relative' }}>
                                     <div style={{
-                                        height: 44, border: 'none', borderRadius: 10,
+                                        height: 44, border: inputBorder, borderRadius: 10,
                                         display: 'flex', alignItems: 'center', padding: '0 14px',
-                                        background: '#f5f5f5',
+                                        background: inputBg,
                                     }}>
-                                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: entry.endDate ? '#333' : '#bbb' }}>
-                                            {entry.endDate ? fmt(entry.endDate) : 'Optional'}
+                                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                            {fmt(entry.endDate || '2026-08-31')}
                                         </span>
                                     </div>
                                     <input
                                         type="date"
-                                        value={entry.endDate || ''}
+                                        value={entry.endDate || '2026-08-31'}
                                         onFocus={() => { dateActiveRef.current = true }}
                                         onBlur={() => { dateActiveRef.current = false }}
                                         onChange={(e) => e.target.value && updateField('endDate', e.target.value)}
@@ -968,11 +1064,11 @@ function EntryCard({
             {/* === IRREGULAR MODE: month pills + customise === */}
             {(isIrregular || sf === 'irregular') && (
                 <>
-                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', display: 'block', marginBottom: 6 }}>
-                        Payment months
+                    <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
+                        {frequency === 'irregular' ? 'Paid in' : 'In'}
                     </span>
                     <div style={{
-                        border: 'none', borderRadius: 12, background: '#f5f5f5',
+                        border: inputBorder, borderRadius: 12, background: inputBg,
                         overflow: 'hidden', marginBottom: 16,
                     }}>
                         <div style={{
@@ -983,8 +1079,8 @@ function EntryCard({
                                 const selected = months.includes(m)
                                 return (
                                     <button key={m} onClick={() => toggleMonth(m)} style={{
-                                        background: selected ? accent : '#fff',
-                                        color: selected ? '#fff' : '#888',
+                                        background: selected ? accent : (compact ? '#fff' : '#eee'),
+                                        color: selected ? '#fff' : grey2,
                                         border: 'none',
                                         borderRadius: 8, padding: '7px 0',
                                         fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
@@ -1022,7 +1118,7 @@ function EntryCard({
                                     <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#555' }}>
                                         Customise amounts & dates
                                     </span>
-                                    <p style={{ fontSize: 11, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#aaa', margin: '2px 0 0' }}>
+                                    <p style={{ fontSize: 11, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: grey3, margin: '2px 0 0' }}>
                                         Optional — set exact amount and date per payment
                                     </p>
                                 </div>
@@ -1044,14 +1140,23 @@ function EntryCard({
                                             <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333', minWidth: 70 }}>
                                                 {MONTH_LABELS[m]}
                                             </span>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: -5 }}>
+                                            {isPerInstalment && (
+                                                <span style={{
+                                                    fontSize: 14, fontWeight: 600, color: '#333', fontFamily: 'Nunito, sans-serif',
+                                                    padding: '6px 0', whiteSpace: 'nowrap', marginLeft: 28,
+                                                }}>
+                                                    {getCurrencySymbol()}{formatDisplay(rawInstalments[m] || '')}
+                                                </span>
+                                            )}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: -5, marginLeft: 'auto' }}>
+                                                {!isPerInstalment && (
                                                 <div style={{
                                                     display: 'flex', alignItems: 'center', gap: 2,
-                                                    background: '#fff', borderRadius: 8,
+                                                    background: '#f0f0f0', borderRadius: 8,
                                                     padding: '4px 8px', width: 80, boxSizing: 'border-box',
                                                     marginLeft: 5
                                                 }}>
-                                                    <span style={{ fontSize: 14, fontWeight: 600, color: '#888', fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>
+                                                    <span style={{ fontSize: 14, fontWeight: 600, color: grey2, fontFamily: 'Nunito, sans-serif', flexShrink: 0 }}>
                                                         {getCurrencySymbol()}
                                                     </span>
                                                     <input
@@ -1065,15 +1170,15 @@ function EntryCard({
                                                         style={{
                                                             flex: 1, border: 'none', background: 'transparent',
                                                             fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                                            color: '#888', outline: 'none', padding: 0, textAlign: 'left',
+                                                            color: grey2, outline: 'none', padding: 0, textAlign: 'left',
                                                         }}
                                                     />
-                                                </div>
+                                                </div>)}
                                                 <div style={{ position: 'relative' }}>
                                                     <span style={{
-                                                        fontSize: 14, fontWeight: 600, color: '#888',
+                                                        fontSize: 14, fontWeight: 600, color: grey2,
                                                         fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                                                        background: '#fff', padding: '6px 12px', borderRadius: 8,
+                                                        background: '#f0f0f0', padding: '6px 12px', borderRadius: 8,
                                                         display: 'inline-block', whiteSpace: 'nowrap',
                                                         minWidth: 120, textAlign: 'center',
                                                     }}>

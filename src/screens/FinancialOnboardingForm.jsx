@@ -23,6 +23,7 @@ import {
     analytics,
     ONBOARDING_EVENTS,
     AUTH_EVENTS,
+    SCREEN_EVENTS,
     getOnboardingStepProperties,
     getUserProperties,
     getStudentLoanProperties,
@@ -163,13 +164,24 @@ function buildGraphEvents(formData) {
         const hasMultiple = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
         let entryNum = 0
         for (const entry of entries) {
-            const amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
+            let amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
+            const amtFreq = entry.frequency || cat.defaultFrequency
+            const paidFreq = entry.scheduleFrequency || amtFreq
+            const freq = paidFreq === 'one-off' ? amtFreq : paidFreq === 'irregular' ? 'irregular' : paidFreq
+            // For irregular entries, sum instalment amounts if top-level amount is 0
+            if (amt <= 0 && freq === 'irregular' && entry.instalmentAmounts) {
+                amt = Object.values(entry.instalmentAmounts).reduce((s, v) => s + (parseFloat(String(v || '0').replace(/,/g, '')) || 0), 0)
+            }
             if (amt <= 0) continue
             entryNum++
             const type = isIncome ? 'income' : 'expense'
-            const freq = entry.frequency || cat.defaultFrequency
             const entryLabel = hasMultiple ? `${cat.label} ${entryNum}` : cat.label
             const entryEditType = hasMultiple ? `${cat.id}:${entry.id || entryNum}` : cat.id
+            // Convert amount when schedule frequency differs from amount frequency
+            const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, yearly: 1, irregular: 1, 'one-off': 1 }
+            const convertedAmt = (freq !== amtFreq && FREQ_PER_YEAR[amtFreq] && FREQ_PER_YEAR[freq])
+                ? Math.round(amt * FREQ_PER_YEAR[amtFreq] / FREQ_PER_YEAR[freq] * 100) / 100
+                : amt
 
             if (freq === 'irregular') {
                 const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
@@ -197,12 +209,12 @@ function buildGraphEvents(formData) {
                     while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
                     while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
                 }
-                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : amt
+                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : convertedAmt
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
                 while (d <= endDate) {
                     if (d >= AY_START) {
                         const dateStr = toLocalDate(d)
-                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
+                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? convertedAmt : nonTermAmt) : convertedAmt
                         if (eventAmt > 0) {
                             events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: entryEditType })
                         }
@@ -216,7 +228,7 @@ function buildGraphEvents(formData) {
                 const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
                 const earliest = startFrom > AY_START ? startFrom : AY_START
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
-                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : amt
+                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : convertedAmt
                 let month = AY_START.getMonth()
                 let year = AY_START.getFullYear()
                 for (let i = 0; i < 13; i++) {
@@ -225,7 +237,7 @@ function buildGraphEvents(formData) {
                     const d = new Date(year, month, day)
                     if (d >= earliest && d <= endDate) {
                         const dateStr = toLocalDate(d)
-                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? amt : nonTermAmt) : amt
+                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? convertedAmt : nonTermAmt) : convertedAmt
                         if (eventAmt > 0) {
                             events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: entryEditType })
                         }
@@ -838,6 +850,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const [nearbyIdx, setNearbyIdx] = useState(0)           // which nearby event is active
     const [showDotHint, setShowDotHint] = useState(false)
     const dotHintShownRef = useRef(false)
+    const [skipToast, setSkipToast] = useState(null)
+    const skipToastTimerRef = useRef(null)
+    const [editWarning, setEditWarning] = useState('')
     const [editingBalance, setEditingBalance] = useState(false)
     const [editBalanceAmount, setEditBalanceAmount] = useState('')
     const transitionRef = useRef(null) // guards against overlapping transitions
@@ -1039,6 +1054,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
         identifyUser()
     }, [])
 
+    useEffect(() => { analytics.track(SCREEN_EVENTS.ONBOARDING_VIEWED) }, [])
     useEffect(() => {
         if (!localStorage.getItem('signup_onboarding_pending')) return
         trackOnce('onboarding_started_tracked', () => {
@@ -1320,6 +1336,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 if (freq === 'one-off' && !entry.nextDate) {
                     return 'Please select a date'
                 }
+                const sf = entry.scheduleFrequency || freq
+                if (freq === 'yearly' && sf === 'yearly' && !entry.nextDate) {
+                    return 'Please select a date'
+                }
             }
         }
 
@@ -1512,10 +1532,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     /* --- Submit --- */
 
-    const submit = async () => {
-        setSubmitting(true)
-
-        // Start saving and pass the promise to the loading screen
+    const submit = () => {
+        // Show loading screen FIRST to avoid re-render crash on summary panel
         const savePromise = (async () => {
         try {
             const {
@@ -1527,7 +1545,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 return
             }
 
-            await Promise.all([
+            await Promise.allSettled([
                 saveCashflowForecast(user.id, formData),
                 saveTermDates(user.id, formData.termDates),
                 formData.balance ? saveBalanceHistory(user.id, formData.balance) : Promise.resolve(),
@@ -1551,7 +1569,6 @@ export default function FinancialOnboardingForm({ onComplete }) {
             // Clear referral code from localStorage after saving
             if (referredBy) {
                 localStorage.removeItem('referral_code')
-                // Track successful referral conversion
                 analytics.track(AUTH_EVENTS.REFERRAL_SIGNUP_COMPLETED, {
                     referral_code: referredBy
                 })
@@ -1575,22 +1592,17 @@ export default function FinancialOnboardingForm({ onComplete }) {
             })
         } catch (err) {
             console.error(err)
-
-            // Track onboarding error
             analytics.track(ONBOARDING_EVENTS.ERROR, {
                 error_message: err.message,
                 error_type: err.name,
                 step_id: currentStep.id,
                 step_number: currentIndex + 1
             })
-
             analytics.error(err, { context: 'onboarding_submission' })
-        } finally {
-            setSubmitting(false)
         }
         })()
 
-        // Show loading screen immediately, passing the save promise
+        // Navigate to loading screen immediately — no intermediate re-render
         if (onComplete) {
             onComplete(savePromise)
         }
@@ -1726,6 +1738,17 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         terms={terms}
                         expandedTerm={activePanel === 0 && activeExpanded.size === 1 ? [...activeExpanded][0] : undefined}
                         balance={activePanel >= 1 ? balanceNum : undefined}
+                        actualBalance={activePanel >= 1 ? balanceNum : undefined}
+                        balanceAnchorDate={toLocalDate(new Date())}
+                        balanceStartDate={(() => {
+                            const terms = formData.termDates?.terms || []
+                            if (terms.length > 0) {
+                                const sorted = [...terms].sort((a, b) => a.start.localeCompare(b.start))
+                                return sorted[0].start
+                            }
+                            return toLocalDate(AY_START)
+                        })()}
+                        weeklySpendRate={parseFloat(String(formData.weeklySpend || '0').replace(/,/g, '')) || 0}
                         overdraft={formData.overdraft ? parseFloat(String(formData.overdraft || '0').replace(/,/g, '')) : undefined}
                         events={activePanel >= 3 ? buildGraphEvents(formData).filter(e => { const wsIdx = PANEL_STEPS.indexOf('weeklySpend'); return e.editType !== 'weeklySpend' || activePanel >= wsIdx }) : []}
                         hiddenEventTypes={(() => {
@@ -1780,6 +1803,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             setNearbyIdx(sameDate.length > 1 ? sameDate.findIndex(ev => ev.editType === evt.editType && ev.amount === evt.amount) : 0)
                             setEditingEvent({ ...evt, clickX: rect.left + rect.width / 2, clickY: rect.top })
                             setEditAmount(String(evt.amount))
+                            setEditWarning('')
                         }}
                         hideDots={PANEL_STEPS[activePanel] === 'summary'}
                         activeEventDot={editingEvent}
@@ -2229,11 +2253,81 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 )}
                                 {panelId === 'summary' && (() => {
                                     const allEvts = buildGraphEvents(formData)
-                                    const totalIncome = allEvts.filter(e => e.type === 'income' && !e.removed).reduce((s, e) => s + e.amount, 0)
-                                    const totalExpense = allEvts.filter(e => e.type === 'expense' && !e.removed).reduce((s, e) => s + e.amount, 0)
-                                    const net = totalIncome - totalExpense
                                     const sym = getCurrencySymbol()
                                     const fmtK = (v) => { if (v >= 1000) { const k = v / 1000; const dec = Math.round(k * 10) % 10; return `${sym}${k.toFixed(dec === 0 ? 0 : 1)}k` } return `${sym}${Math.round(v).toLocaleString()}` }
+
+                                    // Calculate totals from formData (same as Dashboard calcEntryTotal)
+                                    const AY_S = new Date('2025-09-01T00:00:00')
+                                    const AY_E = new Date('2026-08-31T00:00:00')
+                                    const removedSetLocal = new Set(formData.removedEvents || [])
+                                    const calcTotal = (entry, cat) => {
+                                        const amt = parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0
+                                        if (amt <= 0) return 0
+                                        const freq = entry.frequency || cat.defaultFrequency
+                                        const pf = entry.scheduleFrequency || freq
+                                        const ef = pf === 'one-off' ? freq : pf === 'irregular' ? 'irregular' : pf
+                                        const entries = formData[cat.formKey] || []
+                                        const hasMultiple = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
+                                        const entryEditType = hasMultiple ? (entry.id ? `${cat.id}:${entry.id}` : cat.id) : cat.id
+                                        const isSkipped = (dateStr) => removedSetLocal.has(`${entryEditType}:${dateStr}`)
+                                        if (freq === 'irregular' || ef === 'irregular') {
+                                            const months = entry.months || []
+                                            let instTotal = 0
+                                            for (const m of months) {
+                                                const date = entry.dates?.[m] || MONTH_KEY_TO_DATE[m]
+                                                if (date && isSkipped(date)) continue
+                                                const v = parseFloat(String(entry.instalmentAmounts?.[m] || '0').replace(/,/g, '')) || 0
+                                                instTotal += v > 0 ? v : (amt / (months.length || 1))
+                                            }
+                                            return instTotal > 0 ? instTotal : amt
+                                        }
+                                        if (freq === 'one-off' || ef === 'one-off') {
+                                            if (entry.nextDate && isSkipped(entry.nextDate)) return 0
+                                            return amt
+                                        }
+                                        if (freq === 'yearly') {
+                                            if (entry.nextDate && isSkipped(entry.nextDate)) return 0
+                                            return amt
+                                        }
+                                        const start = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_S
+                                        const end = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_E
+                                        if (start > end) return 0
+                                        const nonTermAmt = entry.variesByTerm ? (parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) || 0) : amt
+                                        if (ef === 'weekly' || ef === 'fortnightly') {
+                                            const interval = ef === 'weekly' ? 7 : 14
+                                            let total = 0
+                                            let d = new Date(start)
+                                            while (d <= end) {
+                                                const dateStr = toLocalDate(d)
+                                                if (!isSkipped(dateStr)) {
+                                                    total += (entry.variesByTerm && !isInTerm(dateStr, terms)) ? nonTermAmt : amt
+                                                }
+                                                d = new Date(d.getTime() + interval * 86400000)
+                                            }
+                                            return total
+                                        }
+                                        if (ef === 'monthly') {
+                                            let total = 0, m = start.getMonth(), y = start.getFullYear()
+                                            for (let i = 0; i < 24; i++) {
+                                                const d = new Date(y, m, Math.min(parseInt(entry.dayOfMonth) || 1, new Date(y, m + 1, 0).getDate()))
+                                                if (d >= start && d <= end) {
+                                                    const dateStr = toLocalDate(d)
+                                                    if (!isSkipped(dateStr)) {
+                                                        total += (entry.variesByTerm && !isInTerm(dateStr, terms)) ? nonTermAmt : amt
+                                                    }
+                                                }
+                                                m++; if (m > 11) { m = 0; y++ }
+                                                if (new Date(y, m, 1) > end) break
+                                            }
+                                            return total
+                                        }
+                                        return amt
+                                    }
+                                    const getSourceTotal = (catId) => {
+                                        const cat = CATEGORY_MAP[catId]
+                                        if (!cat) return 0
+                                        return (formData[cat.formKey] || []).reduce((s, e) => s + calcTotal(e, cat), 0)
+                                    }
 
                                     const INCOME_SOURCE_MAP = INCOME_CATEGORIES.map(cat => ({
                                         id: cat.id, label: cat.label, editType: cat.id, panelId: cat.panelId
@@ -2242,11 +2336,21 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         id: cat.id, label: cat.label, editType: cat.id, panelId: cat.panelId
                                     }))
 
-                                    const getYearly = (editTypes, includeNoDot = false) => allEvts.filter(e => editTypes.includes(e.editType) && !e.removed && (includeNoDot || !e.noDot)).reduce((s, e) => s + e.amount, 0)
-
                                     const incomeSources = INCOME_SOURCE_MAP.filter(s => (formData.incomeSources || []).includes(s.id))
                                     const expenseSources = EXPENSE_SOURCE_MAP.filter(s => (formData.expenseSources || []).includes(s.id))
                                     const weeklySpendAmt = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, ''))
+                                    const weeklySpendNonTermAmt = formData.weeklySpendVariesByTerm ? (parseFloat(String(formData.weeklySpendNonTerm || '0').replace(/,/g, '')) || 0) : weeklySpendAmt
+                                    const weeklySpendYearly = (() => {
+                                        if (!formData.weeklySpendVariesByTerm) return weeklySpendAmt * 52
+                                        let total = 0
+                                        const s = new Date('2025-09-01T00:00:00'), e = new Date('2026-08-31T00:00:00')
+                                        let d = new Date(s)
+                                        while (d <= e) {
+                                            total += isInTerm(toLocalDate(d), terms) ? weeklySpendAmt : weeklySpendNonTermAmt
+                                            d = new Date(d.getTime() + 7 * 86400000)
+                                        }
+                                        return total
+                                    })()
                                     const oneOffFiltered = (formData.oneOffItems || []).filter(it => it.name || it.amount)
                                     const oneOffCount = oneOffFiltered.length
                                     const oneOffTotal = oneOffFiltered.reduce((s, it) => {
@@ -2332,6 +2436,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
                                                 {/* Yearly Overview */}
                                                 {(() => {
+                                                    const totalIncome = INCOME_CATEGORIES.reduce((t, cat) => t + ((formData.incomeSources || []).includes(cat.id) ? getSourceTotal(cat.id) : 0), 0)
+                                                    const totalExpense = EXPENSE_CATEGORIES.reduce((t, cat) => t + ((formData.expenseSources || []).includes(cat.id) ? getSourceTotal(cat.id) : 0), 0) + weeklySpendYearly
+                                                    const net = totalIncome - totalExpense
                                                     const total = totalIncome + totalExpense
                                                     const spendPct = total > 0 ? Math.round((totalExpense / total) * 100) : 50
                                                     return (
@@ -2363,7 +2470,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                 {incomeSources.length > 0 && (
                                                     <div style={{ marginBottom: 4 }}>
                                                         {sectionHeader(<PiTrendUp size={15} color="#147b75" />, 'Income')}
-                                                        {incomeSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getYearly([s.editType])} color="rgba(20,123,117,0.8)" onTap={() => goToPanel(s.panelId)} />)}
+                                                        {incomeSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getSourceTotal(s.id)} color="rgba(20,123,117,0.8)" onTap={() => goToPanel(s.panelId)} />)}
                                                     </div>
                                                 )}
 
@@ -2371,9 +2478,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                 {expenseSources.length > 0 && (
                                                     <div style={{ marginBottom: 4 }}>
                                                         {sectionHeader(<PiTrendDown size={15} color="#e06470" />, 'Expenses')}
-                                                        {expenseSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getYearly([s.editType])} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel(s.panelId)} />)}
+                                                        {expenseSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getSourceTotal(s.id)} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel(s.panelId)} />)}
                                                         {weeklySpendAmt > 0 && (
-                                                            <SummaryRow sourceId="weeklySpend" label="Weekly Spend" amount={getYearly(['weeklySpend'], true)} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel('weeklySpend')} />
+                                                            <SummaryRow sourceId="weeklySpend" label="Weekly Spend" amount={weeklySpendYearly} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel('weeklySpend')} />
                                                         )}
                                                     </div>
                                                 )}
@@ -2463,8 +2570,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     const isIncome = editingEvent.type === 'income'
                     const color = isIncome ? '#147b75' : '#e06470'
                     const cat = CATEGORY_MAP[editingEvent.editType]
-                    const eventFreq = cat ? (formData[cat.formKey]?.[0]?.frequency || cat.defaultFrequency) : 'monthly'
-                    const freqLabel = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly', yearly: 'Yearly', irregular: 'Irregular', 'one-off': 'One-off' }[eventFreq] || ''
+                    const amtFreq = cat ? (formData[cat.formKey]?.[0]?.frequency || cat.defaultFrequency) : 'monthly'
+                    const paidFreq = cat ? (formData[cat.formKey]?.[0]?.scheduleFrequency || amtFreq) : amtFreq
+                    const eventFreq = paidFreq === 'irregular' ? 'irregular' : paidFreq === 'one-off' ? amtFreq : paidFreq
+                    const freqLabel = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly', yearly: 'Yearly', irregular: 'Per instalment', 'one-off': 'One-off' }[eventFreq] || ''
                     const skipLabel = (() => {
                         if (!editingEvent.date) return ''
                         if (eventFreq === 'weekly') return 'week'
@@ -2474,7 +2583,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     const handleSave = () => {
                         const val = editAmount.replace(/[^0-9.]/g, '')
                         const parsedAmount = parseFloat(val) || 0
-                        if (parsedAmount <= 0) return
+                        if (parsedAmount <= 0) { setEditWarning('Amount must be greater than zero'); return }
+                        setEditWarning('')
                         if (cat) {
                             const formKey = cat.formKey
                             if (editingEvent.editMonth) {
@@ -2482,7 +2592,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 const entry = entries[0]
                                 const total = entry ? (parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0) : 0
                                 const parsedVal = parseFloat(val) || 0
-                                if (parsedVal > total || parsedVal <= 0) return
+                                if (parsedVal > total) { setEditWarning(`Can't exceed total of ${getCurrencySymbol()}${total.toLocaleString()}`); return }
+                                if (parsedVal <= 0) { setEditWarning('Instalment amount must be greater than zero'); return }
+                                setEditWarning('')
                             }
                             setFormData(prev => {
                                 const entries = prev[formKey] || []
@@ -2510,19 +2622,40 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         setEditingEvent(null)
                     }
                     const handleSkip = () => {
-                        if (editingEvent.editMonth && eventFreq === 'irregular' && cat) {
-                            // Irregular: remove month and redistribute total across remaining months
+                        const prevFormData = { ...formData }
+                        const monthLabel = editingEvent.editMonth
+                            ? editingEvent.editMonth.charAt(0).toUpperCase() + editingEvent.editMonth.slice(1)
+                            : ''
+                        const eventDateMonth = editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { month: 'long' }) : ''
+                        const isDeleteAction = eventFreq === 'irregular' || eventFreq === 'one-off'
+                        const toastLabel = editingEvent.editMonth
+                            ? `${cat?.label || 'Payment'} – ${monthLabel} deleted`
+                            : isDeleteAction
+                                ? `${editingEvent.label || 'Event'} (${editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}) deleted`
+                                : `${editingEvent.label || 'Event'} – ${eventDateMonth} skipped`
+
+                        if (editingEvent.editMonth && (eventFreq === 'irregular') && cat) {
+                            // Irregular/instalment: remove month and redistribute
                             setFormData(prev => {
                                 const entries = prev[cat.formKey] || []
                                 return { ...prev, [cat.formKey]: entries.map(e => {
                                     const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                    const entryFreq = e.frequency || cat.defaultFrequency
+                                    const isPerInst = entryFreq === 'irregular'
                                     const newMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
                                     const newDates = { ...(e.dates || {}) }; delete newDates[editingEvent.editMonth]
                                     const newInst = {}
-                                    if (newMonths.length > 0 && total > 0) {
+                                    if (isPerInst) {
+                                        for (const m of newMonths) {
+                                            newInst[m] = e.instalmentAmounts?.[m] || String(total)
+                                        }
+                                    } else if (newMonths.length > 0 && total > 0) {
                                         const perMonth = Math.round(total * 100 / newMonths.length) / 100
-                                        const leftover = Math.round((total - perMonth * newMonths.length) * 100)
-                                        newMonths.forEach((m, i) => { newInst[m] = String(Math.round((perMonth + (i < leftover ? 0.01 : 0)) * 100) / 100) })
+                                        let remainder = Math.round((total - perMonth * newMonths.length) * 100)
+                                        newMonths.forEach((m, i) => {
+                                            const extra = i < remainder ? 0.01 : 0
+                                            newInst[m] = String(Math.round((perMonth + extra) * 100) / 100)
+                                        })
                                     }
                                     return { ...e, months: newMonths, dates: newDates, instalmentAmounts: newInst }
                                 })}
@@ -2531,6 +2664,10 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             const key = `${editingEvent.editType}:${editingEvent.date}`
                             updateField('removedEvents', [...(formData.removedEvents || []), key])
                         }
+                        // Show undo toast
+                        if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+                        setSkipToast({ label: toastLabel, undoFn: () => setFormData(prevFormData) })
+                        skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
                         setEditingEvent(null)
                     }
                     return (
@@ -2644,46 +2781,60 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             </div>
                                         )
                                     })()}
-                                    {/* Amount + Save + Skip */}
+                                    {/* Amount + Save + Skip/Delete */}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                        <div style={{
-                                            display: 'flex', alignItems: 'center', flex: 1, minWidth: 0,
-                                            border: '1px solid #e8e8e8', borderRadius: 8,
-                                            padding: '0 8px', height: 34, gap: 3, background: '#fff', flexShrink: 0,
-                                        }}>
-                                            <span style={{ fontSize: 14, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
-                                            <input
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={formatMoney(editAmount)}
-                                                onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
-                                                ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
-                                                style={{
-                                                    flex: 1, border: 'none', background: 'transparent',
-                                                    fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
-                                                    color: '#000', outline: 'none', padding: 0,
-                                                }}
-                                            />
-                                        </div>
-                                        <button onClick={handleSave} style={{
-                                            height: 34, borderRadius: 8, border: 'none',
-                                            background: color, padding: '0 12px',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            cursor: 'pointer', flexShrink: 0,
-                                        }}>
-                                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
-                                        </button>
+                                        {amtFreq === 'irregular' && (
+                                            <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333', flex: 1 }}>
+                                                {getCurrencySymbol()}{formatMoney(editAmount)}
+                                            </span>
+                                        )}
+                                        {amtFreq !== 'irregular' && (<>
+                                            <div style={{
+                                                display: 'flex', alignItems: 'center', flex: 1, minWidth: 0,
+                                                border: '1px solid #e8e8e8', borderRadius: 8,
+                                                padding: '0 8px', height: 34, gap: 3, background: '#fff',
+                                                overflow: 'hidden',
+                                            }}>
+                                                <span style={{ fontSize: 14, fontWeight: 600, color: '#444', fontFamily: 'Nunito, sans-serif' }}>{getCurrencySymbol()}</span>
+                                                <input
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={formatMoney(editAmount)}
+                                                    onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                    ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
+                                                    style={{
+                                                        flex: 1, minWidth: 0, border: 'none', background: 'transparent',
+                                                        fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+                                                        color: '#000', outline: 'none', padding: 0,
+                                                    }}
+                                                />
+                                            </div>
+                                            <button onClick={handleSave} style={{
+                                                height: 34, borderRadius: 8, border: 'none',
+                                                background: color, padding: '0 12px',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                cursor: 'pointer', flexShrink: 0,
+                                            }}>
+                                                <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Save</span>
+                                            </button>
+                                        </>)}
                                         <button onClick={handleSkip} style={{
                                             height: 34, borderRadius: 8, border: 'none',
-                                            background: '#f5f5f5', padding: '0 8px',
+                                            background: '#f5f5f5',
+                                            padding: '0 16px', flex: amtFreq === 'irregular' ? 1 : undefined,
                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
                                         }}>
                                             <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                {eventFreq === 'irregular' ? 'Delete' : `Skip ${skipLabel}`}
+                                                {amtFreq === 'irregular' ? 'Delete instalment' : eventFreq === 'irregular' ? 'Delete' : `Skip ${skipLabel}`}
                                             </span>
                                         </button>
                                     </div>
+                                    {editWarning && (
+                                        <p style={{ margin: '6px 0 0', fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                            {editWarning}
+                                        </p>
+                                    )}
                                 </>)}
                             </div>
                         </>
@@ -2769,6 +2920,42 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         </>
                     )
                 })()}
+            {/* Undo toast */}
+            {skipToast && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: 30,
+                    left: 20, right: 20,
+                    background: '#1a1a1a', borderRadius: 14,
+                    padding: '12px 18px',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    zIndex: 200,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.25)',
+                }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#ccc', flex: 1 }}>
+                        {skipToast.label}
+                    </span>
+                    <button
+                        onClick={() => {
+                            skipToast.undoFn()
+                            setSkipToast(null)
+                            if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+                        }}
+                        style={{
+                            background: '#147b75', border: 'none', cursor: 'pointer',
+                            padding: '5px 14px', borderRadius: 8, flexShrink: 0,
+                        }}
+                    >
+                        <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Undo</span>
+                    </button>
+                    <button
+                        onClick={() => { setSkipToast(null); if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current) }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, flexShrink: 0 }}
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                    </button>
+                </div>
+            )}
             </div >
         )
     }

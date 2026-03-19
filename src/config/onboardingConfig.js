@@ -39,7 +39,7 @@ export const STEPS = [
     { id: 'uniFees', heading: 'University Fees', subtitle: 'Only put these down if the money comes out of your bank account.' },
     { id: 'rent', heading: 'Rent & Mortgage', subtitle: 'Halls, private landlords, or home payments.' },
     { id: 'bills', heading: 'Bills', subtitle: 'Gas, electric, water, and Wi-Fi!' },
-    { id: 'phoneSubscriptions', heading: 'Phone & Subscriptions', subtitle: 'Monthly mobile bills, Spotify, Netflix, or the gym.' },
+    { id: 'phoneSubscriptions', heading: 'Subscriptions', subtitle: 'Spotify, Netflix, the gym, or your phone contract.' },
     { id: 'holidayTrips', heading: 'Holiday & Trips', subtitle: 'Estimate how much you plan to spend on any upcoming trips.' },
     { id: 'savingsGoals', heading: 'Savings Goals', subtitle: "Enter how much money you'd like to put into savings." },
     { id: 'predictableTravel', heading: 'Predictable Travel', subtitle: "Any travel costs that you know exactly how much you'll pay for." },
@@ -228,7 +228,6 @@ export const OTHER_INCOME_FREQ_OPTIONS = [
 export const REGULAR_FREQ_OPTIONS = [
     { value: 'weekly', label: 'Weekly' },
     { value: 'monthly', label: 'Monthly' },
-    { value: 'quarterly', label: 'Quarterly' },
     { value: 'other', label: 'Other' }
 ]
 
@@ -390,7 +389,7 @@ export const INITIAL_FORM_DATA = {
 
     oneOffItems: [{ name: '', amount: '', date: '', direction: 'out' }],
 
-    weeklySpend: '75',
+    weeklySpend: '',
     weeklySpendNonTerm: '',
     weeklySpendVariesByTerm: false,
 }

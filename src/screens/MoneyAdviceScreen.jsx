@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { analytics, MONEY_ADVICE_EVENTS } from '../lib/analytics/index.js'
+import { analytics, MONEY_ADVICE_EVENTS, SCREEN_EVENTS } from '../lib/analytics/index.js'
 import { ExternalLink, Mail, ChevronRight } from 'react-feather'
 import { PiLifebuoy, PiChatCircle, PiMoney, PiBriefcase, PiBookOpen, PiHeart, PiWarning, PiShieldCheck } from 'react-icons/pi'
 
@@ -246,8 +246,20 @@ export default function MoneyAdviceScreen() {
         }
     }, [])
 
+    // Scroll to top when tapping the active tab again
+    useEffect(() => {
+        const handler = () => {
+            if (resourcesScrollRef.current) {
+                resourcesScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+            }
+        }
+        window.addEventListener('nav-tap-again', handler)
+        return () => window.removeEventListener('nav-tap-again', handler)
+    }, [])
+
     useEffect(() => {
         analytics.track(MONEY_ADVICE_EVENTS.VIEWED)
+        analytics.track(SCREEN_EVENTS.SUPPORT_VIEWED)
         supabase.auth.getUser().then(async ({ data }) => {
             if (!data?.user) return
             userIdRef.current = data.user.id
