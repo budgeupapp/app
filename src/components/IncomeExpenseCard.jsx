@@ -241,6 +241,8 @@ export default function IncomeExpenseCard({
     scheduleFreqOptions = null, // custom schedule freq options when yearly (e.g. ['yearly', 'irregular'])
     scheduleFreqLabels = null, // custom labels for schedule freq options
     entryTotals = null, // per-entry totals from graph events
+    entryRemovedCounts = null, // per-entry removed event counts
+    entryOverrideCounts = null, // per-entry override counts
     onVisibleEntryChange = null, // callback(idx) when scrolled entry changes
     onDeleteEntry = null, // callback({ label, undoFn, entryId, deletedIdx }) when an entry is deleted
 }) {
@@ -373,7 +375,17 @@ export default function IncomeExpenseCard({
                                     </span>
                                     {entryTotals && entryTotals[idx] != null && (
                                         <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: compact ? '#999' : '#777' }}>
-                                            {isExpense ? '\u2212' : '+'}{getCurrencySymbol()}{entryTotals[idx].toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total
+                                            {isExpense ? '\u2212' : '+'}{getCurrencySymbol()}{Math.round(entryTotals[idx]).toLocaleString()}/yr
+                                        </span>
+                                    )}
+                                    {entryRemovedCounts?.[idx] > 0 && (
+                                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470', background: 'rgba(224,100,112,0.1)', padding: '1px 6px', borderRadius: 6, lineHeight: 1.4 }}>
+                                            {entryRemovedCounts[idx]} skipped
+                                        </span>
+                                    )}
+                                    {entryOverrideCounts?.[idx] > 0 && (
+                                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6', background: 'rgba(59,130,246,0.1)', padding: '1px 6px', borderRadius: 6, lineHeight: 1.4 }}>
+                                            {entryOverrideCounts[idx]} edited
                                         </span>
                                     )}
                                 </div>

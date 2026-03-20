@@ -222,7 +222,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
         : balNum
 
     // Split events into past and future (exclude removed and eye-toggled hidden from balance line)
-    const activeEvents = events.filter(e => !e.removed && !balanceHiddenTypes.includes(e.editType))
+    const activeEvents = events.filter(e => !e.removed && !balanceHiddenTypes.includes(e.editType) && !balanceHiddenTypes.some(h => e.editType?.startsWith(h + ':') || h.startsWith(e.editType + ':')))
     // All events show on the future line — past events are clamped to today's position
     // since they're already reflected in the actual balance
     const pastEvents = []
@@ -1608,10 +1608,14 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                         {/* Past events: dots — only if steppedPath doesn't have its own past line */}
                         {balanceVisible && !hideDots && pastPath && !steppedPath?.pastLinePath && (
                             <>
-                                {pastPath.dots.filter(dot => !dot.event.noDot).map((dot, i) => {
+                                {pastPath.dots.filter(dot => {
+                                    if (dot.event.noDot) return false
+                                    const pet = dot.event.editType
+                                    return !hiddenEventTypes.includes(pet) && !hiddenEventTypes.some(h => pet.startsWith(h + ':'))
+                                }).map((dot, i) => {
                                     const isIncome = dot.event.type === 'income'
                                     const pet = dot.event.editType
-                                    const isHidden = hiddenEventTypes.includes(pet) || hiddenEventTypes.some(h => pet.startsWith(h + ':'))
+                                    const isHidden = false
                                     const isCurrent = !currentEventType || pet === currentEventType || pet.startsWith(currentEventType + ':')
                                     const isDimmed = currentEventType && !isCurrent
                                     const delay = 0.25 + i * 0.12
@@ -1635,9 +1639,9 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                                 cursor: 'pointer',
                                                 zIndex: isActive ? 20 : (isCurrent ? 8 : 4),
                                                 transition: isZoomed
-                                                    ? 'transform 0.15s ease, top 0.4s ease, left 0.4s ease'
+                                                    ? 'transform 0.15s ease'
                                                     : pastRevealed
-                                                        ? 'transform 0.15s ease, opacity 0.2s ease, background 0.2s ease, top 0.4s ease, left 0.4s ease'
+                                                        ? 'transform 0.15s ease, opacity 0.2s ease, background 0.2s ease'
                                                         : `transform 0.3s cubic-bezier(.22,1,.36,1) ${delay}s, opacity 0.2s ease ${delay}s`,
                                             }}
                                         >
@@ -1694,10 +1698,14 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                         )}
 
                         {/* Event dots (clickable) — pop in sequentially after line draws */}
-                        {balanceVisible && !hideDots && showToday && steppedPath && steppedPath.dots.filter(dot => !dot.event.noDot).map((dot, i) => {
+                        {balanceVisible && !hideDots && showToday && steppedPath && steppedPath.dots.filter(dot => {
+                            if (dot.event.noDot) return false
+                            const et = dot.event.editType
+                            return !hiddenEventTypes.includes(et) && !hiddenEventTypes.some(h => et.startsWith(h + ':'))
+                        }).map((dot, i) => {
                             const isIncome = dot.event.type === 'income'
                             const et = dot.event.editType
-                            const isHidden = hiddenEventTypes.includes(et) || hiddenEventTypes.some(h => et.startsWith(h + ':'))
+                            const isHidden = false
                             const isCurrent = !currentEventType || et === currentEventType || et.startsWith(currentEventType + ':')
                             const isPast = dot.x < markerPct
                             const color = isCurrent
@@ -1722,9 +1730,9 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         pointerEvents: 'auto',
                                         zIndex: isActive ? 20 : (isCurrent ? 8 : 5),
                                         transition: isZoomed
-                                            ? 'transform 0.15s ease, top 0.4s ease, left 0.4s ease'
+                                            ? 'transform 0.15s ease'
                                             : eventsRevealed
-                                                ? 'transform 0.15s ease, opacity 0.2s ease, top 0.4s ease, left 0.4s ease'
+                                                ? 'transform 0.15s ease, opacity 0.2s ease'
                                                 : `transform 0.3s cubic-bezier(.22,1,.36,1) ${delay}s, opacity 0.2s ease ${delay}s`,
                                     }}
                                 >
@@ -1833,7 +1841,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                             pointerEvents: 'none',
                                             zIndex: 3,
                                             opacity: (eventsRevealed || isZoomed) ? 0.6 : 0,
-                                            transition: `opacity 0.3s ease ${delay}s, top 0.4s ease, height 0.4s ease, left 0.4s ease`,
+                                            transition: `opacity 0.3s ease ${delay}s`,
                                         }}
                                     />
                                 )
@@ -2016,9 +2024,9 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         fill="none"
                                         stroke="rgba(20,123,117,0.25)"
                                         strokeWidth="1.5"
-                                        strokeLinejoin="bevel"
+                                        strokeLinejoin="miter"
                                         vectorEffect="non-scaling-stroke"
-                                        shapeRendering="crispEdges"
+                                        shapeRendering="geometricPrecision"
                                     />
                                 </svg>
                             </div>
@@ -2049,7 +2057,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         <path
                                             d={steppedPath.pastFillPath}
                                             fill="url(#stepGrad)"
-                                            shapeRendering="crispEdges"
+                                            shapeRendering="geometricPrecision"
                                             opacity={(eventsRevealed || isZoomed) ? 0.4 : 0}
                                             style={{ transition: 'opacity 0.5s ease 0.4s' }}
                                         />
@@ -2058,9 +2066,9 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                             fill="none"
                                             stroke="rgba(20,123,117,0.35)"
                                             strokeWidth="1.5"
-                                            strokeLinejoin="bevel"
+                                            strokeLinejoin="miter"
                                             vectorEffect="non-scaling-stroke"
-                                            shapeRendering="crispEdges"
+                                            shapeRendering="geometricPrecision"
                                             opacity={(eventsRevealed || isZoomed) ? 1 : 0}
                                             style={{ transition: 'opacity 0.5s ease' }}
                                         />
@@ -2070,7 +2078,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                 <path
                                     d={steppedPath.futureFillPath || steppedPath.fillPath}
                                     fill="url(#stepGrad)"
-                                    shapeRendering="crispEdges"
+                                    shapeRendering="geometricPrecision"
                                     opacity={(eventsRevealed || isZoomed) ? 1 : 0}
                                     style={{ transition: 'opacity 0.5s ease 0.4s' }}
                                 />
@@ -2079,9 +2087,9 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                     fill="none"
                                     stroke="#147b75"
                                     strokeWidth="1.5"
-                                    strokeLinejoin="bevel"
+                                    strokeLinejoin="miter"
                                     vectorEffect="non-scaling-stroke"
-                                    shapeRendering="crispEdges"
+                                    shapeRendering="geometricPrecision"
                                     opacity={(eventsRevealed || isZoomed) ? 1 : 0}
                                     style={{ transition: 'opacity 0.5s ease' }}
                                 />
@@ -2161,7 +2169,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                                 stroke="#EC8C17"
                                                 strokeWidth="2"
                                                 strokeDasharray="5 4"
-                                                strokeLinejoin="round"
+                                                strokeLinejoin="miter"
                                                 vectorEffect="non-scaling-stroke"
                                                 style={{
                                                     clipPath: balHistRevealed ? 'inset(0 0% 0 0)' : 'inset(0 0 0 100%)',

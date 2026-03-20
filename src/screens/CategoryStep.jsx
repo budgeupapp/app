@@ -5,7 +5,7 @@ import { CATEGORY_MAP } from '../config/categories'
  * Generic step component for any income/expense category.
  * Looks up config from categories.js and renders IncomeExpenseCard.
  */
-export default function CategoryStep({ categoryId, entries = [], entryTotals = null, updateEntries, compact = false, onVisibleEntryChange = null, onDeleteEntry = null }) {
+export default function CategoryStep({ categoryId, entries = [], entryTotals = null, entryRemovedCounts = null, entryOverrideCounts = null, updateEntries, compact = false, onVisibleEntryChange = null, onDeleteEntry = null }) {
     const cat = CATEGORY_MAP[categoryId]
     if (!cat) return null
 
@@ -37,6 +37,8 @@ export default function CategoryStep({ categoryId, entries = [], entryTotals = n
             scheduleFreqOptions={cat.scheduleFreqOptions}
             scheduleFreqLabels={cat.scheduleFreqLabels}
             entryTotals={entryTotals}
+            entryRemovedCounts={entryRemovedCounts}
+            entryOverrideCounts={entryOverrideCounts}
             onVisibleEntryChange={onVisibleEntryChange}
             onDeleteEntry={onDeleteEntry}
         />

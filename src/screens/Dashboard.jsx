@@ -84,19 +84,37 @@ const FLEX_EXPENSE_SOURCES = [
 
 /* ---------- GRAPH EVENT HELPERS ---------- */
 
-// Distribute yearly total only among non-removed dates; removed dates keep original amount for display
-function distributeExcludingRemoved(total, dates, editType, removedSet) {
-    const activeDates = dates.filter(d => !removedSet.has(`${editType}:${d.date}`))
-    const activeAmounts = distributeEvenly(total, activeDates.length)
+// Distribute yearly total among non-removed, non-overridden dates; overridden dates use their override
+function distributeExcludingRemoved(total, dates, editType, removedSet, overrides = {}) {
+    // Calculate how much of the total is consumed by overrides
+    let overriddenTotal = 0
+    const overrideMap = {}
+    for (const d of dates) {
+        const key = `${editType}:${d.date}`
+        if (overrides[key] != null && !removedSet.has(key)) {
+            const val = parseFloat(String(overrides[key]).replace(/,/g, '')) || 0
+            overrideMap[d.date] = val
+            overriddenTotal += val
+        }
+    }
+    const remaining = total - overriddenTotal
+    const flexDates = dates.filter(d => !removedSet.has(`${editType}:${d.date}`) && !overrideMap.hasOwnProperty(d.date))
+    const flexAmounts = distributeEvenly(Math.max(0, remaining), flexDates.length)
     const originalAmounts = distributeEvenly(total, dates.length)
-    let ai = 0
-    return dates.map((d, i) => removedSet.has(`${editType}:${d.date}`) ? originalAmounts[i] : activeAmounts[ai++])
+    let fi = 0
+    return dates.map((d, i) => {
+        const key = `${editType}:${d.date}`
+        if (removedSet.has(key)) return originalAmounts[i]
+        if (overrideMap.hasOwnProperty(d.date)) return overrideMap[d.date]
+        return flexAmounts[fi++] || 0
+    })
 }
 
 function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
     const events = []
     const terms = formData.termDates?.terms || []
     const removedSet = new Set(formData.removedEvents || [])
+    const overridesMap = formData.amountOverrides || {}
     // Default start: 1st September
     const firstTermStart = AY_START
     const firstTermStartStr = toLocalDate(firstTermStart)
@@ -134,7 +152,7 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                 const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
                 if (months.length === 0) continue
                 const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
-                const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet)
+                const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
                 for (let mi = 0; mi < months.length; mi++) {
                     const month = months[mi]
                     const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
@@ -152,45 +170,85 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                 const interval = freq === 'weekly' ? 7 : 14
                 const DAY_MAP = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
                 const targetDay = DAY_MAP[entry.dayOfWeek] ?? 1 // default Monday
-                let d = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(firstTermStart)
-                // Align to the target day of week (find next occurrence on or after start)
+                // For yearly amounts, always start from Sep 1 to get full year of payments
+                const sepStart = new Date('2025-09-01T00:00:00')
+                const loopStart = amtFreq === 'yearly' ? sepStart : (entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(firstTermStart))
+                let d = new Date(loopStart)
                 for (let i = 0; i < 7 && d.getDay() !== targetDay; i++) d = new Date(d.getTime() + 86400000)
                 const nonTermAmt = entry.variesByTerm ? Math.round(parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) * (FREQ_PER_YEAR[amtFreq] || 1) / (FREQ_PER_YEAR[freq] || 1) * 100) / 100 : convertedAmt
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
+                const earliest = amtFreq === 'yearly' ? sepStart : AY_START
+                // Collect all payment dates
+                const paymentDates = []
                 while (d <= endDate) {
-                    if (d >= AY_START) {
+                    if (d >= earliest) {
                         const dateStr = toLocalDate(d)
-                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? convertedAmt : nonTermAmt) : convertedAmt
-                        if (eventAmt > 0) {
-                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: entryEditType })
-                        }
+                        paymentDates.push({ date: dateStr, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}` })
                     }
                     d = new Date(d.getTime() + interval * 86400000)
+                }
+                if (amtFreq === 'yearly' && paymentDates.length > 0) {
+                    // Redistribute yearly amount across non-skipped payments
+                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
+                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
+                    for (let pi = 0; pi < paymentDates.length; pi++) {
+                        if (amounts[pi] > 0) {
+                            events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
+                        }
+                    }
+                } else {
+                    for (const pd of paymentDates) {
+                        const eventAmt = entry.variesByTerm ? (isInTerm(pd.date, terms) ? convertedAmt : nonTermAmt) : convertedAmt
+                        if (eventAmt > 0) {
+                            events.push({ date: pd.date, amount: eventAmt, type, label: entryLabel, sublabel: pd.sublabel, editType: entryEditType })
+                        }
+                    }
                 }
             } else if (freq === 'monthly' || freq === 'quarterly') {
                 const monthStep = freq === 'quarterly' ? 3 : 1
                 const domRaw = entry.dayOfMonth || '1'
                 const isLast = domRaw === 'last'
                 const domTarget = isLast ? 31 : parseInt(domRaw) || 1
+                const sepStart = new Date('2025-09-01T00:00:00')
                 const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : firstTermStart
-                const earliest = startFrom > AY_START ? startFrom : AY_START
+                // For yearly amounts, always use Sep 1 as earliest to get full 12 months
+                const earliest = amtFreq === 'yearly' ? sepStart : (startFrom > AY_START ? startFrom : AY_START)
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
                 const nonTermAmt = entry.variesByTerm ? Math.round(parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) * (FREQ_PER_YEAR[amtFreq] || 1) / (FREQ_PER_YEAR[freq] || 1) * 100) / 100 : convertedAmt
-                let month = AY_START.getMonth()
-                let year = AY_START.getFullYear()
-                for (let i = 0; i < (freq === 'quarterly' ? 5 : 13); i++) {
+                // Collect all payment dates
+                // For yearly amounts, always generate exactly 12 months (or 4 quarters) starting from Sep
+                const paymentDates = []
+                const loopStart = amtFreq === 'yearly' ? new Date('2025-09-01T00:00:00') : AY_START
+                let month = loopStart.getMonth()
+                let year = loopStart.getFullYear()
+                for (let i = 0; i < (freq === 'quarterly' ? 4 : 12); i++) {
                     const lastDay = new Date(year, month + 1, 0).getDate()
                     const day = Math.min(domTarget, lastDay)
                     const d = new Date(year, month, day)
                     if (d >= earliest && d <= endDate) {
                         const dateStr = toLocalDate(d)
-                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? convertedAmt : nonTermAmt) : convertedAmt
-                        if (eventAmt > 0) {
-                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: entryEditType })
-                        }
+                        paymentDates.push({ date: dateStr, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}` })
                     }
                     month += monthStep
                     while (month > 11) { month -= 12; year++ }
+                }
+                // If yearly amount paid monthly/quarterly, redistribute across non-skipped payments
+                if (amtFreq === 'yearly' && paymentDates.length > 0) {
+                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
+                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
+                    for (let pi = 0; pi < paymentDates.length; pi++) {
+                        if (amounts[pi] > 0) {
+                            events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
+                        }
+                    }
+                } else {
+                    // Regular monthly/quarterly amount — no redistribution
+                    for (const pd of paymentDates) {
+                        const eventAmt = entry.variesByTerm ? (isInTerm(pd.date, terms) ? convertedAmt : nonTermAmt) : convertedAmt
+                        if (eventAmt > 0) {
+                            events.push({ date: pd.date, amount: eventAmt, type, label: entryLabel, sublabel: pd.sublabel, editType: entryEditType })
+                        }
+                    }
                 }
             } else if (freq === 'yearly') {
                 const sf = entry.scheduleFrequency
@@ -216,39 +274,39 @@ function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
                         d = new Date(d.getTime() + interval * 86400000)
                     }
                 } else if (sf === 'monthly') {
-                    // Divide yearly total across monthly payments
+                    // Divide yearly total across monthly payments, redistributing if any are skipped
                     const domRaw = entry.dayOfMonth || '1'
                     const isLast = domRaw === 'last'
                     const domTarget = isLast ? 31 : parseInt(domRaw) || 1
                     const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : firstTermStart
                     const earliest = startFrom > AY_START ? startFrom : AY_START
                     const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
-                    // Count months to divide amount
-                    let count = 0, m2 = AY_START.getMonth(), y2 = AY_START.getFullYear()
+                    // Collect all payment dates first
+                    const paymentDates = []
+                    let m2 = AY_START.getMonth(), y2 = AY_START.getFullYear()
                     for (let i = 0; i < 13; i++) {
                         const lastDay = new Date(y2, m2 + 1, 0).getDate()
                         const day = Math.min(domTarget, lastDay)
                         const dd = new Date(y2, m2, day)
-                        if (dd >= earliest && dd <= endDate) count++
+                        if (dd >= earliest && dd <= endDate) {
+                            paymentDates.push({ date: toLocalDate(dd), sublabel: `${dd.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}` })
+                        }
                         m2++; if (m2 > 11) { m2 = 0; y2++ }
                     }
-                    const perPayment = count > 0 ? Math.round(amt * 100 / count) / 100 : amt
-                    let month = AY_START.getMonth(), year = AY_START.getFullYear()
-                    for (let i = 0; i < 13; i++) {
-                        const lastDay = new Date(year, month + 1, 0).getDate()
-                        const day = Math.min(domTarget, lastDay)
-                        const d = new Date(year, month, day)
-                        if (d >= earliest && d <= endDate) {
-                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: entryEditType })
+                    // Redistribute yearly amount across non-skipped months
+                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
+                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
+                    for (let pi = 0; pi < paymentDates.length; pi++) {
+                        if (amounts[pi] > 0) {
+                            events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
                         }
-                        month++; if (month > 11) { month = 0; year++ }
                     }
                 } else if (sf === 'irregular' || (!sf && entry.months?.length)) {
                     // Yearly amount with irregular schedule — distribute across selected months
                     const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
                     if (months.length > 0) {
                         const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
-                        const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet)
+                        const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
                         for (let mi = 0; mi < months.length; mi++) {
                             const month = months[mi]
                             const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
@@ -826,21 +884,28 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
                             {frequency && frequency !== 'one-off' ? `/${frequency === 'weekly' ? 'wk' : frequency === 'fortnightly' ? '2wk' : frequency === 'monthly' ? 'mo' : frequency === 'termly' ? 'term' : 'yr'}` : ''}
                         </span>
                     )}
-                    {removedCount > 0 && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2, display: 'block' }}
-                        >
-                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted
+                    <div style={{
+                        display: 'flex', gap: 4, marginTop: (removedCount > 0 || overrideCount > 0) ? 2 : 0,
+                        flexWrap: 'wrap', alignItems: 'center',
+                        maxHeight: (removedCount > 0 || overrideCount > 0) ? 20 : 0,
+                        opacity: (removedCount > 0 || overrideCount > 0) ? 1 : 0,
+                        overflow: 'hidden',
+                        transition: 'max-height 0.25s ease, opacity 0.2s ease, margin-top 0.25s ease',
+                    }}>
+                        {removedCount > 0 && (
+                            <span
+                                onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
+                                style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470', background: 'rgba(224,100,112,0.1)', padding: '1px 6px', borderRadius: 6, cursor: 'pointer', display: 'inline-block' }}
+                            >
+                                {removedCount} skipped
                             </span>
-                        </button>
-                    )}
-                    {overrideCount > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6', marginTop: 2, display: 'block' }}>
-                            {overrideCount} payment{overrideCount !== 1 ? 's' : ''} edited
-                        </span>
-                    )}
+                        )}
+                        {overrideCount > 0 && (
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6', background: 'rgba(59,130,246,0.1)', padding: '1px 6px', borderRadius: 6, display: 'inline-block' }}>
+                                {overrideCount} edited
+                            </span>
+                        )}
+                    </div>
                 </div>
                 {onToggleVisibility && (
                     <button onClick={(e) => { e.stopPropagation(); onToggleVisibility() }} style={{
@@ -870,7 +935,7 @@ function FlexRow({ srcId, label, amt, frequency, si, isExpense, expanded, onExpa
                 transition: (expanded && !settled)
                     ? 'max-height 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.2s ease'
                     : !expanded
-                        ? 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease'
+                        ? 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease'
                         : 'none',
             }}>
                 <div ref={innerRef}>
@@ -1017,21 +1082,28 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                             : yearlyAmount === 0 ? `${getCurrencySymbol()}0/yr` : `${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${Math.round(yearlyAmount).toLocaleString()}/yr`
                         }
                     </p>
-                    {removedCount > 0 && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', marginTop: 2 }}
-                        >
-                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                {removedCount} payment{removedCount !== 1 ? 's' : ''} deleted
+                    <div style={{
+                        display: 'flex', gap: 4, marginTop: (removedCount > 0 || overrideCount > 0) ? 2 : 0,
+                        flexWrap: 'wrap', alignItems: 'center',
+                        maxHeight: (removedCount > 0 || overrideCount > 0) ? 20 : 0,
+                        opacity: (removedCount > 0 || overrideCount > 0) ? 1 : 0,
+                        overflow: 'hidden',
+                        transition: 'max-height 0.25s ease, opacity 0.2s ease, margin-top 0.25s ease',
+                    }}>
+                        {removedCount > 0 && (
+                            <span
+                                onClick={(e) => { e.stopPropagation(); onRestoreRemoved?.() }}
+                                style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470', background: 'rgba(224,100,112,0.1)', padding: '1px 6px', borderRadius: 6, cursor: 'pointer', display: 'inline-block' }}
+                            >
+                                {removedCount} skipped
                             </span>
-                        </button>
-                    )}
-                    {overrideCount > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6', marginTop: 2, display: 'block' }}>
-                            {overrideCount} payment{overrideCount !== 1 ? 's' : ''} edited
-                        </span>
-                    )}
+                        )}
+                        {overrideCount > 0 && (
+                            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6', background: 'rgba(59,130,246,0.1)', padding: '1px 6px', borderRadius: 6, display: 'inline-block' }}>
+                                {overrideCount} edited
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 {/* Eye toggle (hide/show on graph) + Chevron */}
@@ -1067,7 +1139,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                 transition: (expanded && !settled)
                     ? 'max-height 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.2s ease'
                     : !expanded
-                        ? 'max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease'
+                        ? 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease'
                         : 'none',
             }}>
                 <div ref={innerRef}>
@@ -1432,8 +1504,10 @@ export default function Dashboard() {
             (formData.flexExpenseSources || []).length === 0
         const isTabEmpty = isIncomeEmpty || isExpensesEmpty
 
-        // Always start at top when switching tabs
-        const targetScroll = 0
+        // Save current tab's scroll position before switching
+        tabScrollRef.current[activeTab] = el.scrollTop
+        // Restore saved scroll position for new tab (or start at top)
+        const targetScroll = tabScrollRef.current[tab] || 0
 
         isTabSwitchingRef.current = true
         isAnimatingRef.current = true
@@ -1858,6 +1932,38 @@ export default function Dashboard() {
 
     // Shrink graph on scroll: 200 → 108 (direct DOM for smooth perf)
     const scrollRef = useRef(null)
+    // Restore scroll position when returning to Dashboard from another navbar tab
+    useEffect(() => {
+        // Restore per-tab scroll positions
+        try {
+            const savedTabs = sessionStorage.getItem('budgeup_tab_scrolls')
+            if (savedTabs) tabScrollRef.current = JSON.parse(savedTabs)
+        } catch { /* ignore */ }
+        // Restore current tab's scroll position after content has rendered
+        const saved = tabScrollRef.current[activeTab]
+        if (saved) {
+            // Delay to allow content to render fully before setting scroll
+            const timer = setTimeout(() => {
+                if (scrollRef.current) {
+                    isAnimatingRef.current = true
+                    scrollRef.current.scrollTop = saved
+                    applyScrollStyles(saved)
+                    requestAnimationFrame(() => { isAnimatingRef.current = false })
+                }
+            }, 100)
+            return () => clearTimeout(timer)
+        }
+    }, [])
+    // Save scroll positions on unmount
+    useEffect(() => {
+        const elRef = scrollRef
+        return () => {
+            if (elRef.current) {
+                tabScrollRef.current[activeTabRef.current] = elRef.current.scrollTop
+            }
+            sessionStorage.setItem('budgeup_tab_scrolls', JSON.stringify(tabScrollRef.current))
+        }
+    }, [])
     const graphContainerRef = useRef(null)
     const contentWrapRef = useRef(null)
     const stickyHeaderRef = useRef(null)
@@ -2281,21 +2387,24 @@ export default function Dashboard() {
             tabsBarRef.current.style.boxShadow = contentTop < tabsBottom ? '0 1px 0 rgba(0,0,0,0.06)' : 'none'
         }
 
-        // Detect which expanded source row is currently in view
+        // Detect which expanded source row takes up the most viewport space
         if (expandedSources.size > 0) {
             const rows = el.querySelectorAll('[data-source-row]')
             const stickyHeader = el.querySelector('[data-sticky-header]')
             const headerBottom = stickyHeader ? stickyHeader.getBoundingClientRect().bottom : el.getBoundingClientRect().top
             const containerBottom = el.getBoundingClientRect().bottom
             let best = null
+            let bestArea = 0
             for (const row of rows) {
                 const sourceId = row.dataset.sourceId
                 if (!expandedSources.has(sourceId)) continue
                 const rect = row.getBoundingClientRect()
-                // Row is in view if any part is visible between header and screen bottom
-                if (rect.bottom > headerBottom && rect.top < containerBottom) {
+                const visibleTop = Math.max(rect.top, headerBottom)
+                const visibleBottom = Math.min(rect.bottom, containerBottom)
+                const visibleHeight = visibleBottom - visibleTop
+                if (visibleHeight > bestArea) {
+                    bestArea = visibleHeight
                     best = sourceId
-                    break
                 }
             }
             setVisibleExpandedSource(prev => prev === best ? prev : best)
@@ -2812,16 +2921,32 @@ export default function Dashboard() {
             setCollapsingSections(prev => new Set(prev).add(sectionAttr))
         }
 
-        // Scroll to top of container on delete
-        if (el && el.scrollTop > 0) {
-            const spacer = document.createElement('div')
-            spacer.style.height = (el.scrollTop + 200) + 'px'
-            spacer.style.flexShrink = '0'
-            el.appendChild(spacer)
-            isAnimatingRef.current = true
-            animateScroll(el, 0, 600, () => {
-                spacer.remove()
-            })
+        // Scroll to the row above the deleted one
+        if (el) {
+            const deletedRow = el.querySelector(`[data-source-id="${sourceId}"]`)
+            if (deletedRow) {
+                const prevRow = deletedRow.previousElementSibling
+                if (prevRow && prevRow.hasAttribute('data-source-row')) {
+                    const headerH = stickyHeaderRef.current?.offsetHeight || 0
+                    const targetScroll = prevRow.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
+                    if (targetScroll >= 0 && targetScroll < el.scrollTop) {
+                        const spacer = document.createElement('div')
+                        spacer.style.height = (el.scrollTop + 200) + 'px'
+                        spacer.style.flexShrink = '0'
+                        el.appendChild(spacer)
+                        isAnimatingRef.current = true
+                        animateScroll(el, targetScroll, 600, () => { spacer.remove() })
+                    }
+                } else if (el.scrollTop > 0) {
+                    // No previous row — scroll to top
+                    const spacer = document.createElement('div')
+                    spacer.style.height = (el.scrollTop + 200) + 'px'
+                    spacer.style.flexShrink = '0'
+                    el.appendChild(spacer)
+                    isAnimatingRef.current = true
+                    animateScroll(el, 0, 600, () => { spacer.remove() })
+                }
+            }
         }
 
         // Delay state removal so the row collapse animation plays out
@@ -3568,11 +3693,22 @@ export default function Dashboard() {
                                                         }
                                                         const hasMulti = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
                                                         const entryTotals = hasMulti ? entries.map(e => calcEntryTotal(e, cat)) : null
+                                                        const entryRemovedCounts = hasMulti ? entries.map((e, i) => {
+                                                            const et = `${cat.id}:${e.id || i}`
+                                                            return allEvents.filter(ev => ev.editType === et && ev.removed && !ev.noDot).length
+                                                        }) : null
+                                                        const entryOverrideCounts = hasMulti ? entries.map((e, i) => {
+                                                            const et = `${cat.id}:${e.id || i}`
+                                                            const overrides = formData.amountOverrides || {}
+                                                            return Object.keys(overrides).filter(k => k.startsWith(et + ':')).length
+                                                        }) : null
                                                         return (
                                                             <CategoryStep
                                                                 categoryId={cat.id} compact
                                                                 entries={entries}
                                                                 entryTotals={entryTotals}
+                                                                entryRemovedCounts={entryRemovedCounts}
+                                                                entryOverrideCounts={entryOverrideCounts}
                                                                 updateEntries={(val) => setFormData(prev => ({ ...prev, [cat.formKey]: typeof val === 'function' ? val(prev[cat.formKey] || []) : val }))}
                                                                 onVisibleEntryChange={entries.length > 1 ? setVisibleEntryIndex : null}
                                                                 onDeleteEntry={({ label, entryId }) => {
@@ -3771,11 +3907,22 @@ export default function Dashboard() {
                                                         }
                                                         const hasMulti = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
                                                         const entryTotals = hasMulti ? entries.map(e => calcEntryTotal(e, cat)) : null
+                                                        const entryRemovedCounts = hasMulti ? entries.map((e, i) => {
+                                                            const et = `${cat.id}:${e.id || i}`
+                                                            return allEvents.filter(ev => ev.editType === et && ev.removed && !ev.noDot).length
+                                                        }) : null
+                                                        const entryOverrideCounts = hasMulti ? entries.map((e, i) => {
+                                                            const et = `${cat.id}:${e.id || i}`
+                                                            const overrides = formData.amountOverrides || {}
+                                                            return Object.keys(overrides).filter(k => k.startsWith(et + ':')).length
+                                                        }) : null
                                                         return (
                                                             <CategoryStep
                                                                 categoryId={cat.id} compact
                                                                 entries={entries}
                                                                 entryTotals={entryTotals}
+                                                                entryRemovedCounts={entryRemovedCounts}
+                                                                entryOverrideCounts={entryOverrideCounts}
                                                                 updateEntries={(val) => setFormData(prev => ({ ...prev, [cat.formKey]: typeof val === 'function' ? val(prev[cat.formKey] || []) : val }))}
                                                                 onVisibleEntryChange={entries.length > 1 ? setVisibleEntryIndex : null}
                                                                 onDeleteEntry={({ label, entryId }) => {
