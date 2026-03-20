@@ -20,6 +20,11 @@ const mapFrequencyToRecurrence = freq => {
 }
 
 export async function saveCashflowForecast(userId, data) {
+    // Debug: log what data we received
+    const entryKeys = Object.keys(data).filter(k => k.endsWith('Entries'))
+    const entryCounts = entryKeys.map(k => `${k}: ${(data[k] || []).length}`)
+    console.log('[saveCashflow] Called with:', { userId: userId?.slice(0, 8), entryCounts, weeklySpend: data.weeklySpend, incomeSources: data.incomeSources, expenseSources: data.expenseSources })
+
     // Default start date: 1st September
     const firstTermDate = '2025-09-01'
 
@@ -99,58 +104,9 @@ export async function saveCashflowForecast(userId, data) {
         })
     }
 
-    /* --- Build set of valid editType prefixes from current entries --- */
-    const validEditTypes = new Set()
-    for (const formKey of CATEGORY_FORM_KEYS) {
-        const entries = data[formKey]
-        if (!Array.isArray(entries) || entries.length === 0) continue
-        const catId = formKey.replace('Entries', '')
-        for (const entry of entries) {
-            if (!stripCommas(entry.amount) && !entry.months?.length) continue
-            const et = entry.id ? `${catId}:${entry.id}` : catId
-            validEditTypes.add(et)
-        }
-        validEditTypes.add(catId)
-    }
-    // Also add flex and weekly spend edit types
-    for (const srcId of [...(data.flexIncomeSources || []), ...(data.flexExpenseSources || [])]) validEditTypes.add(srcId)
-    if (data.weeklySpend) validEditTypes.add('weeklySpend')
-
-    /* --- Removed events (only save if editType matches a current entry) --- */
-    const removedEvents = data.removedEvents || []
-    if (removedEvents.length) {
-        for (const key of removedEvents) {
-            const parts = key.split(':')
-            const date = parts.pop()
-            const editType = parts.join(':')
-            if (!editType || !date) continue
-            if (!validEditTypes.has(editType)) continue
-            rows.push({
-                user_id: userId, direction: 'out', type: editType,
-                title: `Removed: ${editType}`, amount: 0,
-                currency: 'GBP', recurrence: 'once',
-                scheduled_date: date, end_date: null, source: 'manual',
-                category: editType, is_removed: true,
-            })
-        }
-    }
-
-    /* --- Amount overrides (only save if editType matches a current entry) --- */
-    const amountOverrides = data.amountOverrides || {}
-    for (const [key, val] of Object.entries(amountOverrides)) {
-        const parts = key.split(':')
-        const date = parts.pop()
-        const editType = parts.join(':')
-        if (!editType || !date || !val) continue
-        if (!validEditTypes.has(editType)) continue
-        rows.push({
-            user_id: userId, direction: 'out', type: editType,
-            title: `Override: ${editType}`, amount: stripCommas(val) || 0,
-            currency: 'GBP', recurrence: 'once',
-            scheduled_date: date, end_date: null, source: 'manual',
-            category: editType, subcategory: 'amount_override',
-        })
-    }
+    /* --- Removed events and amount overrides are saved after CATEGORY_FORM_KEYS below --- */
+    const _removedEvents = data.removedEvents || []
+    const _amountOverrides = data.amountOverrides || {}
 
     /* --- New category entries (studentFinanceEntries, rentEntries, etc.) --- */
     const CAT_LABELS = {
@@ -181,7 +137,8 @@ export async function saveCashflowForecast(userId, data) {
         const isIncome = INCOME_KEYS.includes(formKey)
         for (const entry of entries) {
             const amt = stripCommas(entry.amount)
-            if (!amt && !entry.months?.length) continue
+            const hasInstalments = entry.instalmentAmounts && Object.values(entry.instalmentAmounts).some(v => Number(stripCommas(String(v))) > 0)
+            if (!amt && !entry.months?.length && !hasInstalments) continue
             const amtFreq = entry.frequency || 'monthly'
             const paidFreq = entry.scheduleFrequency || amtFreq
             const freq = paidFreq === 'irregular' ? 'irregular' : paidFreq === 'one-off' ? amtFreq : paidFreq
@@ -256,6 +213,54 @@ export async function saveCashflowForecast(userId, data) {
         })
     }
 
+    /* --- Removed events (only save if editType matches a current entry) --- */
+    const validEditTypes = new Set()
+    for (const fk of CATEGORY_FORM_KEYS) {
+        const ents = data[fk]
+        if (!Array.isArray(ents) || ents.length === 0) continue
+        const cid = fk.replace('Entries', '')
+        for (const ent of ents) {
+            if (!stripCommas(ent.amount) && !ent.months?.length) continue
+            validEditTypes.add(ent.id ? `${cid}:${ent.id}` : cid)
+        }
+        validEditTypes.add(cid)
+    }
+    for (const srcId of [...(data.flexIncomeSources || []), ...(data.flexExpenseSources || [])]) validEditTypes.add(srcId)
+    if (data.weeklySpend) validEditTypes.add('weeklySpend')
+
+    if (_removedEvents.length) {
+        for (const key of _removedEvents) {
+            const parts = key.split(':')
+            const date = parts.pop()
+            const editType = parts.join(':')
+            if (!editType || !date) continue
+            if (!validEditTypes.has(editType)) continue
+            rows.push({
+                user_id: userId, direction: 'out', type: editType,
+                title: `Removed: ${editType}`, amount: 0,
+                currency: 'GBP', recurrence: 'once',
+                scheduled_date: date, end_date: null, source: 'manual',
+                category: editType, is_removed: true,
+            })
+        }
+    }
+
+    /* --- Amount overrides (only save if editType matches a current entry) --- */
+    for (const [key, val] of Object.entries(_amountOverrides)) {
+        const parts = key.split(':')
+        const date = parts.pop()
+        const editType = parts.join(':')
+        if (!editType || !date || !val) continue
+        if (!validEditTypes.has(editType)) continue
+        rows.push({
+            user_id: userId, direction: 'out', type: editType,
+            title: `Override: ${editType}`, amount: stripCommas(val) || 0,
+            currency: 'GBP', recurrence: 'once',
+            scheduled_date: date, end_date: null, source: 'manual',
+            category: editType, subcategory: 'amount_override',
+        })
+    }
+
     // Sanitize all date fields to prevent invalid date errors
     for (const row of rows) {
         if (row.scheduled_date && !/^\d{4}-\d{2}-\d{2}/.test(row.scheduled_date)) {
@@ -267,11 +272,13 @@ export async function saveCashflowForecast(userId, data) {
     }
 
     // Safety: count existing rows before deleting — never wipe if new data is empty
-    const { count: existingCount } = await supabase
+    const { count: rawCount, error: countError } = await supabase
         .from('cashflow_forecast')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
         .eq('source', 'manual')
+
+    const existingCount = countError ? 0 : (rawCount || 0)
 
     if (!rows.length && existingCount > 0) {
         console.warn('[saveCashflow] Refusing to delete', existingCount, 'existing rows with 0 new rows — data would be wiped')

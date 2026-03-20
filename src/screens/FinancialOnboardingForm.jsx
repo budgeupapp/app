@@ -1361,6 +1361,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
     /* --- Submit --- */
 
     const submit = () => {
+        // Debug: verify formData has entries at submit time
+        const entryKeys = Object.keys(formData).filter(k => k.endsWith('Entries') && formData[k]?.length > 0)
+        console.log('[onboarding submit]', { entryKeys, incomeSources: formData.incomeSources, expenseSources: formData.expenseSources, weeklySpend: formData.weeklySpend })
         // Show loading screen FIRST to avoid re-render crash on summary panel
         const savePromise = (async () => {
         try {
