@@ -8,17 +8,20 @@ import TermGraph, { refreshAY, AY_START, AY_END, datePct, daysBetween, fmt } fro
 import { supabase } from '../lib/supabaseClient'
 import { fetchUserData, saveCashflowForecast, saveUserFinances, saveTermDates, saveBalanceHistory } from '../lib/api'
 import { getCurrencySymbol, getGraphStart, setGraphStart } from '../lib/settings'
-import { toLocalDate, MONTH_KEY_TO_DATE, MONTH_SHORT, isInTerm, distributeEvenly, addMonths } from '../lib/helpers'
+import { toLocalDate } from '../lib/helpers'
 import { analytics, DASHBOARD_EVENTS, SCREEN_EVENTS, getBalanceRange } from '../lib/analytics/index.js'
 import {
     INITIAL_FORM_DATA,
     DEFAULT_LOAN_MONTHS,
-    ALL_MONTH_KEYS,
     MONTH_LABELS,
     hasCustomTermDates,
     getTermDatesForUniversity,
 } from '../config/onboardingConfig'
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, CATEGORY_MAP, SOURCE_ICONS as CATEGORY_SOURCE_ICONS } from '../config/categories'
+import { buildGraphEvents } from '../lib/graphEvents'
+import { calcEntryTotal } from '../lib/calcEntryTotal'
+import { parseMoney, formatDisplay } from '../lib/moneyUtils'
+import { STORAGE_KEY } from '../lib/constants'
 import CategoryStep from './CategoryStep'
 import WeeklySpendStep from './WeeklySpendStep'
 
@@ -48,8 +51,6 @@ export const SOURCE_ICONS = {
     flex_course_materials: { Icon: PiBookOpen, color: '#c0392b' },
     flex_other_expense: { Icon: PiDotsThree, color: '#888' },
 }
-
-const STORAGE_KEY = 'budgeup_onboarding_state'
 
 /* ---------- SOURCE CONFIGS ---------- */
 
@@ -84,334 +85,13 @@ const FLEX_EXPENSE_SOURCES = [
 
 /* ---------- GRAPH EVENT HELPERS ---------- */
 
-// Distribute yearly total among non-removed, non-overridden dates; overridden dates use their override
-function distributeExcludingRemoved(total, dates, editType, removedSet, overrides = {}) {
-    // Calculate how much of the total is consumed by overrides
-    let overriddenTotal = 0
-    const overrideMap = {}
-    for (const d of dates) {
-        const key = `${editType}:${d.date}`
-        if (overrides[key] != null && !removedSet.has(key)) {
-            const val = parseFloat(String(overrides[key]).replace(/,/g, '')) || 0
-            overrideMap[d.date] = val
-            overriddenTotal += val
-        }
-    }
-    const remaining = total - overriddenTotal
-    const flexDates = dates.filter(d => !removedSet.has(`${editType}:${d.date}`) && !overrideMap.hasOwnProperty(d.date))
-    const flexAmounts = distributeEvenly(Math.max(0, remaining), flexDates.length)
-    const originalAmounts = distributeEvenly(total, dates.length)
-    let fi = 0
-    return dates.map((d, i) => {
-        const key = `${editType}:${d.date}`
-        if (removedSet.has(key)) return originalAmounts[i]
-        if (overrideMap.hasOwnProperty(d.date)) return overrideMap[d.date]
-        return flexAmounts[fi++] || 0
-    })
-}
-
-function buildGraphEvents(formData, { filterByGraphStart = true } = {}) {
-    const events = []
-    const terms = formData.termDates?.terms || []
-    const removedSet = new Set(formData.removedEvents || [])
-    const overridesMap = formData.amountOverrides || {}
-    // Default start: 1st September
-    const firstTermStart = AY_START
-    const firstTermStartStr = toLocalDate(firstTermStart)
-
-    // Generic category events
-    for (const cat of [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]) {
-        const isIncome = INCOME_CATEGORIES.includes(cat)
-        const sourceList = isIncome ? formData.incomeSources : formData.expenseSources
-        if (!sourceList?.includes(cat.id)) continue
-
-        const entries = formData[cat.formKey] || []
-        const multiEntry = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
-        for (let ei = 0; ei < entries.length; ei++) {
-            const entry = entries[ei]
-            let amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
-            const isIrregularEntry = (entry.frequency || cat.defaultFrequency) === 'irregular'
-            // For irregular entries, sum instalment amounts if top-level amount is 0
-            if (amt <= 0 && isIrregularEntry && entry.instalmentAmounts) {
-                amt = Object.values(entry.instalmentAmounts).reduce((s, v) => s + (parseFloat(String(v || '0').replace(/,/g, '')) || 0), 0)
-            }
-            if (amt <= 0) continue
-            const type = isIncome ? 'income' : 'expense'
-            const amtFreq = entry.frequency || cat.defaultFrequency
-            const paidFreq = entry.scheduleFrequency || amtFreq
-            // If paid frequency differs from amount frequency, convert the amount
-            const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, quarterly: 4, yearly: 1, irregular: 1, 'one-off': 1 }
-            const freq = paidFreq === 'one-off' ? amtFreq : paidFreq === 'irregular' ? 'irregular' : paidFreq
-            const convertedAmt = (freq !== amtFreq && FREQ_PER_YEAR[amtFreq] && FREQ_PER_YEAR[freq])
-                ? Math.round(amt * FREQ_PER_YEAR[amtFreq] / FREQ_PER_YEAR[freq] * 100) / 100
-                : amt
-            const entryLabel = multiEntry ? `${cat.label} ${ei + 1}` : cat.label
-            const entryEditType = entry.id ? `${cat.id}:${entry.id}` : cat.id
-
-            if (freq === 'irregular') {
-                const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
-                if (months.length === 0) continue
-                const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
-                const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
-                for (let mi = 0; mi < months.length; mi++) {
-                    const month = months[mi]
-                    const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
-                    if (!date) continue
-                    const instAmt = parseFloat(String(entry.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
-                    const amount = instAmt > 0 ? instAmt : amounts[mi]
-                    if (amount <= 0) continue
-                    events.push({ date, amount, type, label: entryLabel, sublabel: `${MONTH_SHORT[month]} ${entryLabel.toLowerCase()}`, editType: entryEditType, editMonth: month })
-                }
-            } else if (freq === 'one-off') {
-                if (entry.nextDate) {
-                    events.push({ date: entry.nextDate, amount: amt, type, label: entryLabel, sublabel: 'One-off', editType: entryEditType })
-                }
-            } else if (freq === 'weekly' || freq === 'fortnightly') {
-                const interval = freq === 'weekly' ? 7 : 14
-                const DAY_MAP = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
-                const targetDay = DAY_MAP[entry.dayOfWeek] ?? 1 // default Monday
-                // For yearly amounts, always start from Sep 1 to get full year of payments
-                const sepStart = new Date('2025-09-01T00:00:00')
-                const loopStart = amtFreq === 'yearly' ? sepStart : (entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(firstTermStart))
-                let d = new Date(loopStart)
-                for (let i = 0; i < 7 && d.getDay() !== targetDay; i++) d = new Date(d.getTime() + 86400000)
-                const nonTermAmt = entry.variesByTerm ? Math.round(parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) * (FREQ_PER_YEAR[amtFreq] || 1) / (FREQ_PER_YEAR[freq] || 1) * 100) / 100 : convertedAmt
-                const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
-                const earliest = amtFreq === 'yearly' ? sepStart : AY_START
-                // Collect all payment dates
-                const paymentDates = []
-                while (d <= endDate) {
-                    if (d >= earliest) {
-                        const dateStr = toLocalDate(d)
-                        paymentDates.push({ date: dateStr, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}` })
-                    }
-                    d = new Date(d.getTime() + interval * 86400000)
-                }
-                if (amtFreq === 'yearly' && paymentDates.length > 0) {
-                    // Redistribute yearly amount across non-skipped payments
-                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
-                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
-                    for (let pi = 0; pi < paymentDates.length; pi++) {
-                        if (amounts[pi] > 0) {
-                            events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
-                        }
-                    }
-                } else {
-                    for (const pd of paymentDates) {
-                        const eventAmt = entry.variesByTerm ? (isInTerm(pd.date, terms) ? convertedAmt : nonTermAmt) : convertedAmt
-                        if (eventAmt > 0) {
-                            events.push({ date: pd.date, amount: eventAmt, type, label: entryLabel, sublabel: pd.sublabel, editType: entryEditType })
-                        }
-                    }
-                }
-            } else if (freq === 'monthly' || freq === 'quarterly') {
-                const monthStep = freq === 'quarterly' ? 3 : 1
-                const domRaw = entry.dayOfMonth || '1'
-                const isLast = domRaw === 'last'
-                const domTarget = isLast ? 31 : parseInt(domRaw) || 1
-                const sepStart = new Date('2025-09-01T00:00:00')
-                const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : firstTermStart
-                // For yearly amounts, always use Sep 1 as earliest to get full 12 months
-                const earliest = amtFreq === 'yearly' ? sepStart : (startFrom > AY_START ? startFrom : AY_START)
-                const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
-                const nonTermAmt = entry.variesByTerm ? Math.round(parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) * (FREQ_PER_YEAR[amtFreq] || 1) / (FREQ_PER_YEAR[freq] || 1) * 100) / 100 : convertedAmt
-                // Collect all payment dates
-                // For yearly amounts, always generate exactly 12 months (or 4 quarters) starting from Sep
-                const paymentDates = []
-                const loopStart = amtFreq === 'yearly' ? new Date('2025-09-01T00:00:00') : AY_START
-                let month = loopStart.getMonth()
-                let year = loopStart.getFullYear()
-                for (let i = 0; i < (freq === 'quarterly' ? 4 : 12); i++) {
-                    const lastDay = new Date(year, month + 1, 0).getDate()
-                    const day = Math.min(domTarget, lastDay)
-                    const d = new Date(year, month, day)
-                    if (d >= earliest && d <= endDate) {
-                        const dateStr = toLocalDate(d)
-                        paymentDates.push({ date: dateStr, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}` })
-                    }
-                    month += monthStep
-                    while (month > 11) { month -= 12; year++ }
-                }
-                // If yearly amount paid monthly/quarterly, redistribute across non-skipped payments
-                if (amtFreq === 'yearly' && paymentDates.length > 0) {
-                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
-                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
-                    for (let pi = 0; pi < paymentDates.length; pi++) {
-                        if (amounts[pi] > 0) {
-                            events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
-                        }
-                    }
-                } else {
-                    // Regular monthly/quarterly amount — no redistribution
-                    for (const pd of paymentDates) {
-                        const eventAmt = entry.variesByTerm ? (isInTerm(pd.date, terms) ? convertedAmt : nonTermAmt) : convertedAmt
-                        if (eventAmt > 0) {
-                            events.push({ date: pd.date, amount: eventAmt, type, label: entryLabel, sublabel: pd.sublabel, editType: entryEditType })
-                        }
-                    }
-                }
-            } else if (freq === 'yearly') {
-                const sf = entry.scheduleFrequency
-                if (sf === 'weekly' || sf === 'fortnightly') {
-                    // Divide yearly total across weekly/fortnightly payments
-                    const interval = sf === 'weekly' ? 7 : 14
-                    const startDate = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(firstTermStart)
-                    let d = new Date(startDate)
-                    if (!entry.nextDate) {
-                        while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
-                        while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
-                    }
-                    // Count total payments to divide amount
-                    const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
-                    let count = 0
-                    let tempD = new Date(d)
-                    while (tempD <= endDate) { if (tempD >= AY_START) count++; tempD = new Date(tempD.getTime() + interval * 86400000) }
-                    const perPayment = count > 0 ? Math.round(amt * 100 / count) / 100 : amt
-                    while (d <= endDate) {
-                        if (d >= AY_START) {
-                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${sf === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: entryEditType })
-                        }
-                        d = new Date(d.getTime() + interval * 86400000)
-                    }
-                } else if (sf === 'monthly') {
-                    // Divide yearly total across monthly payments, redistributing if any are skipped
-                    const domRaw = entry.dayOfMonth || '1'
-                    const isLast = domRaw === 'last'
-                    const domTarget = isLast ? 31 : parseInt(domRaw) || 1
-                    const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : firstTermStart
-                    const earliest = startFrom > AY_START ? startFrom : AY_START
-                    const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_END
-                    // Collect all payment dates first
-                    const paymentDates = []
-                    let m2 = AY_START.getMonth(), y2 = AY_START.getFullYear()
-                    for (let i = 0; i < 13; i++) {
-                        const lastDay = new Date(y2, m2 + 1, 0).getDate()
-                        const day = Math.min(domTarget, lastDay)
-                        const dd = new Date(y2, m2, day)
-                        if (dd >= earliest && dd <= endDate) {
-                            paymentDates.push({ date: toLocalDate(dd), sublabel: `${dd.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}` })
-                        }
-                        m2++; if (m2 > 11) { m2 = 0; y2++ }
-                    }
-                    // Redistribute yearly amount across non-skipped months
-                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
-                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
-                    for (let pi = 0; pi < paymentDates.length; pi++) {
-                        if (amounts[pi] > 0) {
-                            events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
-                        }
-                    }
-                } else if (sf === 'irregular' || (!sf && entry.months?.length)) {
-                    // Yearly amount with irregular schedule — distribute across selected months
-                    const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
-                    if (months.length > 0) {
-                        const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
-                        const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
-                        for (let mi = 0; mi < months.length; mi++) {
-                            const month = months[mi]
-                            const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
-                            if (!date) continue
-                            const instAmt = parseFloat(String(entry.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
-                            const amount = instAmt > 0 ? instAmt : amounts[mi]
-                            if (amount <= 0) continue
-                            events.push({ date, amount, type, label: entryLabel, sublabel: `${MONTH_SHORT[month]} ${entryLabel.toLowerCase()}`, editType: entryEditType, editMonth: month })
-                        }
-                    } else {
-                        events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: entryEditType })
-                    }
-                } else {
-                    events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: entryEditType })
-                }
-            }
-        }
-    }
-
-    // Weekly spend
-    const weeklyAmt = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, ''))
-    const weeklyNonTermAmt = formData.weeklySpendVariesByTerm ? parseFloat(String(formData.weeklySpendNonTerm || '0').replace(/,/g, '')) : weeklyAmt
-    if (weeklyAmt > 0 || weeklyNonTermAmt > 0) {
-        const ayStart = AY_START, ayEnd = AY_END
-        let d = new Date(ayStart)
-        while (d.getDay() !== 1) d = new Date(d.getTime() + 86400000)
-        while (d <= ayEnd) {
-            const ds = toLocalDate(d)
-            const amt = formData.weeklySpendVariesByTerm ? (isInTerm(ds, terms) ? weeklyAmt : weeklyNonTermAmt) : weeklyAmt
-            if (amt > 0) events.push({ date: ds, amount: amt, type: 'expense', label: 'Weekly Spend', sublabel: 'Average weekly spending', editType: 'weeklySpend', noDot: true })
-            d = new Date(d.getTime() + 7 * 86400000)
-        }
-    }
-
-    // Flex sources (income + expense)
-    const allFlexSources = [
-        ...((formData.flexIncomeSources || []).map(id => ({ id, type: 'income' }))),
-        ...((formData.flexExpenseSources || []).map(id => ({ id, type: 'expense' }))),
-    ]
-    for (const { id: flexId, type: flexType } of allFlexSources) {
-        const srcData = formData.flexSourceData?.[flexId]
-        if (!srcData) continue
-        const amt = parseFloat(String(srcData.amount || '0').replace(/,/g, ''))
-        if (amt <= 0) continue
-        const freq = srcData.frequency || 'monthly'
-        const allSrc = flexType === 'income' ? FLEX_INCOME_SOURCES : FLEX_EXPENSE_SOURCES
-        const srcDef = allSrc.find(s => s.id === flexId)
-        const label = srcDef?.label || flexId
-        const ayStartStr = toLocalDate(AY_START)
-        const ayEndStr = toLocalDate(AY_END)
-        const startDate = srcData.startDate || ayStartStr
-        const endDate = srcData.endDate || ayEndStr
-        const ayStart = new Date(ayStartStr + 'T00:00:00')
-        const ayEndD = new Date(ayEndStr + 'T00:00:00')
-        const effStart = new Date(Math.max(new Date(startDate + 'T00:00:00'), ayStart))
-        const effEnd = new Date(Math.min(endDate ? new Date(endDate + 'T00:00:00') : ayEndD, ayEndD))
-
-        if (freq === 'one-off') {
-            if (startDate) events.push({ date: startDate, amount: amt, type: flexType, label, sublabel: 'One-off', editType: flexId })
-        } else if (freq === 'weekly' || freq === 'fortnightly') {
-            const step = freq === 'fortnightly' ? 14 : 7
-            let d = new Date(effStart)
-            while (d <= effEnd) { events.push({ date: toLocalDate(d), amount: amt, type: flexType, label, sublabel: freq === 'fortnightly' ? 'Fortnightly' : 'Weekly', editType: flexId }); d = new Date(d.getTime() + step * 86400000) }
-        } else if (freq === 'monthly') {
-            let d = new Date(effStart)
-            const dom = d.getDate()
-            while (d <= effEnd) { events.push({ date: toLocalDate(d), amount: amt, type: flexType, label, sublabel: d.toLocaleDateString('en-GB', { month: 'long' }), editType: flexId }); d = addMonths(d, 1, dom) }
-        } else if (freq === 'quarterly') {
-            const QD = ['2025-10-01', '2026-01-01', '2026-04-01', '2026-07-01']
-            for (let i = 0; i < 4; i++) { const date = QD[i]; if (date >= startDate && date <= (endDate || AY_END)) events.push({ date, amount: amt, type: flexType, label, sublabel: `Q${i + 1}`, editType: flexId }) }
-        } else if (freq === 'termly') {
-            for (const term of terms) { const date = term.start; if (date && date >= startDate && date <= (endDate || AY_END)) events.push({ date, amount: amt, type: flexType, label, sublabel: term.name, editType: flexId }) }
-        } else if (freq === 'yearly') {
-            events.push({ date: startDate || AY_START, amount: amt, type: flexType, label, sublabel: 'Yearly', editType: flexId })
-        }
-    }
-
-    // One-off items (skip hidden)
-    for (const item of (formData.oneOffItems || [])) {
-        if (item.hidden) continue
-        const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
-        const isIn = (item.direction || 'out') === 'in'
-        if (amt > 0 && item.date) events.push({ date: item.date, amount: amt, type: isIn ? 'income' : 'expense', label: item.name || 'One-off', sublabel: isIn ? 'One-off income' : 'One-off expense', editType: isIn ? 'oneOffIncome' : 'oneOffExpense' })
-    }
-
-    // Filter out events before graph start month (unless disabled for yearly totals)
-    // Also filter out events on or after AY_END (Sep 1) — graph stops at Aug 31
-    const graphStartMonth = getGraphStart().slice(0, 7) + '-01'
-    const ayEndStr = toLocalDate(AY_END)
-    const filtered = filterByGraphStart
-        ? events.filter(e => e.date >= graphStartMonth && e.date < ayEndStr)
-        : events.filter(e => e.date < ayEndStr)
-
-    const removed = formData.removedEvents || []
-    const overrides = formData.amountOverrides || {}
-    return filtered.map(e => {
-        const isFlex = e.editType?.startsWith('flex_')
-        const base = isFlex ? { ...e, flex: true } : e
-        // One-off items are deleted from source array directly, not via removedEvents
-        if (base.editType === 'oneOffIncome' || base.editType === 'oneOffExpense') return base
-        // Apply per-payment amount override
-        const overrideKey = `${base.editType}:${base.date}`
-        const overrideVal = overrides[overrideKey]
-        const withOverride = overrideVal != null ? { ...base, amount: parseFloat(String(overrideVal).replace(/,/g, '')) || base.amount, hasOverride: true, originalAmount: base.amount } : base
-        return removed.includes(overrideKey) ? { ...withOverride, removed: true } : withOverride
+function buildDashboardGraphEvents(formData, { filterByGraphStart = true } = {}) {
+    return buildGraphEvents(formData, {
+        filterByGraphStart,
+        includeFlexSources: true,
+        splitOneOffEditType: true,
+        flexIncomeSources: FLEX_INCOME_SOURCES,
+        flexExpenseSources: FLEX_EXPENSE_SOURCES,
     })
 }
 
@@ -427,13 +107,6 @@ function fmtAmount(val) {
     const sym = getCurrencySymbol()
     if (val >= 1000) { const k = val / 1000; const dec = Math.round(k * 10) % 10; return `${sym}${k.toFixed(dec === 0 ? 0 : 1)}k` }
     return `${sym}${Math.round(val).toLocaleString()}`
-}
-
-function formatDisplay(raw) {
-    if (!raw) return ''
-    const [whole, ...rest] = raw.split('.')
-    const formatted = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-    return rest.length ? `${formatted}.${rest.join('.')}` : formatted
 }
 
 /* ---------- ICONS ---------- */
@@ -502,7 +175,7 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
     const inputRef = useRef(null)
     const containerRef = useRef(null)
     const sym = getCurrencySymbol()
-    const balanceNum = parseFloat(String(value || '0').replace(/,/g, '')) || 0
+    const balanceNum = parseMoney(value)
     const hasBalance = value != null && value !== '' && value !== '0' && balanceNum !== 0
 
     const [pillRect, setPillRect] = useState(null)
@@ -517,7 +190,7 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
     }
 
     const handleConfirm = () => {
-        const n = parseFloat(String(raw || '0').replace(/,/g, ''))
+        const n = parseMoney(raw)
         onSave(String(isNegative ? -Math.abs(n) : Math.abs(n)))
         setExpanded(false)
     }
@@ -537,7 +210,7 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
     }
 
     const handleStep = (dir) => {
-        const n = parseFloat(String(raw).replace(/,/g, '')) || 0
+        const n = parseMoney(raw)
         const stepped = Math.max(0, Math.round((n + dir * 10) * 100) / 100)
         setRaw(new Intl.NumberFormat('en-GB').format(stepped))
     }
@@ -746,7 +419,7 @@ function BalancePillInline({ value, sym, onSave, onCancel, compact }) {
     }
 
     const handleConfirm = () => {
-        const n = parseFloat(String(raw || '0').replace(/,/g, ''))
+        const n = parseMoney(raw)
         onSave(String(isNegative ? -Math.abs(n) : Math.abs(n)))
     }
 
@@ -1449,6 +1122,7 @@ export default function Dashboard() {
     const goalsMoreRef = useRef(null)
     const goalsTransCardRef = useRef(null)
     const tabScrollRef = useRef({})
+    const skipScrollSaveRef = useRef(false)
     const tabExpandedRef = useRef({})
     const tabGraphCoveredRef = useRef({
         goals: sessionStorage.getItem('budgeup_graph_covered_goals') === 'true',
@@ -1504,8 +1178,9 @@ export default function Dashboard() {
             (formData.flexExpenseSources || []).length === 0
         const isTabEmpty = isIncomeEmpty || isExpensesEmpty
 
-        // Save current tab's scroll position before switching
-        tabScrollRef.current[activeTab] = el.scrollTop
+        // Save current tab's scroll position before switching (skip if already saved by navigateToSource)
+        if (!skipScrollSaveRef.current) tabScrollRef.current[activeTab] = el.scrollTop
+        skipScrollSaveRef.current = false
         // Restore saved scroll position for new tab (or start at top)
         const targetScroll = tabScrollRef.current[tab] || 0
 
@@ -1592,7 +1267,7 @@ export default function Dashboard() {
     }, [editingBalance])
 
     const saveInlineBalance = () => {
-        const newVal = parseFloat(String(editBalanceValue || '0').replace(/,/g, '')) || 0
+        const newVal = parseMoney(editBalanceValue)
         const today = toLocalDate(new Date())
         const lastRecorded = localStorage.getItem('budgeup_balance_last_date')
         const isUpdate = lastRecorded === today
@@ -2676,21 +2351,21 @@ export default function Dashboard() {
     }, [])
 
     const terms = formData.termDates?.terms || []
-    const originBalance = parseFloat(String(formData.balance || '0').replace(/,/g, ''))
-    const overdraftNum = formData.overdraft ? parseFloat(String(formData.overdraft || '0').replace(/,/g, '')) : undefined
+    const originBalance = parseMoney(formData.balance)
+    const overdraftNum = formData.overdraft ? parseMoney(formData.overdraft) : undefined
 
     // Projection balance (green line): anchored at join date, walked forward to today
     const todayStr = toLocalDate(new Date())
     const anchorDate = joinDate || getGraphStart()
     const allSourceIds = [...FIXED_INCOME_SOURCES.map(s => s.id), ...FIXED_EXPENSE_SOURCES.map(s => s.id)]
-    const _allEventsForProjection = buildGraphEvents({ ...formData, incomeSources: allSourceIds, expenseSources: allSourceIds }, { filterByGraphStart: false })
+    const _allEventsForProjection = buildDashboardGraphEvents({ ...formData, incomeSources: allSourceIds, expenseSources: allSourceIds }, { filterByGraphStart: false })
     const projectionBalance = (() => {
         // Walk forward from originBalance at anchor date through events to today
         // Discrete events: applied on their date
         const discreteEvents = _allEventsForProjection
             .filter(e => !e.removed && e.date >= anchorDate && e.date <= todayStr && e.editType !== 'weeklySpend')
         // Weekly spend: simple daily rate (weeklySpend / 7) — same as pastPath
-        const weeklyAmt = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, '')) || 0
+        const weeklyAmt = parseMoney(formData.weeklySpend)
         const dailyRate = weeklyAmt / 7
         const anchorD = new Date(anchorDate + 'T00:00:00')
         const todayD = new Date(todayStr + 'T00:00:00')
@@ -2717,97 +2392,20 @@ export default function Dashboard() {
     const INCOME_SOURCES = FIXED_INCOME_SOURCES
     const EXPENSE_SOURCES = FIXED_EXPENSE_SOURCES
 
-    const events = buildGraphEvents(formData)
+    const events = buildDashboardGraphEvents(formData)
     const exactGraphStart = getGraphStart() // exact date string e.g. '2025-10-20'
     // Build all events (ignoring source toggles) for computing yearly amounts when sources are off
     const allEvents = _allEventsForProjection
 
     // Calculate totals from formData, counting actual occurrences between start/end dates
     const removedSet = new Set(formData.removedEvents || [])
-    const calcEntryTotal = (entry, cat) => {
-        const amt = parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0
-        if (amt <= 0) return 0
-        const freq = entry.frequency || cat.defaultFrequency
-        const paidFreq = entry.scheduleFrequency || freq
-        const effectiveFreq = paidFreq === 'one-off' ? freq : paidFreq === 'irregular' ? 'irregular' : paidFreq
-        const entryEditType = entry.id ? `${cat.id}:${entry.id}` : cat.id
-        const isRemoved = (dateStr) => removedSet.has(`${entryEditType}:${dateStr}`)
-
-        if (freq === 'irregular' || effectiveFreq === 'irregular') {
-            const months = entry.months || []
-            let instTotal = 0
-            for (const m of months) {
-                const date = entry.dates?.[m] || MONTH_KEY_TO_DATE[m]
-                if (date && isRemoved(date)) continue
-                const v = parseFloat(String(entry.instalmentAmounts?.[m] || '0').replace(/,/g, '')) || 0
-                instTotal += v > 0 ? v : (amt / (months.length || 1))
-            }
-            return instTotal > 0 ? instTotal : amt
-        }
-        if (freq === 'one-off' || effectiveFreq === 'one-off') {
-            if (entry.nextDate && isRemoved(entry.nextDate)) return 0
-            return amt
-        }
-        if (freq === 'yearly') {
-            if (entry.nextDate && isRemoved(entry.nextDate)) return 0
-            return amt
-        }
-
-        // Count occurrences between start and end dates (use entry dates, not graph view)
-        const defaultStart = new Date('2025-09-01T00:00:00')
-        const defaultEnd = new Date('2026-08-31T00:00:00')
-        const start = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : defaultStart
-        const end = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : defaultEnd
-        if (start > end) return 0
-
-        // For yearly amount with sub-frequency schedule, convert amount
-        const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, yearly: 1 }
-        const perOccurrence = (freq === 'yearly' && effectiveFreq !== 'yearly' && FREQ_PER_YEAR[effectiveFreq])
-            ? Math.round(amt / FREQ_PER_YEAR[effectiveFreq] * 100) / 100
-            : amt
-
-        const nonTermAmt = entry.variesByTerm ? (parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) || 0) : amt
-        const nonTermPerOcc = (freq === 'yearly' && effectiveFreq !== 'yearly' && FREQ_PER_YEAR[effectiveFreq])
-            ? Math.round(nonTermAmt / FREQ_PER_YEAR[effectiveFreq] * 100) / 100
-            : nonTermAmt
-
-        if (effectiveFreq === 'weekly' || effectiveFreq === 'fortnightly') {
-            const interval = effectiveFreq === 'weekly' ? 7 : 14
-            let total = 0
-            let d = new Date(start)
-            while (d <= end) {
-                const dateStr = toLocalDate(d)
-                if (!isRemoved(dateStr)) {
-                    total += (entry.variesByTerm && !isInTerm(dateStr, terms)) ? nonTermPerOcc : perOccurrence
-                }
-                d = new Date(d.getTime() + interval * 86400000)
-            }
-            return total
-        }
-        if (effectiveFreq === 'monthly') {
-            let total = 0
-            let m = start.getMonth(), y = start.getFullYear()
-            for (let i = 0; i < 24; i++) {
-                const d = new Date(y, m, Math.min(parseInt(entry.dayOfMonth) || 1, new Date(y, m + 1, 0).getDate()))
-                if (d >= start && d <= end) {
-                    const dateStr = toLocalDate(d)
-                    if (!isRemoved(dateStr)) {
-                        total += (entry.variesByTerm && !isInTerm(dateStr, terms)) ? nonTermPerOcc : perOccurrence
-                    }
-                }
-                m++; if (m > 11) { m = 0; y++ }
-                if (new Date(y, m, 1) > end) break
-            }
-            return total
-        }
-        return amt
-    }
+    const dashCalcEntryTotal = (entry, cat) => calcEntryTotal(entry, cat, { removedSet, terms })
 
     const yearlyIncome = INCOME_CATEGORIES.reduce((total, cat) => {
-        return total + (formData[cat.formKey] || []).reduce((s, entry) => s + calcEntryTotal(entry, cat), 0)
+        return total + (formData[cat.formKey] || []).reduce((s, entry) => s + dashCalcEntryTotal(entry, cat), 0)
     }, 0)
     const yearlyExpense = EXPENSE_CATEGORIES.reduce((total, cat) => {
-        return total + (formData[cat.formKey] || []).reduce((s, entry) => s + calcEntryTotal(entry, cat), 0)
+        return total + (formData[cat.formKey] || []).reduce((s, entry) => s + dashCalcEntryTotal(entry, cat), 0)
     }, 0)
     const weeklySpendTotal = events.filter(e => e.editType === 'weeklySpend' && !e.removed).reduce((s, e) => s + e.amount, 0)
     const fixedNet = yearlyIncome - yearlyExpense
@@ -2824,7 +2422,7 @@ export default function Dashboard() {
     // On-track: compare actual balance vs green line at today
     // Green line is anchored at projectionBalance at today (past events are walked backwards from it)
     // So green line value at today = projectionBalance, actual = balanceNum
-    const projBal = parseFloat(String(projectionBalance || '0').replace(/,/g, '')) || 0
+    const projBal = parseMoney(projectionBalance)
     const goalsData = (() => {
         const diff = Math.round((balanceNum - projBal) * 100) / 100
         return { diff, isAhead: diff > 0, isOnTrack: Math.abs(diff) < 10 }
@@ -2849,7 +2447,7 @@ export default function Dashboard() {
             for (const entry of entries) {
                 const entryEditType = entry.id ? `${cat.id}:${entry.id}` : cat.id
                 if (!editTypes.includes(entryEditType)) continue
-                total += calcEntryTotal(entry, cat)
+                total += dashCalcEntryTotal(entry, cat)
             }
         }
         return total
@@ -2892,7 +2490,7 @@ export default function Dashboard() {
         const cat = CATEGORY_MAP[sourceId]
         if (cat) {
             const entries = formData[cat.formKey] || []
-            return entries.some(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0)
+            return entries.some(e => parseMoney(e.amount) > 0)
         }
         return false
     }
@@ -3138,7 +2736,7 @@ export default function Dashboard() {
         setEditingEvent({ ...evt, clickX: rect.left + rect.width / 2, clickY: rect.top + rect.height / 2 })
         setEditAmount(String(evt.amount))
         // Find nearby events on same date
-        const allEvts = buildGraphEvents(formData)
+        const allEvts = buildDashboardGraphEvents(formData)
         const sameDate = allEvts.filter(ev => ev.date === evt.date && !ev.noDot && ev.amount > 0)
         setNearbyEvents(sameDate.length > 1 ? sameDate : [])
         setNearbyIdx(sameDate.length > 1 ? Math.max(0, sameDate.findIndex(ev => ev.editType === evt.editType && ev.amount === evt.amount)) : 0)
@@ -3280,7 +2878,7 @@ export default function Dashboard() {
                                     </div>
                                     <button
                                         onClick={async () => {
-                                            const abs = parseFloat(String(initialBalanceRaw || '0').replace(/,/g, '')) || 0
+                                            const abs = parseMoney(initialBalanceRaw)
                                             if (abs === 0) return
                                             const n = initialBalanceNegative ? -abs : abs
                                             const val = String(n)
@@ -3315,13 +2913,13 @@ export default function Dashboard() {
                                         }}
                                         style={{
                                             height: 40, padding: '0 18px', border: 'none', borderRadius: 8,
-                                            background: (parseFloat(String(initialBalanceRaw || '0').replace(/,/g, '')) || 0) === 0
+                                            background: (parseMoney(initialBalanceRaw)) === 0
                                                 ? '#ddd' : '#e06470',
-                                            cursor: (parseFloat(String(initialBalanceRaw || '0').replace(/,/g, '')) || 0) === 0
+                                            cursor: (parseMoney(initialBalanceRaw)) === 0
                                                 ? 'not-allowed' : 'pointer',
                                             fontSize: 13, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
                                             color: '#fff', flexShrink: 0,
-                                            boxShadow: (parseFloat(String(initialBalanceRaw || '0').replace(/,/g, '')) || 0) === 0
+                                            boxShadow: (parseMoney(initialBalanceRaw)) === 0
                                                 ? 'none' : '0 2px 6px rgba(224,100,112,0.35)',
                                         }}
                                     >
@@ -3453,7 +3051,7 @@ export default function Dashboard() {
                                 onOverdraftClick={handleOverdraftClick}
                                 events={events}
                                 allEvents={allEvents}
-                                weeklySpendRate={parseFloat(String(formData.weeklySpend || '0').replace(/,/g, '')) || 0}
+                                weeklySpendRate={parseMoney(formData.weeklySpend)}
                                 hiddenEventTypes={[
                                     ...(!showIncome ? [...INCOME_CATEGORIES.map(c => c.id), 'oneOffIncome', ...(formData.flexIncomeSources || [])] : []),
                                     ...(!showExpenses ? [...EXPENSE_CATEGORIES.map(c => c.id), 'weeklySpend', 'oneOffExpense', ...(formData.flexExpenseSources || [])] : []),
@@ -3491,7 +3089,7 @@ export default function Dashboard() {
                                     const cat = CATEGORY_MAP[activeSource]
                                     if (!cat) return null
                                     const entries = formData[cat.formKey] || []
-                                    const hasMulti = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
+                                    const hasMulti = entries.filter(e => parseMoney(e.amount) > 0).length > 1
                                     return hasMulti ? `${cat.label} ${visibleEntryIndex + 1}` : cat.label
                                 })()}
                                 onEventClick={handleEventClick}
@@ -3699,8 +3297,8 @@ export default function Dashboard() {
                                                             entries = [defaultEntry]
                                                             setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
                                                         }
-                                                        const hasMulti = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
-                                                        const entryTotals = hasMulti ? entries.map(e => calcEntryTotal(e, cat)) : null
+                                                        const hasMulti = entries.filter(e => parseMoney(e.amount) > 0).length > 1
+                                                        const entryTotals = hasMulti ? entries.map(e => dashCalcEntryTotal(e, cat)) : null
                                                         const entryRemovedCounts = hasMulti ? entries.map((e, i) => {
                                                             const et = `${cat.id}:${e.id || i}`
                                                             return allEvents.filter(ev => ev.editType === et && ev.removed && !ev.noDot).length
@@ -3913,8 +3511,8 @@ export default function Dashboard() {
                                                             entries = [defaultEntry]
                                                             setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
                                                         }
-                                                        const hasMulti = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
-                                                        const entryTotals = hasMulti ? entries.map(e => calcEntryTotal(e, cat)) : null
+                                                        const hasMulti = entries.filter(e => parseMoney(e.amount) > 0).length > 1
+                                                        const entryTotals = hasMulti ? entries.map(e => dashCalcEntryTotal(e, cat)) : null
                                                         const entryRemovedCounts = hasMulti ? entries.map((e, i) => {
                                                             const et = `${cat.id}:${e.id || i}`
                                                             return allEvents.filter(ev => ev.editType === et && ev.removed && !ev.noDot).length
@@ -4106,7 +3704,7 @@ export default function Dashboard() {
                                 if (evt.editType === 'oneOffIncome' || evt.editType === 'oneOffExpense') {
                                     const dir = evt.editType === 'oneOffIncome' ? 'in' : 'out'
                                     const updated = (formData.oneOffItems || []).filter(item => {
-                                        const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
+                                        const amt = parseMoney(item.amount)
                                         return !(item.date === evt.date && (item.direction || 'out') === dir && amt === evt.amount)
                                     })
                                     updateField('oneOffItems', updated.length > 0 ? updated : [{ name: '', amount: '', date: '', direction: 'out' }])
@@ -4117,24 +3715,37 @@ export default function Dashboard() {
                             }
 
                             const navigateToSource = (evt) => {
-                                const baseId = (evt.editType || '').includes(':') ? evt.editType.split(':')[0] : evt.editType
+                                const et = evt.editType || ''
+                                const baseId = et.includes(':') ? et.split(':')[0] : et
+                                const entrySuffix = et.includes(':') ? et.split(':').slice(1).join(':') : null
                                 const isIncome = evt.type === 'income'
                                 const targetTab = isIncome ? 'income' : 'expenses'
+                                // Lock current tab scroll before switching — skip save in handleTabChange
+                                const scrollEl = scrollRef.current
+                                if (scrollEl) tabScrollRef.current[activeTab] = scrollEl.scrollTop
+                                tabScrollRef.current[targetTab] = 0
+                                skipScrollSaveRef.current = true
                                 handleTabChange(targetTab)
                                 setTimeout(() => {
                                     if (!expandedSources.has(baseId)) handleExpandToggle(baseId)
                                     setTimeout(() => {
                                         const el = scrollRef.current
                                         if (!el) return
-                                        const target = el.querySelector(`[data-source-id="${baseId}"]`)
-                                        if (target) {
+                                        let scrollTarget = null
+                                        if (entrySuffix) {
+                                            const entryEl = el.querySelector('[data-entry-id="' + entrySuffix + '"]') || el.querySelector('[data-entry-id="' + baseId + '_' + entrySuffix + '"]')
+                                            if (entryEl && entryEl.dataset.entryIdx && parseInt(entryEl.dataset.entryIdx) > 0) scrollTarget = entryEl
+                                        }
+                                        if (!scrollTarget) scrollTarget = el.querySelector('[data-source-id="' + baseId + '"]')
+                                        if (scrollTarget) {
                                             const stickyHeader = el.querySelector('[data-sticky-header]')
                                             const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
-                                            const pos = target.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
-                                            el.scrollTo({ top: Math.max(0, pos), behavior: 'smooth' })
+                                            const pos = scrollTarget.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
+                                            isAnimatingRef.current = true
+                                            animateScroll(el, Math.max(0, pos), 400, function () { isAnimatingRef.current = false })
                                         }
                                     }, 301)
-                                }, 350)
+                                }, 500)
                             }
 
                             const renderEventRow = (evt, i, list, color) => (
@@ -4453,16 +4064,16 @@ export default function Dashboard() {
                                         const expenseGroups = {}
                                         for (const cat of INCOME_CATEGORIES) {
                                             if (!(formData.incomeSources || []).includes(cat.id)) continue
-                                            const total = (formData[cat.formKey] || []).reduce((s, e) => s + calcEntryTotal(e, cat), 0)
+                                            const total = (formData[cat.formKey] || []).reduce((s, e) => s + dashCalcEntryTotal(e, cat), 0)
                                             if (total > 0) incomeGroups[cat.label] = total
                                         }
                                         for (const cat of EXPENSE_CATEGORIES) {
                                             if (!(formData.expenseSources || []).includes(cat.id)) continue
-                                            const total = (formData[cat.formKey] || []).reduce((s, e) => s + calcEntryTotal(e, cat), 0)
+                                            const total = (formData[cat.formKey] || []).reduce((s, e) => s + dashCalcEntryTotal(e, cat), 0)
                                             if (total > 0) expenseGroups[cat.label] = total
                                         }
                                         // Add weekly spend
-                                        const wkSpend = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, '')) || 0
+                                        const wkSpend = parseMoney(formData.weeklySpend)
                                         if (wkSpend > 0) expenseGroups['Weekly Spend'] = wkSpend * 52
                                         const expEntries = Object.entries(expenseGroups).sort((a, b) => b[1] - a[1])
                                         const incEntries = Object.entries(incomeGroups).sort((a, b) => b[1] - a[1])
@@ -4985,7 +4596,7 @@ export default function Dashboard() {
                         if (saveCat) {
                             const entries = formData[saveCat.formKey] || []
                             const entry = eventEntry || entries[0]
-                            const total = entry ? (parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0) : 0
+                            const total = entry ? (parseMoney(entry.amount)) : 0
                             const parsedVal = parseFloat(val) || 0
                             if (parsedVal > total) { setEditWarning(`Can't exceed total of ${getCurrencySymbol()}${total.toLocaleString()}`); return }
                             if (parsedVal <= 0) { setEditWarning('Instalment amount must be greater than zero'); return }
@@ -4996,7 +4607,7 @@ export default function Dashboard() {
                             setFormData(prev => {
                                 const entries = prev[saveCat.formKey] || []
                                 return { ...prev, [saveCat.formKey]: entries.map(e => {
-                                    const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                    const total = parseMoney(e.amount)
                                     const newVal = parseFloat(val) || 0
                                     const otherMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
                                     const remainder = Math.max(0, total - newVal)
@@ -5015,13 +4626,13 @@ export default function Dashboard() {
                         const originalAmt = editingEvent.originalAmount != null ? editingEvent.originalAmount : editingEvent.amount
                         // Validate against yearly total if this is a yearly amount paid in sub-frequency
                         if (eventFreq === 'yearly' && eventEntry) {
-                            const total = parseFloat(String(eventEntry.amount || '0').replace(/,/g, '')) || 0
+                            const total = parseMoney(eventEntry.amount)
                             if (parsedAmount > total) { setEditWarning(`Can't exceed yearly total of ${getCurrencySymbol()}${Math.round(total).toLocaleString()}`); return }
                             const currentOverrides = formData.amountOverrides || {}
                             let otherOverridesTotal = 0
                             for (const [k, v] of Object.entries(currentOverrides)) {
                                 if (k.startsWith(editingEvent.editType + ':') && k !== overrideKey) {
-                                    otherOverridesTotal += parseFloat(String(v).replace(/,/g, '')) || 0
+                                    otherOverridesTotal += parseMoney(v)
                                 }
                             }
                             if (otherOverridesTotal + parsedAmount > total) {
@@ -5056,7 +4667,7 @@ export default function Dashboard() {
                     if (editingEvent.editType === 'oneOffIncome' || editingEvent.editType === 'oneOffExpense') {
                         const dir = editingEvent.editType === 'oneOffIncome' ? 'in' : 'out'
                         const updated = (formData.oneOffItems || []).filter(item => {
-                            const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
+                            const amt = parseMoney(item.amount)
                             return !(item.date === editingEvent.date && (item.direction || 'out') === dir && amt === editingEvent.amount)
                         })
                         updateField('oneOffItems', updated.length > 0 ? updated : [{ name: '', amount: '', date: '', direction: 'out' }])
@@ -5075,7 +4686,7 @@ export default function Dashboard() {
                             setFormData(prev => {
                                 const entries = prev[irregCat.formKey] || []
                                 return { ...prev, [irregCat.formKey]: entries.map(e => {
-                                    const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                    const total = parseMoney(e.amount)
                                     const entryFreq = e.frequency || irregCat.defaultFrequency
                                     const isPerInst = entryFreq === 'irregular'
                                     const newMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
@@ -5222,31 +4833,34 @@ export default function Dashboard() {
                                 <div
                                     onClick={() => {
                                         const baseId = editingEvent.editType?.includes(':') ? editingEvent.editType.split(':')[0] : editingEvent.editType
-                                        const entrySuffix = editingEvent.editType?.includes(':') ? editingEvent.editType.split(':')[1] : null
+                                        const entrySuffix = editingEvent.editType?.includes(':') ? editingEvent.editType.split(':').slice(1).join(':') : null
                                         const isExp = EXPENSE_CATEGORIES.some(c => c.id === baseId)
+                                        const targetTab = isExp ? 'expenses' : 'income'
                                         setEditingEvent(null)
                                         setNearbyEvents([])
                                         setNearbyIdx(0)
-                                        handleTabChange(isExp ? 'expenses' : 'income')
+                                        const scrollEl = scrollRef.current
+                                        if (scrollEl) tabScrollRef.current[activeTab] = scrollEl.scrollTop
+                                        tabScrollRef.current[targetTab] = 0
+                                        skipScrollSaveRef.current = true
+                                        handleTabChange(targetTab)
                                         collapseGraph()
                                         setExpandedSources(prev => new Set(prev).add(baseId))
-                                        // Scroll to the correct instance
                                         setTimeout(() => {
                                             const el = scrollRef.current
                                             if (!el) return
-                                            isAnimatingRef.current = false
-                                            // Find the specific entry element if multi-instance
                                             let scrollTarget = null
                                             if (entrySuffix) {
-                                                scrollTarget = el.querySelector(`[data-entry-id="${entrySuffix}"]`)
-                                                    || el.querySelector(`[data-entry-id="${baseId}_${entrySuffix}"]`)
+                                                const entryEl = el.querySelector('[data-entry-id="' + entrySuffix + '"]') || el.querySelector('[data-entry-id="' + baseId + '_' + entrySuffix + '"]')
+                                                if (entryEl && entryEl.dataset.entryIdx && parseInt(entryEl.dataset.entryIdx) > 0) scrollTarget = entryEl
                                             }
-                                            if (!scrollTarget) scrollTarget = el.querySelector(`[data-source-id="${baseId}"]`)
+                                            if (!scrollTarget) scrollTarget = el.querySelector('[data-source-id="' + baseId + '"]')
                                             if (scrollTarget) {
                                                 const stickyHeader = el.querySelector('[data-sticky-header]')
                                                 const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
-                                                const target = scrollTarget.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
-                                                el.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
+                                                const pos = scrollTarget.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
+                                                isAnimatingRef.current = true
+                                                animateScroll(el, Math.max(0, pos), 400, function () { isAnimatingRef.current = false })
                                             }
                                         }, 500)
                                     }}
@@ -5609,7 +5223,7 @@ export default function Dashboard() {
                                 value={balanceNum}
                                 sym={sym}
                                 onSave={(val) => {
-                                    const newVal = parseFloat(String(val || '0').replace(/,/g, '')) || 0
+                                    const newVal = parseMoney(val)
                                     const today = toLocalDate(new Date())
                                     const lastRecorded = localStorage.getItem('budgeup_balance_last_date')
                                     const isUpdate = lastRecorded === today
