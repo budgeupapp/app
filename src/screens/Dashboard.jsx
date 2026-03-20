@@ -1679,22 +1679,29 @@ export default function Dashboard() {
                 const result = await fetchUserData(userId)
                 if (result.formData) {
                     const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
-                    // Prefer localStorage values (Settings saves there immediately, Supabase may lag)
+                    // Only prefer localStorage over DB when there's a pending save (local data is ahead)
+                    const hasPending = localStorage.getItem('budgeup_pending_save') === 'true'
+                    if (hasPending) {
+                        try {
+                            const saved = localStorage.getItem(STORAGE_KEY)
+                            const parsed = saved ? JSON.parse(saved) : {}
+                            const localFD = parsed.formData || {}
+                            if (localFD.overdraft != null) merged.overdraft = localFD.overdraft
+                            if (localFD.amountOverrides) merged.amountOverrides = { ...(merged.amountOverrides || {}), ...localFD.amountOverrides }
+                            for (const key of Object.keys(localFD)) {
+                                if (key.endsWith('Entries') && Array.isArray(localFD[key]) && localFD[key].length > 0) {
+                                    merged[key] = localFD[key]
+                                }
+                            }
+                            if (localFD.termDates?.terms?.length) {
+                                merged.termDates = localFD.termDates
+                            }
+                        } catch { /* ignore */ }
+                    }
+                    // Update localStorage with merged data (DB as source of truth)
                     try {
                         const saved = localStorage.getItem(STORAGE_KEY)
                         const parsed = saved ? JSON.parse(saved) : {}
-                        const localFD = parsed.formData || {}
-                        if (localFD.overdraft != null) merged.overdraft = localFD.overdraft
-                        if (localFD.amountOverrides) merged.amountOverrides = { ...(merged.amountOverrides || {}), ...localFD.amountOverrides }
-                        // Preserve all category entries from localStorage
-                        for (const key of Object.keys(localFD)) {
-                            if (key.endsWith('Entries') && Array.isArray(localFD[key]) && localFD[key].length > 0) {
-                                merged[key] = localFD[key]
-                            }
-                        }
-                        if (parsed.formData?.termDates?.terms?.length) {
-                            merged.termDates = parsed.formData.termDates
-                        }
                         localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...parsed, formData: merged }))
                     } catch { /* ignore */ }
                     setFormData(prev => {
@@ -1768,11 +1775,11 @@ export default function Dashboard() {
                         const merged = hasPendingSave
                             ? migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData, ...(() => { try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s).formData || {} : {} } catch { return {} } })() })
                             : migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
-                        // Prefer localStorage term dates (Settings saves there immediately, Supabase may lag)
+                        // Only prefer localStorage term dates when there's a pending save
                         try {
                             const saved = localStorage.getItem(STORAGE_KEY)
                             const parsed = saved ? JSON.parse(saved) : {}
-                            if (parsed.formData?.termDates?.terms?.length) {
+                            if (hasPendingSave && parsed.formData?.termDates?.terms?.length) {
                                 merged.termDates = parsed.formData.termDates
                             }
                             // Re-run break name merge after localStorage override
