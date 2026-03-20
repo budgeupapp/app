@@ -274,10 +274,10 @@ function AppContent() {
     if (showLoadingScreen) {
         return (
             <LoadingScreen
-                onComplete={async () => {
+                onComplete={() => {
+                    // Don't await save — let it complete in background
                     if (savePromiseRef.current) {
-                        try { await savePromiseRef.current } catch (e) { console.error('Save failed:', e) }
-                        savePromiseRef.current = null
+                        savePromiseRef.current.catch(e => console.error('Save failed:', e)).finally(() => { savePromiseRef.current = null })
                     }
                     setShowLoadingScreen(false)
                 }}

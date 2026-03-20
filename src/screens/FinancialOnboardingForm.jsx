@@ -2619,7 +2619,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                 )}
 
                                                 {/* Expense section */}
-                                                {expenseSources.length > 0 && (
+                                                {(expenseSources.length > 0 || weeklySpendAmt > 0) && (
                                                     <div style={{ marginBottom: 4 }}>
                                                         {sectionHeader(<PiTrendDown size={15} color="#e06470" />, 'Expenses')}
                                                         {expenseSources.map(s => <SummaryRow key={s.id} sourceId={s.id} label={s.label} amount={getSourceTotal(s.id)} color="rgba(224,100,112,0.8)" isExpense onTap={() => goToPanel(s.panelId)} />)}
