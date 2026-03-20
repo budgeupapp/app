@@ -948,15 +948,16 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
     return (
         <div ref={rowRef} data-source-row data-source-id={source.id} style={{
             borderRadius: 14,
-            background: isInactive ? '#eee' : '#fff',
+            background: isInactive ? '#f0f0f0' : '#fff',
             overflow: 'hidden',
             maxHeight: deleting ? 0 : naturalHeight != null ? naturalHeight : 5000,
-            opacity: deleting ? 0 : 1,
+            opacity: deleting ? 0 : isInactive ? 0.55 : 1,
             marginBottom: deleting ? 0 : 12,
             boxShadow: expanded ? '0 2px 12px rgba(0,0,0,0.06)' : '0 1px 4px rgba(0,0,0,0.04)',
+            filter: isInactive ? 'grayscale(0.6)' : 'none',
             transition: deleting
                 ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.25s ease, margin-bottom 0.4s cubic-bezier(0.22, 0.61, 0.36, 1)'
-                : 'opacity 0.25s ease, background 0.25s ease, box-shadow 0.3s ease',
+                : 'opacity 0.25s ease, background 0.25s ease, box-shadow 0.3s ease, filter 0.25s ease',
         }}>
             {/* Tappable row */}
             <div
@@ -1013,7 +1014,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                     }}>
                         {!isInactive && yearlyAmount > 0 && source._visibleAmount === 0
                             ? 'Not visible — change graph start date in Settings'
-                            : yearlyAmount === 0 ? `${getCurrencySymbol()}0.00/yr` : `${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${yearlyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/yr`
+                            : yearlyAmount === 0 ? `${getCurrencySymbol()}0/yr` : `${isExpense ? '\u2212' : '+'}${getCurrencySymbol()}${Math.round(yearlyAmount).toLocaleString()}/yr`
                         }
                     </p>
                     {removedCount > 0 && (
@@ -1352,8 +1353,10 @@ export default function Dashboard() {
     const [activeTab, setActiveTabRaw] = useState(() => localStorage.getItem('budgeup_active_tab') || 'goals')
     const activeTabRef = useRef(activeTab)
     const setActiveTab = (tab) => { activeTabRef.current = tab; localStorage.setItem('budgeup_active_tab', tab); setActiveTabRaw(tab) }
-    const [goalsShowMore, setGoalsShowMore] = useState(false)
-    const [trackingShowAll, setTrackingShowAll] = useState(false)
+    const [goalsShowMore, setGoalsShowMoreRaw] = useState(() => sessionStorage.getItem('budgeup_goals_show_more') === 'true')
+    const setGoalsShowMore = (fn) => { setGoalsShowMoreRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; sessionStorage.setItem('budgeup_goals_show_more', String(val)); return val }) }
+    const [trackingShowAll, setTrackingShowAllRaw] = useState(() => sessionStorage.getItem('budgeup_tracking_show_all') === 'true')
+    const setTrackingShowAll = (fn) => { setTrackingShowAllRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; sessionStorage.setItem('budgeup_tracking_show_all', String(val)); return val }) }
     const [warningMinimised, setWarningMinimisedRaw] = useState(() => localStorage.getItem('budgeup_warning_minimised') === 'true')
     const setWarningMinimised = (fn) => { setWarningMinimisedRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; localStorage.setItem('budgeup_warning_minimised', String(val)); return val }) }
     const [trackMinimised, setTrackMinimised] = useState(false)
@@ -1367,8 +1370,10 @@ export default function Dashboard() {
         setTimeout(() => document.addEventListener('pointerdown', dismiss), 50)
         return () => document.removeEventListener('pointerdown', dismiss)
     }, [tappedSegment])
-    const [showAllIncome, setShowAllIncome] = useState(false)
-    const [showAllExpenses, setShowAllExpenses] = useState(false)
+    const [showAllIncome, setShowAllIncomeRaw] = useState(() => sessionStorage.getItem('budgeup_show_all_income') === 'true')
+    const setShowAllIncome = (fn) => { setShowAllIncomeRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; sessionStorage.setItem('budgeup_show_all_income', String(val)); return val }) }
+    const [showAllExpenses, setShowAllExpensesRaw] = useState(() => sessionStorage.getItem('budgeup_show_all_expenses') === 'true')
+    const setShowAllExpenses = (fn) => { setShowAllExpensesRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; sessionStorage.setItem('budgeup_show_all_expenses', String(val)); return val }) }
     const goalsMoreRef = useRef(null)
     const goalsTransCardRef = useRef(null)
     const tabScrollRef = useRef({})
@@ -1416,8 +1421,7 @@ export default function Dashboard() {
             return
         }
 
-        // Switching to different tab — save scroll, keep graph state as-is
-        sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTabRef.current, String(el.scrollTop))
+        // Switching to different tab
 
         // Check if tab is empty
         const isIncomeEmpty = tab === 'income' &&
@@ -1428,9 +1432,8 @@ export default function Dashboard() {
             (formData.flexExpenseSources || []).length === 0
         const isTabEmpty = isIncomeEmpty || isExpensesEmpty
 
-        // Restore saved scroll position for the target tab
-        const savedScroll = parseInt(sessionStorage.getItem('budgeup_scroll_dashboard_' + tab) || '0', 10)
-        const targetScroll = isTabEmpty ? 0 : savedScroll
+        // Always start at top when switching tabs
+        const targetScroll = 0
 
         isTabSwitchingRef.current = true
         isAnimatingRef.current = true
@@ -1456,8 +1459,8 @@ export default function Dashboard() {
             applyScrollStyles(targetScroll)
             el.style.opacity = ''
             isAnimatingRef.current = false
-            // Delay clearing tab switch flag to block stale scroll events from content change
-            setTimeout(() => { isTabSwitchingRef.current = false }, 50)
+            // Delay clearing tab switch flag to block stale scroll events from content reflow
+            setTimeout(() => { isTabSwitchingRef.current = false }, 300)
         })
     }
     const [editingEvent, setEditingEvent] = useState(null)
@@ -1891,6 +1894,7 @@ export default function Dashboard() {
     const cardDetailsRef = useRef(null)
     const footerRef = useRef(null)
 
+
     // Cache DOM node references to avoid querySelectorAll on every scroll frame
     const cachedNodesRef = useRef(null)
     const getCachedNodes = useCallback(() => {
@@ -2269,7 +2273,6 @@ export default function Dashboard() {
         const el = scrollRef.current
         if (!el) return
         applyScrollStyles(el.scrollTop)
-        sessionStorage.setItem('budgeup_scroll_dashboard_' + activeTabRef.current, String(el.scrollTop))
 
         // Show/hide tab bar bottom line based on content scroll
         if (tabsBarRef.current && contentWrapRef.current) {
@@ -2303,14 +2306,6 @@ export default function Dashboard() {
 
     // Apply saved scroll position + graph state immediately on mount to prevent flash
     useLayoutEffect(() => {
-        const saved = sessionStorage.getItem('budgeup_scroll_dashboard_' + activeTab)
-        if (saved && scrollRef.current) {
-            const pos = parseInt(saved, 10)
-            if (pos > 0) {
-                scrollRef.current.scrollTop = pos
-                applyScrollStyles(pos)
-            }
-        }
         // Restore graph visual state to match graphCovered / graphCollapsed
         const gc = graphCardRef.current
         const graphEl = graphContainerRef.current
@@ -2322,26 +2317,12 @@ export default function Dashboard() {
         } else if (graphCollapsed) {
             if (graphEl) graphEl.style.height = `${MIN_H}px`
             if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
-        } else {
-            const pos = parseInt(saved || '0', 10)
-            if (pos > 0) {
-                if (graphEl) graphEl.style.height = `${MIN_H}px`
-                if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
-            }
         }
     }, [])
 
-    // Re-apply scroll position + graph state after data loads (content may have changed)
+    // Re-apply graph state after data loads
     useLayoutEffect(() => {
         if (!dbLoaded) return
-        const saved = sessionStorage.getItem('budgeup_scroll_dashboard_' + activeTab)
-        if (saved && scrollRef.current) {
-            const pos = parseInt(saved, 10)
-            if (pos > 0) {
-                scrollRef.current.scrollTop = pos
-                applyScrollStyles(pos)
-            }
-        }
         const gc = graphCardRef.current
         const graphEl = graphContainerRef.current
         const heroEl = heroHeaderRef.current
@@ -2352,12 +2333,6 @@ export default function Dashboard() {
         } else if (graphCollapsed) {
             if (graphEl) graphEl.style.height = `${MIN_H}px`
             if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
-        } else {
-            const pos = parseInt(saved || '0', 10)
-            if (pos > 0) {
-                if (graphEl) graphEl.style.height = `${MIN_H}px`
-                if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
-            }
         }
     }, [dbLoaded])
 
@@ -2837,8 +2812,8 @@ export default function Dashboard() {
             setCollapsingSections(prev => new Set(prev).add(sectionAttr))
         }
 
-        // If section will be empty, scroll to top so content doesn't disappear
-        if (sectionWillBeEmpty && el && el.scrollTop > 0) {
+        // Scroll to top of container on delete
+        if (el && el.scrollTop > 0) {
             const spacer = document.createElement('div')
             spacer.style.height = (el.scrollTop + 200) + 'px'
             spacer.style.flexShrink = '0'
@@ -3986,11 +3961,35 @@ export default function Dashboard() {
                                 }
                             }
 
+                            const navigateToSource = (evt) => {
+                                const baseId = (evt.editType || '').includes(':') ? evt.editType.split(':')[0] : evt.editType
+                                const isIncome = evt.type === 'income'
+                                const targetTab = isIncome ? 'income' : 'expenses'
+                                handleTabChange(targetTab)
+                                setTimeout(() => {
+                                    if (!expandedSources.has(baseId)) handleExpandToggle(baseId)
+                                    setTimeout(() => {
+                                        const el = scrollRef.current
+                                        if (!el) return
+                                        const target = el.querySelector(`[data-source-id="${baseId}"]`)
+                                        if (target) {
+                                            const stickyHeader = el.querySelector('[data-sticky-header]')
+                                            const headerH = stickyHeader ? stickyHeader.offsetHeight : 0
+                                            const pos = target.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - headerH - 8
+                                            el.scrollTo({ top: Math.max(0, pos), behavior: 'smooth' })
+                                        }
+                                    }, 301)
+                                }, 350)
+                            }
+
                             const renderEventRow = (evt, i, list, color) => (
-                                <div key={`${evt.editType}-${evt.date}-${i}`} style={{
-                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                    padding: '8px 0', borderBottom: i < list.length - 1 ? '1px solid #f5f5f5' : 'none',
-                                }}>
+                                <div key={`${evt.editType}-${evt.date}-${i}`}
+                                    onClick={() => navigateToSource(evt)}
+                                    style={{
+                                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                        padding: '8px 0', borderBottom: i < list.length - 1 ? '1px solid #f5f5f5' : 'none',
+                                        cursor: 'pointer',
+                                    }}>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <p style={{ margin: 0, fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
                                             {evt.label}
@@ -4003,23 +4002,13 @@ export default function Dashboard() {
                                         <p style={{ margin: 0, fontSize: 16, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color }}>
                                             {evt.type === 'income' ? '+' : '-'}{sym}{Math.round(evt.amount).toLocaleString()}
                                         </p>
-                                        <button
-                                            onClick={() => removeEvent(evt)}
-                                            style={{
-                                                width: 24, height: 24, borderRadius: 6, border: 'none',
-                                                background: '#f5f7f7', cursor: 'pointer',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                padding: 0, flexShrink: 0,
-                                            }}
-                                        >
-                                            <Trash size={12} color="#999" />
-                                        </button>
+                                        <ChevronRight size={16} color="#ccc" style={{ flexShrink: 0 }} />
                                     </div>
                                 </div>
                             )
 
                             return (
-                                <div style={{ padding: '0 0 40px' }} >
+                                <div style={{ padding: '0 0 10px' }} >
 
                                     {/* Will I run out? */}
                                     {(() => {
@@ -4376,7 +4365,7 @@ export default function Dashboard() {
                                                                     {tappedSegment.label}
                                                                 </span>
                                                                 <span style={{ fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>
-                                                                    {sym}{Math.round(tappedSegment.amt).toLocaleString()}
+                                                                    {sym}{Math.round(tappedSegment.amt).toLocaleString()}/yr
                                                                 </span>
                                                             </div>
                                                         )}
@@ -4583,7 +4572,7 @@ export default function Dashboard() {
                                                     )}
                                                 </div>
                                                 <div style={{
-                                                    maxHeight: goalsShowMore ? 300 : undefined,
+                                                    maxHeight: goalsShowMore ? 250 : undefined,
                                                     overflowY: goalsShowMore ? 'auto' : undefined,
                                                     WebkitOverflowScrolling: 'touch',
                                                 }}>

@@ -485,33 +485,6 @@ export default function MoneyAdviceScreen() {
                     <ResourceCard key={`gen-${i}`} {...r} />
                 ))}
 
-                {/* Newsletter signup */}
-                <div style={{
-                    background: '#f0f4f4', borderRadius: 14, padding: '16px 18px',
-                    marginTop: 16, marginBottom: 12,
-                }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                        <div style={{
-                            width: 36, height: 36, borderRadius: 10,
-                            background: '#147b7512',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            flexShrink: 0,
-                        }}>
-                            <Mail size={18} color="#147b75" />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                            <p style={{
-                                fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                                color: '#1a1a1a', margin: '0 0 2px',
-                            }}>Stay in the loop</p>
-                            <p style={{
-                                fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
-                                color: '#999', margin: 0,
-                            }}>Behind-the-scenes updates & tips</p>
-                        </div>
-                        <Toggle on={newsletterOn} onChange={handleNewsletterToggle} loading={newsletterLoading} />
-                    </div>
-                </div>
 
                 {/* Disclaimer */}
                 <p style={{

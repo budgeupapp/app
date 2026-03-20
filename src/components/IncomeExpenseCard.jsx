@@ -311,7 +311,7 @@ export default function IncomeExpenseCard({
         if (entries.length <= 1) return
         const prevEntries = [...entries]
         const name = categoryLabel || entryLabel
-        const label = entries.length > 1 ? `${name} – ${entryLabel.toLowerCase()} ${idx + 1}` : name
+        const label = entries.length > 1 ? `${name} ${idx + 1}` : name
         // Animate out then remove
         setDeletingIdx(idx)
         setTimeout(() => {
@@ -656,8 +656,8 @@ function EntryCard({
         <div>
             {/* Amount + frequency */}
             <div style={{ marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: grey1, display: 'block', marginTop: 4, marginBottom: 10, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                    Amount
+                <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: compact ? '#999' : '#777', display: 'block', marginTop: 4, marginBottom: 6 }}>
+                    {isExpense ? 'I pay' : 'I earn'}
                 </span>
                 <div style={{ display: 'flex', gap: 8, height: showTermSplit ? 89 : 44, transition: 'height 0.3s ease' }}>
                     <div style={{ flex: '1 1 0', minWidth: 0, height: '100%' }}>
@@ -860,9 +860,6 @@ function EntryCard({
 
             {/* === WEEKLY/FORTNIGHTLY/MONTHLY/YEARLY: schedule card === */}
             {(frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly' || frequency === 'yearly' || showFreqPicker) && frequency !== 'irregular' && frequency !== 'one-off' && (<>
-                <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: grey1, display: 'block', marginBottom: 10, letterSpacing: 0.5, textTransform: 'uppercase' }}>
-                    Schedule
-                </span>
                 <div style={{ marginBottom: 16 }}>
                     {/* Paid dropdown row (only for yearly — others skip straight to day selector) */}
                     {frequency === 'yearly' && (sf === 'weekly' || sf === 'fortnightly' || sf === 'monthly' || sf === 'yearly' || showFreqPicker || sf === 'irregular') && (
@@ -934,13 +931,14 @@ function EntryCard({
                                 <CustomSelect
                                     value={entry.dayOfMonth || '1'}
                                     onChange={(v) => updateField('dayOfMonth', v)}
+                                    minWidth={200}
                                     options={[
                                         ...Array.from({ length: 31 }, (_, i) => {
                                             const d = i + 1
                                             const suffix = d === 1 || d === 21 || d === 31 ? 'st' : d === 2 || d === 22 ? 'nd' : d === 3 || d === 23 ? 'rd' : 'th'
-                                            return { value: String(d), label: `${d}${suffix}` }
+                                            return { value: String(d), label: `${d}${suffix} of each month` }
                                         }),
-                                        { value: 'last', label: 'Last day' },
+                                        { value: 'last', label: 'Last day of each month' },
                                     ]}
                                     triggerStyle={{
                                         width: '100%', height: 44, border: inputBorder,
@@ -964,13 +962,14 @@ function EntryCard({
                             <CustomSelect
                                 value={entry.dayOfMonth || '1'}
                                 onChange={(v) => updateField('dayOfMonth', v)}
+                                minWidth={200}
                                 options={[
                                     ...Array.from({ length: 31 }, (_, i) => {
                                         const d = i + 1
                                         const suffix = d === 1 || d === 21 || d === 31 ? 'st' : d === 2 || d === 22 ? 'nd' : d === 3 || d === 23 ? 'rd' : 'th'
-                                        return { value: String(d), label: `${d}${suffix}` }
+                                        return { value: String(d), label: `${d}${suffix} of each month` }
                                     }),
-                                    { value: 'last', label: 'Last day' },
+                                    { value: 'last', label: 'Last day of each month' },
                                 ]}
                                 triggerStyle={{
                                     width: '100%', height: 44, border: inputBorder,
@@ -987,7 +986,7 @@ function EntryCard({
                     {(frequency === 'weekly' || frequency === 'fortnightly') && (
                         <div style={{ marginBottom: 10 }}>
                             <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
-                                Paid on
+                                Paid {frequency === 'weekly' ? 'weekly' : 'fortnightly'} on
                             </span>
                             <CustomSelect
                                 value={entry.dayOfWeek || 'monday'}
@@ -1152,7 +1151,7 @@ function EntryCard({
                                                 {!isPerInstalment && (
                                                 <div style={{
                                                     display: 'flex', alignItems: 'center', gap: 2,
-                                                    background: '#f0f0f0', borderRadius: 8,
+                                                    background: compact ? '#fff' : '#f0f0f0', borderRadius: 8,
                                                     padding: '4px 8px', width: 80, boxSizing: 'border-box',
                                                     marginLeft: 5
                                                 }}>
@@ -1178,7 +1177,7 @@ function EntryCard({
                                                     <span style={{
                                                         fontSize: 14, fontWeight: 600, color: grey2,
                                                         fontFamily: 'Nunito, sans-serif', pointerEvents: 'none',
-                                                        background: '#f0f0f0', padding: '6px 12px', borderRadius: 8,
+                                                        background: compact ? '#fff' : '#f0f0f0', padding: '6px 12px', borderRadius: 8,
                                                         display: 'inline-block', whiteSpace: 'nowrap',
                                                         minWidth: 120, textAlign: 'center',
                                                     }}>

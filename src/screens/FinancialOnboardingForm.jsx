@@ -2398,7 +2398,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 {panelId === 'summary' && (() => {
                                     const allEvts = buildGraphEvents(formData)
                                     const sym = getCurrencySymbol()
-                                    const fmtK = (v) => { if (v >= 1000) { const k = v / 1000; const dec = Math.round(k * 10) % 10; return `${sym}${k.toFixed(dec === 0 ? 0 : 1)}k` } return `${sym}${Math.round(v).toLocaleString()}` }
+                                    const fmtK = (v) => `${sym}${Math.round(v).toLocaleString()}`
 
                                     // Calculate totals from formData (same as Dashboard calcEntryTotal)
                                     const AY_S = new Date('2025-09-01T00:00:00')

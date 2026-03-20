@@ -157,7 +157,7 @@ function SettingsRow({ icon, label, value, onClick, last, children, expanded }) 
           width: '100%', display: 'flex', alignItems: 'center', gap: 14,
           padding: '15px 18px', background: 'transparent', border: 'none',
           borderBottom: last ? 'none' : '1px solid',
-          borderBottomColor: expanded ? 'transparent' : '#ddd',
+          borderBottomColor: expanded ? 'transparent' : '#e5e5e5',
           cursor: onClick ? 'pointer' : 'default', textAlign: 'left',
           transition: 'border-bottom-color 0.3s ease',
         }}
@@ -231,6 +231,8 @@ export default function SettingsScreen() {
   const [showNewsletterPopup, setShowNewsletterPopup] = useState(false)
   const [newsletterOn, setNewsletterOn] = useState(() => localStorage.getItem('budgeup_newsletter') !== 'false')
   const [newsletterLoading, setNewsletterLoading] = useState(false)
+  const [insightsOn, setInsightsOn] = useState(() => localStorage.getItem('budgeup_insights_consent') === 'true')
+  const [insightsLoading, setInsightsLoading] = useState(false)
   const [userEmail, setUserEmail] = useState('')
   const [currency, setCurrencyState] = useState(getCurrency)
   const [graphStart, setGraphStartState] = useState(getGraphStart)
@@ -559,6 +561,50 @@ export default function SettingsScreen() {
       showToast('Failed to update newsletter preference', 'error')
     } finally {
       setNewsletterLoading(false)
+    }
+  }
+
+  const handleInsightsToggle = async () => {
+    if (insightsLoading || !userIdRef.current) return
+    const newVal = !insightsOn
+    setInsightsOn(newVal)
+    localStorage.setItem('budgeup_insights_consent', String(newVal))
+    setInsightsLoading(true)
+    try {
+      const { data: existing } = await supabase.from('user_consents')
+        .select('id')
+        .eq('user_id', userIdRef.current)
+        .eq('scope', 'insights')
+        .limit(1)
+        .maybeSingle()
+      if (newVal) {
+        if (existing) {
+          await supabase.from('user_consents')
+            .update({ revoked_at: null, granted_at: new Date().toISOString() })
+            .eq('id', existing.id)
+        } else {
+          await supabase.from('user_consents').insert({
+            user_id: userIdRef.current,
+            provider: 'budgeup',
+            scope: 'insights',
+            policy_version: 'v1',
+            granted_at: new Date().toISOString(),
+          })
+        }
+      } else {
+        if (existing) {
+          await supabase.from('user_consents')
+            .update({ revoked_at: new Date().toISOString() })
+            .eq('id', existing.id)
+        }
+      }
+      showToast(newVal ? 'Student finance insights enabled' : 'Student finance insights disabled')
+    } catch (err) {
+      setInsightsOn(!newVal)
+      localStorage.setItem('budgeup_insights_consent', String(!newVal))
+      showToast('Failed to update preference', 'error')
+    } finally {
+      setInsightsLoading(false)
     }
   }
 
@@ -1291,7 +1337,7 @@ export default function SettingsScreen() {
                 style={{
                   display: 'flex', alignItems: 'center', gap: 14,
                   padding: '15px 18px', textDecoration: 'none',
-                  borderBottom: i < policyLinks.length - 1 ? '1px solid #f0f0f0' : 'none',
+                  borderBottom: i < policyLinks.length - 1 ? '1px solid #e5e5e5' : 'none',
                 }}
               >
                 <span style={{ color: '#888', flexShrink: 0, display: 'flex' }}>{link.icon}</span>
@@ -1307,6 +1353,7 @@ export default function SettingsScreen() {
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 14,
                 padding: '15px 18px', background: 'transparent', border: 'none',
+                borderTop: '1px solid #e5e5e5',
                 cursor: 'pointer', textAlign: 'left',
               }}
             >
@@ -1317,6 +1364,70 @@ export default function SettingsScreen() {
               <ChevronRight size={18} color="#ccc" />
             </button>
 
+          </div>
+        </div>
+
+        {/* PREFERENCES */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{
+            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+            color: '#1a1a1a',
+            padding: '0 6px', marginBottom: 8,
+          }}>Preferences</div>
+          <div style={{ background: '#f0f4f4', borderRadius: 16 }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '15px 18px',
+              borderBottom: '1px solid #e5e5e5',
+            }}>
+              <span style={{ color: '#888', flexShrink: 0, display: 'flex' }}><Mail size={18} /></span>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', display: 'block' }}>Newsletter</span>
+                <span style={{ fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999' }}>Behind-the-scenes updates & new features</span>
+              </div>
+              <button onClick={handleNewsletterToggle} disabled={newsletterLoading} style={{
+                width: 48, height: 26, borderRadius: 13,
+                background: newsletterOn ? '#147b75' : '#e0e0e0',
+                border: 'none', cursor: 'pointer', padding: 0,
+                position: 'relative', flexShrink: 0,
+                opacity: newsletterLoading ? 0.5 : 1,
+                transition: 'background 0.2s ease, opacity 0.2s ease',
+              }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: '50%',
+                  background: '#fff', position: 'absolute', top: 2,
+                  left: newsletterOn ? 24 : 2,
+                  transition: 'left 0.2s ease',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                }} />
+              </button>
+            </div>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: '15px 18px',
+            }}>
+              <span style={{ color: '#888', flexShrink: 0, display: 'flex' }}><Shield size={18} /></span>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 15, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', display: 'block' }}>Student finance insights</span>
+                <span style={{ fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999' }}>Allow us to use your anonymised data for student finance research</span>
+              </div>
+              <button onClick={handleInsightsToggle} disabled={insightsLoading} style={{
+                width: 48, height: 26, borderRadius: 13,
+                background: insightsOn ? '#147b75' : '#e0e0e0',
+                border: 'none', cursor: 'pointer', padding: 0,
+                position: 'relative', flexShrink: 0,
+                opacity: insightsLoading ? 0.5 : 1,
+                transition: 'background 0.2s ease, opacity 0.2s ease',
+              }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: '50%',
+                  background: '#fff', position: 'absolute', top: 2,
+                  left: insightsOn ? 24 : 2,
+                  transition: 'left 0.2s ease',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                }} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1333,7 +1444,7 @@ export default function SettingsScreen() {
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 14,
                 padding: '15px 18px', background: 'transparent', border: 'none',
-                borderBottom: '1px solid #f0f0f0',
+                borderBottom: '1px solid #e5e5e5',
                 cursor: 'pointer', textAlign: 'left',
               }}
             >
@@ -1349,7 +1460,7 @@ export default function SettingsScreen() {
               style={{
                 width: '100%', display: 'flex', alignItems: 'center', gap: 14,
                 padding: '15px 18px', background: 'transparent', border: 'none',
-                borderBottom: '1px solid #f0f0f0',
+                borderBottom: '1px solid #e5e5e5',
                 cursor: 'pointer', textAlign: 'left',
               }}
             >

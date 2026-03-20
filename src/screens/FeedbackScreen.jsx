@@ -84,8 +84,8 @@ function RatingQuestion({ question, value, onChange }) {
             </div>
             {(question.lowerBoundLabel || question.upperBoundLabel) && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-                    <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>{question.lowerBoundLabel}</span>
-                    <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>{question.upperBoundLabel}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#999' }}>{question.lowerBoundLabel}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#999' }}>{question.upperBoundLabel}</span>
                 </div>
             )}
         </div>
@@ -539,6 +539,7 @@ export default function FeedbackScreen() {
                     const hasAny = Object.values(quickResponses).some(v => v !== undefined && v !== null && v !== '')
                     const [quickSubmitting, setQuickSubmitting] = useState(false)
                     const handleQuickSubmit = () => {
+                        if (!hasAny) return
                         const btn = document.querySelector('[data-quick-submit-btn]')
                         if (btn) {
                             const rect = btn.getBoundingClientRect()
@@ -579,10 +580,11 @@ export default function FeedbackScreen() {
                                 {quickSurveyQuestions.map((q, i) => renderQuestion(q, i, quickResponses, (idx, val) => setQuickResponses(prev => ({ ...prev, [idx]: val }))))}
                             </div>
                             <div style={{ marginTop: 4 }}>
-                                <button data-quick-submit-btn onClick={handleQuickSubmit} disabled={quickSubmitting} style={{
+                                <button data-quick-submit-btn onClick={handleQuickSubmit} disabled={quickSubmitting || !hasAny} style={{
                                     width: '100%', marginTop: 18, padding: '13px', borderRadius: 12, border: 'none',
                                     background: '#147B75', color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                                    cursor: quickSubmitting ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                    cursor: (quickSubmitting || !hasAny) ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                    opacity: !hasAny ? 0.5 : 1,
                                 }}>
                                     {!quickSubmitting && <Send size={16} />}
                                     {quickSubmitting ? 'Sending...' : 'Submit survey'}
