@@ -2538,10 +2538,17 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     amountOverrides: { ...(prev.amountOverrides || {}), [overrideKey]: val }
                                 }))
                             } else {
-                                // Regular amount edit
-                                const matchIdx = entries.findIndex(e => e.nextDate === editingEvent.date)
-                                const idx = matchIdx >= 0 ? matchIdx : 0
-                                setFormData(prev => ({ ...prev, [cat.formKey]: (prev[cat.formKey] || []).map((e, i) => i === idx ? { ...e, amount: val } : e) }))
+                                // Regular payment edit — use amountOverrides (same as Dashboard)
+                                const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
+                                const originalAmt = editingEvent.originalAmount != null ? editingEvent.originalAmount : editingEvent.amount
+                                if (Math.abs(parsedAmount - originalAmt) < 0.01) {
+                                    // Same as original — remove override
+                                    const updated = { ...(formData.amountOverrides || {}) }
+                                    delete updated[overrideKey]
+                                    updateField('amountOverrides', updated)
+                                } else {
+                                    updateField('amountOverrides', { ...(formData.amountOverrides || {}), [overrideKey]: val })
+                                }
                             }
                         }
                         setEditingEvent(null)
@@ -2776,7 +2783,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                     type="text"
                                                     inputMode="decimal"
                                                     value={formatMoney(editAmount)}
-                                                    onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                    onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ''); const parts = v.split('.'); setEditAmount(parts.length > 1 ? parts[0] + '.' + parts[1].slice(0, 2) : v) }}
                                                     ref={(el) => el && setTimeout(() => el.focus({ preventScroll: true }), 50)}
                                                     style={{
                                                         flex: 1, minWidth: 0, border: 'none', background: 'transparent',

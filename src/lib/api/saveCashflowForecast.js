@@ -20,15 +20,6 @@ const mapFrequencyToRecurrence = freq => {
 }
 
 export async function saveCashflowForecast(userId, data) {
-    // Delete existing manual cashflow entries for this user
-    const { error: delError } = await supabase
-        .from('cashflow_forecast')
-        .delete()
-        .eq('user_id', userId)
-        .eq('source', 'manual')
-
-    if (delError) throw delError
-
     // Default start date: 1st September
     const firstTermDate = '2025-09-01'
 
@@ -108,7 +99,24 @@ export async function saveCashflowForecast(userId, data) {
         })
     }
 
-    /* --- Removed events --- */
+    /* --- Build set of valid editType prefixes from current entries --- */
+    const validEditTypes = new Set()
+    for (const formKey of CATEGORY_FORM_KEYS) {
+        const entries = data[formKey]
+        if (!Array.isArray(entries) || entries.length === 0) continue
+        const catId = formKey.replace('Entries', '')
+        for (const entry of entries) {
+            if (!stripCommas(entry.amount) && !entry.months?.length) continue
+            const et = entry.id ? `${catId}:${entry.id}` : catId
+            validEditTypes.add(et)
+        }
+        validEditTypes.add(catId)
+    }
+    // Also add flex and weekly spend edit types
+    for (const srcId of [...(data.flexIncomeSources || []), ...(data.flexExpenseSources || [])]) validEditTypes.add(srcId)
+    if (data.weeklySpend) validEditTypes.add('weeklySpend')
+
+    /* --- Removed events (only save if editType matches a current entry) --- */
     const removedEvents = data.removedEvents || []
     if (removedEvents.length) {
         for (const key of removedEvents) {
@@ -116,6 +124,7 @@ export async function saveCashflowForecast(userId, data) {
             const date = parts.pop()
             const editType = parts.join(':')
             if (!editType || !date) continue
+            if (!validEditTypes.has(editType)) continue
             rows.push({
                 user_id: userId, direction: 'out', type: editType,
                 title: `Removed: ${editType}`, amount: 0,
@@ -126,13 +135,14 @@ export async function saveCashflowForecast(userId, data) {
         }
     }
 
-    /* --- Amount overrides (per-payment) --- */
+    /* --- Amount overrides (only save if editType matches a current entry) --- */
     const amountOverrides = data.amountOverrides || {}
     for (const [key, val] of Object.entries(amountOverrides)) {
         const parts = key.split(':')
-        const date = parts.pop() // last part is always the date
-        const editType = parts.join(':') // rest is the editType
+        const date = parts.pop()
+        const editType = parts.join(':')
         if (!editType || !date || !val) continue
+        if (!validEditTypes.has(editType)) continue
         rows.push({
             user_id: userId, direction: 'out', type: editType,
             title: `Override: ${editType}`, amount: stripCommas(val) || 0,
@@ -246,23 +256,41 @@ export async function saveCashflowForecast(userId, data) {
         })
     }
 
-    if (!rows.length) {
-        console.warn('[saveCashflow] No rows to save — all entries empty?', Object.keys(data).filter(k => k.endsWith('Entries')).map(k => `${k}: ${(data[k] || []).length}`))
-        return
-    }
-
     // Sanitize all date fields to prevent invalid date errors
     for (const row of rows) {
         if (row.scheduled_date && !/^\d{4}-\d{2}-\d{2}/.test(row.scheduled_date)) {
-            console.warn('[saveCashflow] Invalid scheduled_date:', row.scheduled_date, 'in row:', row.type, row.title)
             row.scheduled_date = '2025-09-01'
         }
         if (row.end_date && !/^\d{4}-\d{2}-\d{2}/.test(row.end_date)) {
-            console.warn('[saveCashflow] Invalid end_date:', row.end_date, 'in row:', row.type, row.title)
             row.end_date = null
         }
     }
-    console.log(`[saveCashflow] Saving ${rows.length} rows`)
+
+    // Safety: count existing rows before deleting — never wipe if new data is empty
+    const { count: existingCount } = await supabase
+        .from('cashflow_forecast')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('source', 'manual')
+
+    if (!rows.length && existingCount > 0) {
+        console.warn('[saveCashflow] Refusing to delete', existingCount, 'existing rows with 0 new rows — data would be wiped')
+        return
+    }
+
+    // Only delete existing rows if we have new rows to replace them (or DB is already empty)
+    if (existingCount > 0) {
+        const { error: delError } = await supabase
+            .from('cashflow_forecast')
+            .delete()
+            .eq('user_id', userId)
+            .eq('source', 'manual')
+        if (delError) throw delError
+    }
+
+    if (!rows.length) return
+
+    console.log(`[saveCashflow] Saving ${rows.length} rows (replaced ${existingCount || 0})`)
     const { error } = await supabase.from('cashflow_forecast').insert(rows)
     if (error) {
         console.error('[saveCashflow] Insert failed:', error.message, error.details, error.hint)

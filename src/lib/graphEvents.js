@@ -331,7 +331,7 @@ export function buildGraphEvents(formData, {
         const overrideKey = `${base.editType}:${base.date}`
         const overrideVal = overrides[overrideKey]
         const withOverride = overrideVal != null
-            ? { ...base, amount: parseMoney(overrideVal) || base.amount, hasOverride: true, originalAmount: base.amount }
+            ? { ...base, amount: parseMoney(overrideVal) || base.amount, edited: true, hasOverride: true, originalAmount: base.amount }
             : base
         return removed.includes(overrideKey) ? { ...withOverride, removed: true } : withOverride
     })

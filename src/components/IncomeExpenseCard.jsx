@@ -245,6 +245,7 @@ export default function IncomeExpenseCard({
     entryOverrideCounts = null, // per-entry override counts
     onVisibleEntryChange = null, // callback(idx) when scrolled entry changes
     onDeleteEntry = null, // callback({ label, undoFn, entryId, deletedIdx }) when an entry is deleted
+    onClearEntryEvents = null, // callback(entryEditType) clear removed/overrides for this entry
 }) {
     const wrapperRef = useRef(null)
     const scrollContainerRef = useRef(null)
@@ -427,6 +428,7 @@ export default function IncomeExpenseCard({
                             freqLabelOverrides={freqLabelOverrides}
                             scheduleFreqOptions={scheduleFreqOptions}
                             scheduleFreqLabels={scheduleFreqLabels}
+                            onClearEntryEvents={onClearEntryEvents ? () => onClearEntryEvents(entry.id) : null}
                         />
                     </div>
                 )})}
@@ -475,6 +477,7 @@ function EntryCard({
     freqLabelOverrides,
     scheduleFreqOptions = null,
     scheduleFreqLabels = null,
+    onClearEntryEvents = null,
 }) {
     const {
         amount = '',
@@ -812,6 +815,8 @@ function EntryCard({
                             updateField('endDate', '')
                             updateField('dayOfWeek', '')
                             updateField('dayOfMonth', '')
+                            // Clear stale removed/overrides for this entry
+                            if (onClearEntryEvents) onClearEntryEvents()
                             if (v !== 'weekly' && v !== 'fortnightly' && v !== 'monthly') {
                                 if (variesByTerm) {
                                     updateField('variesByTerm', false)
@@ -918,6 +923,8 @@ function EntryCard({
                                     onChange={(v) => {
                                         setScheduleFreq(v)
                                         updateField('scheduleFrequency', v)
+                                        // Clear stale removed/overrides when paid frequency changes
+                                        if (onClearEntryEvents) onClearEntryEvents()
                                     }}
                                     options={(scheduleFreqOptions || (() => {
                                         const order = ['weekly', 'fortnightly', 'monthly', 'yearly']

@@ -1446,18 +1446,37 @@ export default function Dashboard() {
                     if (cancelled) return
                     if (result.formData) {
                         const hasPendingSave = localStorage.getItem('budgeup_pending_save') === 'true'
-                        // If there was a pending save (e.g. quick reload), prefer localStorage over stale DB
-                        const merged = hasPendingSave
-                            ? migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData, ...(() => { try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s).formData || {} : {} } catch { return {} } })() })
-                            : migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
+                        // Always clear the pending flag on load — it will be re-set if there are actual changes
+                        localStorage.removeItem('budgeup_pending_save')
+                        // Start from DB data as source of truth
+                        const merged = migrateOtherFields({ ...INITIAL_FORM_DATA, ...result.formData })
+                        // If pending save, carefully merge localStorage — only prefer non-empty entries over empty DB entries
+                        if (hasPendingSave) {
+                            try {
+                                const s = localStorage.getItem(STORAGE_KEY)
+                                const localFD = s ? JSON.parse(s).formData || {} : {}
+                                // Only override with localStorage values that have actual data
+                                for (const key of Object.keys(localFD)) {
+                                    if (key.endsWith('Entries') && Array.isArray(localFD[key]) && localFD[key].length > 0) {
+                                        // Only prefer localStorage entries if DB has fewer or none
+                                        const dbEntries = merged[key] || []
+                                        if (localFD[key].length >= dbEntries.length) merged[key] = localFD[key]
+                                    }
+                                }
+                                if (localFD.incomeSources?.length > (merged.incomeSources?.length || 0)) merged.incomeSources = localFD.incomeSources
+                                if (localFD.expenseSources?.length > (merged.expenseSources?.length || 0)) merged.expenseSources = localFD.expenseSources
+                                if (localFD.removedEvents?.length) merged.removedEvents = [...new Set([...(merged.removedEvents || []), ...localFD.removedEvents])]
+                                if (localFD.amountOverrides && Object.keys(localFD.amountOverrides).length) merged.amountOverrides = { ...(merged.amountOverrides || {}), ...localFD.amountOverrides }
+                                if (localFD.weeklySpend && !merged.weeklySpend) merged.weeklySpend = localFD.weeklySpend
+                                if (localFD.overdraft != null && localFD.overdraft !== '') merged.overdraft = localFD.overdraft
+                                if (localFD.termDates?.terms?.length) merged.termDates = localFD.termDates
+                            } catch { /* ignore */ }
+                        }
                         // Only prefer localStorage term dates when there's a pending save
                         try {
                             const saved = localStorage.getItem(STORAGE_KEY)
                             const parsed = saved ? JSON.parse(saved) : {}
-                            if (hasPendingSave && parsed.formData?.termDates?.terms?.length) {
-                                merged.termDates = parsed.formData.termDates
-                            }
-                            // Re-run break name merge after localStorage override
+                            // Re-run break name merge
                             if (merged.university && hasCustomTermDates(merged.university) && merged.termDates?.terms?.length) {
                                 const custom = getTermDatesForUniversity(merged.university)
                                 if (custom?.terms?.length) {
@@ -3306,7 +3325,11 @@ export default function Dashboard() {
                                                         const entryOverrideCounts = hasMulti ? entries.map((e, i) => {
                                                             const et = `${cat.id}:${e.id || i}`
                                                             const overrides = formData.amountOverrides || {}
-                                                            return Object.keys(overrides).filter(k => k.startsWith(et + ':')).length
+                                                            return Object.keys(overrides).filter(k => {
+                                                                if (!k.startsWith(et + ':')) return false
+                                                                const date = k.slice(et.length + 1)
+                                                                return events.some(ev => ev.editType === et && ev.date === date && !ev.removed)
+                                                            }).length
                                                         }) : null
                                                         return (
                                                             <CategoryStep
@@ -3322,6 +3345,14 @@ export default function Dashboard() {
                                                                     if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
                                                                     setSkipToast({ label, undoFn: () => setFormData(prevFormData), sourceId: source.id, entryId })
                                                                     skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
+                                                                }}
+                                                                onClearEntryEvents={(entryId) => {
+                                                                    const prefix = `${cat.id}:${entryId}:`
+                                                                    setFormData(prev => ({
+                                                                        ...prev,
+                                                                        removedEvents: (prev.removedEvents || []).filter(k => !k.startsWith(prefix)),
+                                                                        amountOverrides: Object.fromEntries(Object.entries(prev.amountOverrides || {}).filter(([k]) => !k.startsWith(prefix))),
+                                                                    }))
                                                                 }}
                                                             />
                                                         )
@@ -3520,7 +3551,11 @@ export default function Dashboard() {
                                                         const entryOverrideCounts = hasMulti ? entries.map((e, i) => {
                                                             const et = `${cat.id}:${e.id || i}`
                                                             const overrides = formData.amountOverrides || {}
-                                                            return Object.keys(overrides).filter(k => k.startsWith(et + ':')).length
+                                                            return Object.keys(overrides).filter(k => {
+                                                                if (!k.startsWith(et + ':')) return false
+                                                                const date = k.slice(et.length + 1)
+                                                                return events.some(ev => ev.editType === et && ev.date === date && !ev.removed)
+                                                            }).length
                                                         }) : null
                                                         return (
                                                             <CategoryStep
@@ -3536,6 +3571,14 @@ export default function Dashboard() {
                                                                     if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
                                                                     setSkipToast({ label, undoFn: () => setFormData(prevFormData), sourceId: source.id, entryId })
                                                                     skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
+                                                                }}
+                                                                onClearEntryEvents={(entryId) => {
+                                                                    const prefix = `${cat.id}:${entryId}:`
+                                                                    setFormData(prev => ({
+                                                                        ...prev,
+                                                                        removedEvents: (prev.removedEvents || []).filter(k => !k.startsWith(prefix)),
+                                                                        amountOverrides: Object.fromEntries(Object.entries(prev.amountOverrides || {}).filter(([k]) => !k.startsWith(prefix))),
+                                                                    }))
                                                                 }}
                                                             />
                                                         )
@@ -3744,8 +3787,8 @@ export default function Dashboard() {
                                             isAnimatingRef.current = true
                                             animateScroll(el, Math.max(0, pos), 400, function () { isAnimatingRef.current = false })
                                         }
-                                    }, 301)
-                                }, 500)
+                                    }, 30)
+                                }, 50)
                             }
 
                             const renderEventRow = (evt, i, list, color) => (
@@ -4980,7 +5023,7 @@ export default function Dashboard() {
                                                 type="text"
                                                 inputMode="decimal"
                                                 value={formatDisplay(editAmount)}
-                                                onChange={(e) => setEditAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                                                onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ''); const parts = v.split('.'); setEditAmount(parts.length > 1 ? parts[0] + '.' + parts[1].slice(0, 2) : v) }}
                                                 readOnly
                                                 onTouchEnd={(e) => { e.target.readOnly = false; e.target.focus({ preventScroll: true }) }}
                                                 onBlur={(e) => { e.target.readOnly = true }}

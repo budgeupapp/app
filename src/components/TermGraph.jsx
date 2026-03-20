@@ -1749,10 +1749,10 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         width: isActive ? 14 : 10, height: isActive ? 14 : 10,
                                         borderRadius: '50%',
                                         background: dot.event.flex ? 'transparent'
-                                            : (dot.event.hasOverride || dot.event.edited) && (dot.event.edited || (currentEventType && dot.event.editType === currentEventType)) ? '#3b82f6'
+                                            : (dot.event.hasOverride || dot.event.edited) && isCurrent && currentEventType ? '#3b82f6'
                                             : color,
                                         border: dot.event.flex
-                                            ? `2px solid ${(dot.event.hasOverride || dot.event.edited) && (dot.event.edited || (currentEventType && dot.event.editType === currentEventType)) ? '#3b82f6' : color}`
+                                            ? `2px solid ${(dot.event.hasOverride || dot.event.edited) && isCurrent && currentEventType ? '#3b82f6' : color}`
                                             : isActive ? '2px solid white' : '1px solid white',
                                         boxShadow: isActive
                                             ? `0 0 8px ${isIncome ? 'rgba(20,123,117,0.7)' : 'rgba(224,100,112,0.7)'}`
@@ -1791,7 +1791,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                             }
 
                             return [...removedFutureEvents, ...removedPastEvents]
-                                .filter(evt => evt.editType === currentEventType && !removedHiddenTypes.includes(evt.editType))
+                                .filter(evt => (evt.editType === currentEventType || evt.editType?.startsWith(currentEventType + ':') || currentEventType?.startsWith(evt.editType + ':')) && !removedHiddenTypes.includes(evt.editType))
                                 .map((evt, i) => {
                                     const x = datePct(evt.date)
                                     const yPct = getLineY(x)
