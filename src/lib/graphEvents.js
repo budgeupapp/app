@@ -1,7 +1,8 @@
 /**
  * Shared graph event generation logic used by both Dashboard and Onboarding.
  */
-import { AY_START, AY_END, getGraphStart } from '../components/TermGraph'
+import { AY_START, AY_END } from '../components/TermGraph'
+import { getGraphStart } from './settings'
 import { toLocalDate, MONTH_KEY_TO_DATE, MONTH_SHORT, isInTerm, distributeEvenly, addMonths } from './helpers'
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../config/categories'
 import { FREQ_PER_YEAR, DAY_MAP, ALL_MONTH_KEYS } from './constants'

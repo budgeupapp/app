@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { toLocalDate, makeOtherInstance, MONTH_KEY_TO_DATE, MONTH_SHORT, isInTerm, distributeEvenly, addMonths } from '../lib/helpers'
 import { getCurrencySymbol, getGraphStart, setGraphStart } from '../lib/settings'
+import { buildGraphEvents as _buildGraphEvents } from '../lib/graphEvents'
+import { calcEntryTotal } from '../lib/calcEntryTotal'
+import { parseMoney, formatMoney } from '../lib/moneyUtils'
 import { Button, Input, Modal, Radio, Typography, message } from 'antd'
 import StepProgress from '../components/StepProgress'
 import NativeSelect from '../components/NativeSelect'
@@ -35,7 +38,6 @@ import {
     STEPS,
     UK_UNIVERSITIES,
     MONTH_LABELS,
-    ALL_MONTH_KEYS,
     DEFAULT_LOAN_MONTHS,
     OTHER_INCOME_TYPE_OPTIONS,
     OTHER_INCOME_FREQ_OPTIONS,
@@ -55,13 +57,7 @@ const STEP_CONFIG = Object.fromEntries(STEPS.map(s => [s.id, s]))
 
 /* ---------- HELPERS ---------- */
 
-const formatMoney = raw => {
-    const cleaned = raw.replace(/[^0-9.]/g, '')
-    const parts = cleaned.split('.')
-    const whole = parts[0] || ''
-    const formatted = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-    return parts.length > 1 ? `${formatted}.${parts[1]}` : formatted
-}
+// formatMoney imported from ../lib/moneyUtils
 
 /* ---------- GRAPH EVENT HELPERS ---------- */
 
@@ -140,255 +136,13 @@ function generateRentDates(frequency, nextDate, formData = {}) {
     return dates
 }
 
-// Distribute yearly total among non-removed, non-overridden dates; overridden dates use their override
-function distributeExcludingRemoved(total, dates, editType, removedSet, overrides = {}) {
-    let overriddenTotal = 0
-    const overrideMap = {}
-    for (const d of dates) {
-        const key = `${editType}:${d.date}`
-        if (overrides[key] != null && !removedSet.has(key)) {
-            const val = parseFloat(String(overrides[key]).replace(/,/g, '')) || 0
-            overrideMap[d.date] = val
-            overriddenTotal += val
-        }
-    }
-    const remaining = total - overriddenTotal
-    const flexDates = dates.filter(d => !removedSet.has(`${editType}:${d.date}`) && !overrideMap.hasOwnProperty(d.date))
-    const flexAmounts = distributeEvenly(Math.max(0, remaining), flexDates.length)
-    const originalAmounts = distributeEvenly(total, dates.length)
-    let fi = 0
-    return dates.map((d, i) => {
-        const key = `${editType}:${d.date}`
-        if (removedSet.has(key)) return originalAmounts[i]
-        if (overrideMap.hasOwnProperty(d.date)) return overrideMap[d.date]
-        return flexAmounts[fi++] || 0
-    })
-}
+// distributeExcludingRemoved imported via ../lib/graphEvents
 
 function buildGraphEvents(formData) {
-    const events = []
-    const terms = formData.termDates?.terms || []
-    const removedSet = new Set(formData.removedEvents || [])
-    const overridesMap = formData.amountOverrides || {}
-    const ayEnd = AY_END
-    const sepStart = new Date('2025-09-01T00:00:00')
-
-    // Generic category events (income + expense)
-    const ALL_CATS = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
-    for (const cat of ALL_CATS) {
-        const isIncome = INCOME_CATEGORIES.includes(cat)
-        const sourceList = isIncome ? formData.incomeSources : formData.expenseSources
-        if (!sourceList?.includes(cat.id)) continue
-
-        const entries = formData[cat.formKey] || []
-        const hasMultiple = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
-        let entryNum = 0
-        for (const entry of entries) {
-            let amt = parseFloat(String(entry.amount || '0').replace(/,/g, ''))
-            const amtFreq = entry.frequency || cat.defaultFrequency
-            const paidFreq = entry.scheduleFrequency || amtFreq
-            const freq = paidFreq === 'one-off' ? amtFreq : paidFreq === 'irregular' ? 'irregular' : paidFreq
-            // For irregular entries, sum instalment amounts if top-level amount is 0
-            if (amt <= 0 && freq === 'irregular' && entry.instalmentAmounts) {
-                amt = Object.values(entry.instalmentAmounts).reduce((s, v) => s + (parseFloat(String(v || '0').replace(/,/g, '')) || 0), 0)
-            }
-            if (amt <= 0) continue
-            entryNum++
-            const type = isIncome ? 'income' : 'expense'
-            const entryLabel = hasMultiple ? `${cat.label} ${entryNum}` : cat.label
-            const entryEditType = hasMultiple ? `${cat.id}:${entry.id || entryNum}` : cat.id
-            // Convert amount when schedule frequency differs from amount frequency
-            const FREQ_PER_YEAR = { weekly: 52, fortnightly: 26, monthly: 12, yearly: 1, irregular: 1, 'one-off': 1 }
-            const convertedAmt = (freq !== amtFreq && FREQ_PER_YEAR[amtFreq] && FREQ_PER_YEAR[freq])
-                ? Math.round(amt * FREQ_PER_YEAR[amtFreq] / FREQ_PER_YEAR[freq] * 100) / 100
-                : amt
-
-            if (freq === 'irregular') {
-                const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
-                if (months.length === 0) continue
-                const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
-                const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
-                for (let mi = 0; mi < months.length; mi++) {
-                    const month = months[mi]
-                    const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
-                    if (!date) continue
-                    const instAmt = parseFloat(String(entry.instalmentAmounts?.[month] || '0').replace(/,/g, ''))
-                    const amount = instAmt > 0 ? instAmt : amounts[mi]
-                    if (amount <= 0) continue
-                    events.push({ date, amount, type, label: entryLabel, sublabel: `${MONTH_SHORT[month]} ${entryLabel.toLowerCase()}`, editType: entryEditType, editMonth: month })
-                }
-            } else if (freq === 'one-off') {
-                if (entry.nextDate) {
-                    events.push({ date: entry.nextDate, amount: amt, type, label: entryLabel, sublabel: 'One-off', editType: entryEditType })
-                }
-            } else if (freq === 'weekly' || freq === 'fortnightly') {
-                const interval = freq === 'weekly' ? 7 : 14
-                const loopStart = amtFreq === 'yearly' ? sepStart : (entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START))
-                let d = new Date(loopStart)
-                if (!entry.nextDate && amtFreq !== 'yearly') {
-                    while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
-                    while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
-                }
-                const DAY_MAP = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
-                const targetDay = DAY_MAP[entry.dayOfWeek] ?? 1
-                for (let i = 0; i < 7 && d.getDay() !== targetDay; i++) d = new Date(d.getTime() + 86400000)
-                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : convertedAmt
-                const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
-                const earliest = amtFreq === 'yearly' ? sepStart : AY_START
-                const paymentDates = []
-                while (d <= endDate) {
-                    if (d >= earliest) {
-                        paymentDates.push({ date: toLocalDate(d), sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}` })
-                    }
-                    d = new Date(d.getTime() + interval * 86400000)
-                }
-                if (amtFreq === 'yearly' && paymentDates.length > 0) {
-                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
-                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
-                    for (let pi = 0; pi < paymentDates.length; pi++) {
-                        if (amounts[pi] > 0) events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
-                    }
-                } else {
-                    for (const pd of paymentDates) {
-                        const eventAmt = entry.variesByTerm ? (isInTerm(pd.date, terms) ? convertedAmt : nonTermAmt) : convertedAmt
-                        if (eventAmt > 0) events.push({ date: pd.date, amount: eventAmt, type, label: entryLabel, sublabel: pd.sublabel, editType: entryEditType })
-                    }
-                }
-            } else if (freq === 'monthly') {
-                const domRaw = entry.dayOfMonth || '1'
-                const isLast = domRaw === 'last'
-                const domTarget = isLast ? 31 : parseInt(domRaw) || 1
-                const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
-                const earliest = amtFreq === 'yearly' ? sepStart : (startFrom > AY_START ? startFrom : AY_START)
-                const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
-                const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : convertedAmt
-                const loopStart = amtFreq === 'yearly' ? sepStart : AY_START
-                const paymentDates = []
-                let month = loopStart.getMonth()
-                let year = loopStart.getFullYear()
-                for (let i = 0; i < 12; i++) {
-                    const lastDay = new Date(year, month + 1, 0).getDate()
-                    const day = Math.min(domTarget, lastDay)
-                    const d = new Date(year, month, day)
-                    if (d >= earliest && d <= endDate) {
-                        paymentDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}` })
-                    }
-                    month++
-                    if (month > 11) { month = 0; year++ }
-                }
-                if (amtFreq === 'yearly' && paymentDates.length > 0) {
-                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
-                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
-                    for (let pi = 0; pi < paymentDates.length; pi++) {
-                        if (amounts[pi] > 0) events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
-                    }
-                } else {
-                    for (const pd of paymentDates) {
-                        const eventAmt = entry.variesByTerm ? (isInTerm(pd.date, terms) ? convertedAmt : nonTermAmt) : convertedAmt
-                        if (eventAmt > 0) events.push({ date: pd.date, amount: eventAmt, type, label: entryLabel, sublabel: pd.sublabel, editType: entryEditType })
-                    }
-                }
-            } else if (freq === 'yearly') {
-                const sf = entry.scheduleFrequency
-                if (sf === 'weekly' || sf === 'fortnightly') {
-                    const interval = sf === 'weekly' ? 7 : 14
-                    let d = new Date(sepStart)
-                    const DAY_MAP2 = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
-                    const targetDay2 = DAY_MAP2[entry.dayOfWeek] ?? 1
-                    for (let i = 0; i < 7 && d.getDay() !== targetDay2; i++) d = new Date(d.getTime() + 86400000)
-                    const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
-                    const paymentDates = []
-                    while (d <= endDate) {
-                        if (d >= sepStart) paymentDates.push({ date: toLocalDate(d), sublabel: `${sf === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}` })
-                        d = new Date(d.getTime() + interval * 86400000)
-                    }
-                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
-                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
-                    for (let pi = 0; pi < paymentDates.length; pi++) {
-                        if (amounts[pi] > 0) events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
-                    }
-                } else if (sf === 'monthly') {
-                    const domRaw = entry.dayOfMonth || '1'
-                    const isLast = domRaw === 'last'
-                    const domTarget = isLast ? 31 : parseInt(domRaw) || 1
-                    const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
-                    const paymentDates = []
-                    let month = sepStart.getMonth(), year = sepStart.getFullYear()
-                    for (let i = 0; i < 12; i++) {
-                        const lastDay = new Date(year, month + 1, 0).getDate()
-                        const day = Math.min(domTarget, lastDay)
-                        const d = new Date(year, month, day)
-                        if (d >= sepStart && d <= endDate) {
-                            paymentDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}` })
-                        }
-                        month++; if (month > 11) { month = 0; year++ }
-                    }
-                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
-                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
-                    for (let pi = 0; pi < paymentDates.length; pi++) {
-                        if (amounts[pi] > 0) events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
-                    }
-                } else {
-                    events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: entryEditType })
-                }
-            }
-        }
-    }
-
-    // Weekly spend events
-    const weeklyAmt = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, ''))
-    const weeklyNonTermAmt = formData.weeklySpendVariesByTerm
-        ? parseFloat(String(formData.weeklySpendNonTerm || '0').replace(/,/g, ''))
-        : weeklyAmt
-    if (weeklyAmt > 0 || weeklyNonTermAmt > 0) {
-        const ayStart = AY_START
-        const ayEnd = AY_END
-        let d = new Date(ayStart)
-        // Align to Mondays
-        while (d.getDay() !== 1) d = new Date(d.getTime() + 24 * 60 * 60 * 1000)
-        while (d <= ayEnd) {
-            const dateStr = toLocalDate(d)
-            const amt = formData.weeklySpendVariesByTerm
-                ? (isInTerm(dateStr, terms) ? weeklyAmt : weeklyNonTermAmt)
-                : weeklyAmt
-            if (amt > 0) {
-                events.push({
-                    date: dateStr, amount: amt, type: 'expense',
-                    label: 'Weekly Spend', sublabel: 'Average weekly spending',
-                    editType: 'weeklySpend',
-                    noDot: true,
-                })
-            }
-            d = new Date(d.getTime() + 7 * 24 * 60 * 60 * 1000)
-        }
-    }
-
-    // One-off items events
-    const oneOffItems = formData.oneOffItems || []
-    for (const item of oneOffItems) {
-        const amt = parseFloat(String(item.amount || '0').replace(/,/g, ''))
-        if (amt > 0 && item.date) {
-            events.push({
-                date: item.date, amount: amt,
-                type: (item.direction || 'out') === 'in' ? 'income' : 'expense',
-                label: item.name || 'One-off',
-                sublabel: (item.direction || 'out') === 'in' ? 'One-off income' : 'One-off expense',
-                editType: 'oneOff',
-            })
-        }
-    }
-
-    // Mark individually removed and overridden events
-    const removed = formData.removedEvents || []
-    const overrides = formData.amountOverrides || {}
-    return events.map(e => {
-        const key = `${e.editType}:${e.date}`
-        const overrideVal = overrides[key]
-        const withOverride = overrideVal != null
-            ? { ...e, amount: parseFloat(String(overrideVal).replace(/,/g, '')) || e.amount, edited: true, hasOverride: true, originalAmount: e.amount }
-            : e
-        if (removed.includes(key)) return { ...withOverride, removed: true }
-        return withOverride
+    return _buildGraphEvents(formData, {
+        filterByGraphStart: false,
+        includeFlexSources: false,
+        splitOneOffEditType: false,
     })
 }
 /* ---------- SUB-COMPONENTS ---------- */
@@ -1723,7 +1477,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
     if (inPanelGroup) {
         const terms = formData.termDates?.terms || []
-        const balanceNum = parseFloat(String(formData.balance || '0').replace(/,/g, '')) || 0
+        const balanceNum = parseMoney(formData.balance)
         const activeExpanded = expandedTerms
 
         // Determine which handler to use based on active panel
@@ -1831,8 +1585,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             }
                             return toLocalDate(AY_START)
                         })()}
-                        weeklySpendRate={parseFloat(String(formData.weeklySpend || '0').replace(/,/g, '')) || 0}
-                        overdraft={formData.overdraft ? parseFloat(String(formData.overdraft || '0').replace(/,/g, '')) : undefined}
+                        weeklySpendRate={parseMoney(formData.weeklySpend)}
+                        overdraft={formData.overdraft ? parseMoney(formData.overdraft) : undefined}
                         events={activePanel >= 3 ? buildGraphEvents(formData).filter(e => { const wsIdx = PANEL_STEPS.indexOf('weeklySpend'); return e.editType !== 'weeklySpend' || activePanel >= wsIdx }) : []}
                         hiddenEventTypes={(() => {
                             const panelId = PANEL_STEPS[activePanel]
@@ -2101,7 +1855,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     const sources = INCOME_CATEGORIES.includes(c) ? formData.incomeSources : formData.expenseSources
                                     if (!sources?.includes(c.id)) return false
                                     const entries = formData[c.formKey] || []
-                                    return entries.some(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0 || (e.months?.length > 0))
+                                    return entries.some(e => parseMoney(e.amount) > 0 || (e.months?.length > 0))
                                 })
                                 if (allCatsWithData.length < 2) return null
                                 const otherPanels = ['oneOffItems', 'weeklySpend']
@@ -2458,77 +2212,18 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     const sym = getCurrencySymbol()
                                     const fmtK = (v) => `${sym}${Math.round(v).toLocaleString()}`
 
-                                    // Calculate totals from formData (same as Dashboard calcEntryTotal)
-                                    const AY_S = new Date('2025-09-01T00:00:00')
-                                    const AY_E = new Date('2026-08-31T00:00:00')
+                                    // Calculate totals from formData using shared calcEntryTotal
                                     const removedSetLocal = new Set(formData.removedEvents || [])
-                                    const calcTotal = (entry, cat) => {
-                                        const amt = parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0
-                                        if (amt <= 0) return 0
-                                        const freq = entry.frequency || cat.defaultFrequency
-                                        const pf = entry.scheduleFrequency || freq
-                                        const ef = pf === 'one-off' ? freq : pf === 'irregular' ? 'irregular' : pf
-                                        const entries = formData[cat.formKey] || []
-                                        const hasMultiple = entries.filter(e => parseFloat(String(e.amount || '0').replace(/,/g, '')) > 0).length > 1
-                                        const entryEditType = hasMultiple ? (entry.id ? `${cat.id}:${entry.id}` : cat.id) : cat.id
-                                        const isSkipped = (dateStr) => removedSetLocal.has(`${entryEditType}:${dateStr}`)
-                                        if (freq === 'irregular' || ef === 'irregular') {
-                                            const months = entry.months || []
-                                            let instTotal = 0
-                                            for (const m of months) {
-                                                const date = entry.dates?.[m] || MONTH_KEY_TO_DATE[m]
-                                                if (date && isSkipped(date)) continue
-                                                const v = parseFloat(String(entry.instalmentAmounts?.[m] || '0').replace(/,/g, '')) || 0
-                                                instTotal += v > 0 ? v : (amt / (months.length || 1))
-                                            }
-                                            return instTotal > 0 ? instTotal : amt
-                                        }
-                                        if (freq === 'one-off' || ef === 'one-off') {
-                                            if (entry.nextDate && isSkipped(entry.nextDate)) return 0
-                                            return amt
-                                        }
-                                        if (freq === 'yearly') {
-                                            if (entry.nextDate && isSkipped(entry.nextDate)) return 0
-                                            return amt
-                                        }
-                                        const start = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_S
-                                        const end = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : AY_E
-                                        if (start > end) return 0
-                                        const nonTermAmt = entry.variesByTerm ? (parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) || 0) : amt
-                                        if (ef === 'weekly' || ef === 'fortnightly') {
-                                            const interval = ef === 'weekly' ? 7 : 14
-                                            let total = 0
-                                            let d = new Date(start)
-                                            while (d <= end) {
-                                                const dateStr = toLocalDate(d)
-                                                if (!isSkipped(dateStr)) {
-                                                    total += (entry.variesByTerm && !isInTerm(dateStr, terms)) ? nonTermAmt : amt
-                                                }
-                                                d = new Date(d.getTime() + interval * 86400000)
-                                            }
-                                            return total
-                                        }
-                                        if (ef === 'monthly') {
-                                            let total = 0, m = start.getMonth(), y = start.getFullYear()
-                                            for (let i = 0; i < 24; i++) {
-                                                const d = new Date(y, m, Math.min(parseInt(entry.dayOfMonth) || 1, new Date(y, m + 1, 0).getDate()))
-                                                if (d >= start && d <= end) {
-                                                    const dateStr = toLocalDate(d)
-                                                    if (!isSkipped(dateStr)) {
-                                                        total += (entry.variesByTerm && !isInTerm(dateStr, terms)) ? nonTermAmt : amt
-                                                    }
-                                                }
-                                                m++; if (m > 11) { m = 0; y++ }
-                                                if (new Date(y, m, 1) > end) break
-                                            }
-                                            return total
-                                        }
-                                        return amt
-                                    }
                                     const getSourceTotal = (catId) => {
                                         const cat = CATEGORY_MAP[catId]
                                         if (!cat) return 0
-                                        return (formData[cat.formKey] || []).reduce((s, e) => s + calcTotal(e, cat), 0)
+                                        const allEntries = formData[cat.formKey] || []
+                                        return allEntries.reduce((s, e) => s + calcEntryTotal(e, cat, {
+                                            removedSet: removedSetLocal,
+                                            terms,
+                                            useHasMultiple: true,
+                                            allEntries,
+                                        }), 0)
                                     }
 
                                     const INCOME_SOURCE_MAP = INCOME_CATEGORIES.map(cat => ({
@@ -2540,8 +2235,8 @@ export default function FinancialOnboardingForm({ onComplete }) {
 
                                     const incomeSources = INCOME_SOURCE_MAP.filter(s => (formData.incomeSources || []).includes(s.id))
                                     const expenseSources = EXPENSE_SOURCE_MAP.filter(s => (formData.expenseSources || []).includes(s.id))
-                                    const weeklySpendAmt = parseFloat(String(formData.weeklySpend || '0').replace(/,/g, ''))
-                                    const weeklySpendNonTermAmt = formData.weeklySpendVariesByTerm ? (parseFloat(String(formData.weeklySpendNonTerm || '0').replace(/,/g, '')) || 0) : weeklySpendAmt
+                                    const weeklySpendAmt = parseMoney(formData.weeklySpend)
+                                    const weeklySpendNonTermAmt = formData.weeklySpendVariesByTerm ? parseMoney(formData.weeklySpendNonTerm) : weeklySpendAmt
                                     const weeklySpendYearly = (() => {
                                         if (!formData.weeklySpendVariesByTerm) return weeklySpendAmt * 52
                                         let total = 0
@@ -2556,7 +2251,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     const oneOffFiltered = (formData.oneOffItems || []).filter(it => it.name || it.amount)
                                     const oneOffCount = oneOffFiltered.length
                                     const oneOffTotal = oneOffFiltered.reduce((s, it) => {
-                                        const amt = parseFloat(String(it.amount || '0').replace(/,/g, '')) || 0
+                                        const amt = parseMoney(it.amount)
                                         return s + (it.direction === 'in' ? amt : -amt)
                                     }, 0)
 
@@ -2623,14 +2318,14 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                     <div onClick={() => goToPanel('balance')} style={{ ...cardStyle, flex: 1, marginBottom: 0 }}>
                                                         <div style={{ flex: 1 }}>
                                                             <p style={{ fontSize: 11, fontWeight: 600, fontFamily: F, color: '#999', margin: 0 }}>Balance</p>
-                                                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: F, color: '#333', margin: '2px 0 0' }}>{sym}{Math.round(parseFloat(String(formData.balance || '0').replace(/,/g, ''))).toLocaleString()}</p>
+                                                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: F, color: '#333', margin: '2px 0 0' }}>{sym}{Math.round(parseMoney(formData.balance)).toLocaleString()}</p>
                                                         </div>
                                                         {chevron}
                                                     </div>
                                                     <div onClick={() => goToPanel('overdraft')} style={{ ...cardStyle, flex: 1, marginBottom: 0 }}>
                                                         <div style={{ flex: 1 }}>
                                                             <p style={{ fontSize: 11, fontWeight: 600, fontFamily: F, color: '#999', margin: 0 }}>Overdraft</p>
-                                                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: F, color: '#333', margin: '2px 0 0' }}>{formData.overdraft ? `${sym}${Math.round(parseFloat(String(formData.overdraft).replace(/,/g, ''))).toLocaleString()}` : 'None'}</p>
+                                                            <p style={{ fontSize: 16, fontWeight: 800, fontFamily: F, color: '#333', margin: '2px 0 0' }}>{formData.overdraft ? `${sym}${Math.round(parseMoney(formData.overdraft)).toLocaleString()}` : 'None'}</p>
                                                         </div>
                                                         {chevron}
                                                     </div>
@@ -2797,7 +2492,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             const formKey = cat.formKey
                             if (editingEvent.editMonth) {
                                 // Irregular/instalment: redistribute across other months (only for matching entry)
-                                const total = eventEntry ? (parseFloat(String(eventEntry.amount || '0').replace(/,/g, '')) || 0) : 0
+                                const total = eventEntry ? (parseMoney(eventEntry.amount)) : 0
                                 const parsedVal = parseFloat(val) || 0
                                 if (parsedVal > total) { setEditWarning(`Can't exceed total of ${getCurrencySymbol()}${total.toLocaleString()}`); return }
                                 const entryMonths = eventEntry?.months || []
@@ -2807,7 +2502,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     return { ...prev, [formKey]: prevEntries.map(e => {
                                         if (entryId && e.id !== entryId) return e
                                         if (!entryId && prevEntries.length > 1) return e
-                                        const eTotal = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                        const eTotal = parseMoney(e.amount)
                                         const newVal = parseFloat(val) || 0
                                         const otherMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
                                         const remainder = Math.max(0, eTotal - newVal)
@@ -2822,7 +2517,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 })
                             } else if (amtFreq === 'yearly') {
                                 // Yearly paid monthly/weekly/fortnightly: validate then use amountOverrides
-                                const total = eventEntry ? (parseFloat(String(eventEntry.amount || '0').replace(/,/g, '')) || 0) : 0
+                                const total = eventEntry ? (parseMoney(eventEntry.amount)) : 0
                                 const parsedVal = parseFloat(val) || 0
                                 if (parsedVal > total) { setEditWarning(`Can't exceed yearly total of ${getCurrencySymbol()}${Math.round(total).toLocaleString()}`); return }
                                 // Check total of all overrides + this one doesn't exceed yearly
@@ -2831,7 +2526,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 let otherOverridesTotal = 0
                                 for (const [k, v] of Object.entries(currentOverrides)) {
                                     if (k.startsWith(editingEvent.editType + ':') && k !== overrideKey) {
-                                        otherOverridesTotal += parseFloat(String(v).replace(/,/g, '')) || 0
+                                        otherOverridesTotal += parseMoney(v)
                                     }
                                 }
                                 if (otherOverridesTotal + parsedVal > total) {
@@ -2869,7 +2564,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             setFormData(prev => {
                                 const entries = prev[cat.formKey] || []
                                 return { ...prev, [cat.formKey]: entries.map(e => {
-                                    const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                    const total = parseMoney(e.amount)
                                     const entryFreq = e.frequency || cat.defaultFrequency
                                     const isPerInst = entryFreq === 'irregular'
                                     const newMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
