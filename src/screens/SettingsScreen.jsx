@@ -6,7 +6,7 @@ import { POLICY_URLS } from '../lib/policyVersions'
 import { analytics, AUTH_EVENTS, SETTINGS_EVENTS, SCREEN_EVENTS, FEEDBACK_EVENTS, getErrorProperties } from '../lib/analytics/index.js'
 import { CURRENCIES, getCurrency, setCurrency, getGraphStart, setGraphStart, getCurrencySymbol } from '../lib/settings'
 import { refreshAY } from '../components/TermGraph'
-import { fetchUserData, saveTermDates, saveUserFinances, saveCashflowForecast } from '../lib/api'
+import { fetchUserData, saveTermDates, saveUserFinances, saveCashflowForecast, saveBalanceHistory } from '../lib/api'
 import { INITIAL_FORM_DATA, UK_UNIVERSITIES, getTermDatesForUniversity, hasCustomTermDates } from '../config/onboardingConfig'
 import TermDatesStep from './TermDatesStep'
 import { User, Share2, DollarSign, Calendar, BookOpen, ChevronRight, LogOut, Trash2, RefreshCw, FileText, Shield, Mail, Copy, Globe, AlertCircle, CreditCard, Sliders, ExternalLink } from 'react-feather'
@@ -268,6 +268,7 @@ export default function SettingsScreen() {
     } catch { return '' }
   })
   const startingBalanceSaveTimerRef = useRef(null)
+  const pendingBalanceRef = useRef(null)
   const userIdRef = useRef(null)
   const termSaveTimerRef = useRef(null)
   const pendingTermDatesRef = useRef(null)
@@ -325,12 +326,17 @@ export default function SettingsScreen() {
     }
   }, [])
 
-  // Flush pending term dates save on unmount
+  // Flush pending saves on unmount (tab switch / navigation)
   useEffect(() => {
     return () => {
       if (termSaveTimerRef.current) clearTimeout(termSaveTimerRef.current)
       if (pendingTermDatesRef.current && userIdRef.current) {
         saveTermDates(userIdRef.current, pendingTermDatesRef.current).catch(() => { })
+      }
+      if (startingBalanceSaveTimerRef.current) clearTimeout(startingBalanceSaveTimerRef.current)
+      if (pendingBalanceRef.current != null && userIdRef.current) {
+        const val = pendingBalanceRef.current
+        supabase.from('user_profiles').update({ balance: Number(String(val).replace(/,/g, '')) || 0, updated_at: new Date().toISOString() }).eq('user_id', userIdRef.current).then()
       }
     }
   }, [])
@@ -373,7 +379,16 @@ export default function SettingsScreen() {
           if (result.formData?.overdraft != null && result.formData.overdraft !== '') {
             setOverdraft(result.formData.overdraft)
           }
-          if (result.formData?.balance != null && result.formData.balance !== '') {
+          // Prefer localStorage balance (saved immediately) over Supabase (may lag behind)
+          let localBalance = null
+          try {
+            const ls = localStorage.getItem('budgeup_onboarding_state')
+            const parsed = ls ? JSON.parse(ls) : {}
+            if (parsed.formData?.balance != null && parsed.formData.balance !== '') localBalance = parsed.formData.balance
+          } catch { }
+          if (localBalance != null) {
+            setStartingBalance(localBalance)
+          } else if (result.formData?.balance != null && result.formData.balance !== '') {
             setStartingBalance(result.formData.balance)
           }
         } catch (err) {
@@ -1048,6 +1063,7 @@ export default function SettingsScreen() {
                     const parts = val.split('.')
                     if (parts.length > 2) val = parts[0] + '.' + parts.slice(1).join('')
                     setStartingBalance(val)
+                    pendingBalanceRef.current = val
                     try {
                       const raw = localStorage.getItem('budgeup_onboarding_state')
                       const parsed = raw ? JSON.parse(raw) : {}
@@ -1057,12 +1073,20 @@ export default function SettingsScreen() {
                     } catch { }
                     if (startingBalanceSaveTimerRef.current) clearTimeout(startingBalanceSaveTimerRef.current)
                     startingBalanceSaveTimerRef.current = setTimeout(async () => {
+                      pendingBalanceRef.current = null
                       if (!userIdRef.current) return
                       try {
                         await supabase
                           .from('user_profiles')
                           .update({ balance: Number(val.replace(/,/g, '')) || 0, updated_at: new Date().toISOString() })
                           .eq('user_id', userIdRef.current)
+                        // If today is the join date, also update today's balance history
+                        const graphStart = getGraphStart()
+                        const today = new Date()
+                        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+                        if (todayStr === graphStart) {
+                          await saveBalanceHistory(userIdRef.current, val)
+                        }
                       } catch (err) {
                         console.error('Failed to save starting balance:', err)
                       }

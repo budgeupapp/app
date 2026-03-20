@@ -2129,17 +2129,21 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                             // Always use all points for the line, plus marker position to connect
                             const linePoints = [...allHistPoints, { x: markerPct, y: balTopPctLive }]
                             const pathD = linePoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
-                            // Show dots: always include latest (last point), then every 5 days going backwards
-                            const dayStep = zoom >= 4 ? 1 : zoom >= 2 ? 7 : 14
-                            const dotPoints = dayStep === 1 ? allHistPoints : (() => {
+                            // Show dots: space them so there's always ~1.5 dot-widths gap between each
+                            // Dot is 10px wide, so min spacing = 10 * 2.5 = 25px between centres
+                            const graphWidth = graphAreaRef.current?.offsetWidth || 300
+                            const effectiveWidth = graphWidth * (zoom || 1)
+                            const dotSize = 10
+                            const minGapPx = dotSize * 2.5 // 1.5 dot-widths gap = 2.5 dot-widths centre-to-centre
+                            const minGapPct = (minGapPx / effectiveWidth) * 100
+                            const dotPoints = (() => {
+                                if (allHistPoints.length <= 1) return allHistPoints
                                 const last = allHistPoints[allHistPoints.length - 1]
                                 const pts = [last]
-                                let lastDate = last.date
                                 for (let i = allHistPoints.length - 2; i >= 0; i--) {
-                                    const daysDiff = Math.round((new Date(lastDate) - new Date(allHistPoints[i].date)) / 86400000)
-                                    if (daysDiff >= dayStep) {
+                                    const prevShown = pts[pts.length - 1]
+                                    if (Math.abs(prevShown.x - allHistPoints[i].x) >= minGapPct) {
                                         pts.push(allHistPoints[i])
-                                        lastDate = allHistPoints[i].date
                                     }
                                 }
                                 return pts.reverse()
