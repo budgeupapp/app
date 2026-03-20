@@ -1483,7 +1483,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                     {/* Current source label */}
                     {currentEventLabel && (
                         <div style={{
-                            position: 'absolute', top: 4, left: 6, zIndex: 15,
+                            position: 'absolute', top: 4, right: 6, zIndex: 15,
                             background: '#fff',
                             borderRadius: 8, padding: '3px 10px',
                             pointerEvents: 'none',
