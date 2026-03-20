@@ -539,6 +539,7 @@ function EntryCard({
     const [customAmounts, setCustomAmounts] = useState(
         () => Object.values(instalmentAmounts || {}).some(v => parseFloat(String(v || '0').replace(/,/g, '')) > 0)
     )
+    const [instalmentWarning, setInstalmentWarning] = useState('')
     const dateActiveRef = useRef(false)
     const [showFreqPicker, setShowFreqPicker] = useState(frequency === 'yearly')
     // Default schedule frequency: use custom options if provided, else per instalment for yearly, monthly otherwise
@@ -589,9 +590,41 @@ function EntryCard({
 
     const handleInstalmentChange = (month, e) => {
         const val = cleanNum(e.target.value)
-        const newInstalments = { ...instalmentAmounts, [month]: val }
-        setRawInstalments(prev => ({ ...prev, [month]: val }))
-        updateField('instalmentAmounts', newInstalments)
+        const totalAmt = parseFloat(String(amount || '0').replace(/,/g, '')) || 0
+        const parsedVal = parseFloat(val) || 0
+        // Validate: single instalment can't exceed total
+        if (parsedVal > totalAmt && totalAmt > 0) {
+            setInstalmentWarning(`Can't exceed total of ${getCurrencySymbol()}${Math.round(totalAmt).toLocaleString()}`)
+            return
+        }
+        setInstalmentWarning('')
+        // If only 1 instalment, it must equal the total
+        if (months.length === 1 && totalAmt > 0 && Math.abs(parsedVal - totalAmt) > 0.01) {
+            setInstalmentWarning(`Only 1 instalment — must equal the total (${getCurrencySymbol()}${Math.round(totalAmt).toLocaleString()}). Add more months to split.`)
+            const totalStr = String(totalAmt)
+            setRawInstalments({ [month]: totalStr })
+            updateField('instalmentAmounts', { [month]: totalStr })
+            setTimeout(() => setInstalmentWarning(''), 3000)
+            return
+        }
+        // Redistribute remainder across other months
+        const otherMonths = months.filter(m => m !== month)
+        const remainder = Math.max(0, totalAmt - parsedVal)
+        const ni = { [month]: val }
+        const nr = { [month]: val }
+        if (otherMonths.length > 0 && totalAmt > 0) {
+            const perOther = Math.round(remainder * 100 / otherMonths.length) / 100
+            const leftover = Math.round((remainder - perOther * otherMonths.length) * 100)
+            otherMonths.forEach((m, i) => {
+                const v = String(Math.round((perOther + (i < leftover ? 0.01 : 0)) * 100) / 100)
+                ni[m] = v
+                nr[m] = v
+            })
+        } else {
+            otherMonths.forEach(m => { ni[m] = instalmentAmounts?.[m] || ''; nr[m] = instalmentAmounts?.[m] || '' })
+        }
+        setRawInstalments(nr)
+        updateField('instalmentAmounts', ni)
     }
 
     const toggleMonth = (month) => {
@@ -1226,6 +1259,11 @@ function EntryCard({
                                         </div>
                                     </div>
                                 ))}
+                                {instalmentWarning && (
+                                    <p style={{ margin: '8px 12px 4px', fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
+                                        {instalmentWarning}
+                                    </p>
+                                )}
                             </div>
                         </>)}
                     </div>

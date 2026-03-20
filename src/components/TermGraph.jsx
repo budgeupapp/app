@@ -575,7 +575,16 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
             pastLinePath = pastPts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
             pastFillPath = pastLinePath + ` L ${pastPts[pastPts.length - 1].x} 100 L ${startX} 100 Z`
 
+            // Ensure future line starts exactly at the orange dot position
             const futurePts = points.slice(splitIdx)
+            if (futurePts.length > 0 && Math.abs(futurePts[0].x - splitX) > 0.01) {
+                // Interpolate y at splitX between the point before and after
+                const prevPt = points[splitIdx - 1]
+                const nextPt = points[splitIdx]
+                const t = (splitX - prevPt.x) / (nextPt.x - prevPt.x || 1)
+                const interpolatedY = prevPt.y + t * (nextPt.y - prevPt.y)
+                futurePts.unshift({ x: splitX, y: interpolatedY })
+            }
             futureLinePath = futurePts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
             futureFillPath = futureLinePath + ` L 100 100 L ${futurePts[0].x} 100 Z`
         } else {
@@ -1740,10 +1749,10 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         width: isActive ? 14 : 10, height: isActive ? 14 : 10,
                                         borderRadius: '50%',
                                         background: dot.event.flex ? 'transparent'
-                                            : dot.event.hasOverride && currentEventType && dot.event.editType === currentEventType ? '#3b82f6'
+                                            : (dot.event.hasOverride || dot.event.edited) && (dot.event.edited || (currentEventType && dot.event.editType === currentEventType)) ? '#3b82f6'
                                             : color,
                                         border: dot.event.flex
-                                            ? `2px solid ${dot.event.hasOverride && currentEventType && dot.event.editType === currentEventType ? '#3b82f6' : color}`
+                                            ? `2px solid ${(dot.event.hasOverride || dot.event.edited) && (dot.event.edited || (currentEventType && dot.event.editType === currentEventType)) ? '#3b82f6' : color}`
                                             : isActive ? '2px solid white' : '1px solid white',
                                         boxShadow: isActive
                                             ? `0 0 8px ${isIncome ? 'rgba(20,123,117,0.7)' : 'rgba(224,100,112,0.7)'}`

@@ -4,9 +4,9 @@ const stripCommas = str =>
     str ? String(str).replace(/,/g, '') : null
 
 const MONTH_TO_DEFAULT_DATE = {
-    september: '2025-09-15', october: '2025-10-15', november: '2025-11-15', december: '2025-12-15',
-    january: '2026-01-15', february: '2026-02-15', march: '2026-03-15', april: '2026-04-15',
-    may: '2026-05-15', june: '2026-06-15', july: '2026-07-15', august: '2026-08-15'
+    september: '2025-09-01', october: '2025-10-01', november: '2025-11-01', december: '2025-12-01',
+    january: '2026-01-01', february: '2026-02-01', march: '2026-03-01', april: '2026-04-01',
+    may: '2026-05-01', june: '2026-06-01', july: '2026-07-01', august: '2026-08-01'
 }
 
 const mapFrequencyToRecurrence = freq => {

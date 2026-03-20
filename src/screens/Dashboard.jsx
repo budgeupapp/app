@@ -2718,6 +2718,7 @@ export default function Dashboard() {
     const EXPENSE_SOURCES = FIXED_EXPENSE_SOURCES
 
     const events = buildGraphEvents(formData)
+    const exactGraphStart = getGraphStart() // exact date string e.g. '2025-10-20'
     // Build all events (ignoring source toggles) for computing yearly amounts when sources are off
     const allEvents = _allEventsForProjection
 
@@ -3657,7 +3658,7 @@ export default function Dashboard() {
                                             const active = !hiddenSources.has(source.id)
                                             const editTypes = incomeEditTypeMap[source.id] || []
                                             const yearly = getSourceYearly(editTypes)
-                                            const visibleAmt = events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot).reduce((s, e) => s + e.amount, 0)
+                                            const visibleAmt = events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot && e.date >= exactGraphStart).reduce((s, e) => s + e.amount, 0)
                                             const removedCount = getSourceRemovedCount(editTypes)
                                             const isExpanded = expandedSources.has(source.id)
 
@@ -3871,7 +3872,7 @@ export default function Dashboard() {
                                             const active = !hiddenSources.has(source.id)
                                             const editTypes = expenseEditTypeMap[source.id] || []
                                             const yearly = getSourceYearly(editTypes)
-                                            const visibleAmt = events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot).reduce((s, e) => s + e.amount, 0)
+                                            const visibleAmt = events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot && e.date >= exactGraphStart).reduce((s, e) => s + e.amount, 0)
                                             const removedCount = getSourceRemovedCount(editTypes)
 
                                             return (
@@ -4988,6 +4989,9 @@ export default function Dashboard() {
                             const parsedVal = parseFloat(val) || 0
                             if (parsedVal > total) { setEditWarning(`Can't exceed total of ${getCurrencySymbol()}${total.toLocaleString()}`); return }
                             if (parsedVal <= 0) { setEditWarning('Instalment amount must be greater than zero'); return }
+                            // Check single instalment before saving
+                            const entryMonths = entry?.months || []
+                            if (entryMonths.length <= 1 && total > 0 && Math.abs(parsedVal - total) > 0.01) { setEditWarning(`Only 1 instalment — must equal the total (${getCurrencySymbol()}${Math.round(total).toLocaleString()})`); return }
                             setEditWarning('')
                             setFormData(prev => {
                                 const entries = prev[saveCat.formKey] || []
@@ -5009,6 +5013,22 @@ export default function Dashboard() {
                     } else {
                         const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
                         const originalAmt = editingEvent.originalAmount != null ? editingEvent.originalAmount : editingEvent.amount
+                        // Validate against yearly total if this is a yearly amount paid in sub-frequency
+                        if (eventFreq === 'yearly' && eventEntry) {
+                            const total = parseFloat(String(eventEntry.amount || '0').replace(/,/g, '')) || 0
+                            if (parsedAmount > total) { setEditWarning(`Can't exceed yearly total of ${getCurrencySymbol()}${Math.round(total).toLocaleString()}`); return }
+                            const currentOverrides = formData.amountOverrides || {}
+                            let otherOverridesTotal = 0
+                            for (const [k, v] of Object.entries(currentOverrides)) {
+                                if (k.startsWith(editingEvent.editType + ':') && k !== overrideKey) {
+                                    otherOverridesTotal += parseFloat(String(v).replace(/,/g, '')) || 0
+                                }
+                            }
+                            if (otherOverridesTotal + parsedAmount > total) {
+                                setEditWarning(`Edited payments total ${getCurrencySymbol()}${Math.round(otherOverridesTotal + parsedAmount).toLocaleString()} — exceeds yearly total of ${getCurrencySymbol()}${Math.round(total).toLocaleString()}`)
+                                return
+                            }
+                        }
                         if (Math.abs(parsedAmount - originalAmt) < 0.01) {
                             // Same as original — remove override if exists
                             const updated = { ...(formData.amountOverrides || {}) }
@@ -5305,30 +5325,25 @@ export default function Dashboard() {
                                     )
                                 })()}
                                 {/* Original amount + reset (if edited) */}
-                                {editingEvent.hasOverride && editingEvent.originalAmount != null && (
-                                    <div style={{
-                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                        background: '#eef4ff', borderRadius: 10, padding: '7px 12px', marginBottom: 8,
-                                    }}>
-                                        <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#3b82f6' }}>
-                                            Originally {getCurrencySymbol()}{editingEvent.originalAmount.toLocaleString()} / {freqLabel ? freqLabel.toLowerCase() : 'payment'}
-                                        </span>
+                                {editingEvent.hasOverride && (
+                                    <div style={{ marginBottom: 8 }}>
                                         <button
                                             onClick={() => {
-                                                const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
+                                                // Clear all overrides for this editType
                                                 const updated = { ...(formData.amountOverrides || {}) }
-                                                delete updated[overrideKey]
+                                                for (const k of Object.keys(updated)) {
+                                                    if (k.startsWith(editingEvent.editType + ':')) delete updated[k]
+                                                }
                                                 updateField('amountOverrides', updated)
                                                 setEditingEvent(null)
                                             }}
                                             style={{
-                                                background: '#3b82f6', border: 'none',
-                                                padding: '4px 10px', borderRadius: 6,
-                                                cursor: 'pointer', flexShrink: 0,
-                                                display: 'flex', alignItems: 'center',
+                                                width: '100%', height: 32, background: 'rgba(59,130,246,0.08)', border: 'none', borderRadius: 8,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                cursor: 'pointer',
                                             }}
                                         >
-                                            <span style={{ fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#fff' }}>Reset</span>
+                                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6' }}>Reset all payments to equal</span>
                                         </button>
                                     </div>
                                 )}

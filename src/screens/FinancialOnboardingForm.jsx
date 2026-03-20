@@ -140,20 +140,38 @@ function generateRentDates(frequency, nextDate, formData = {}) {
     return dates
 }
 
-// Distribute yearly total only among non-removed dates; removed dates keep original amount for display
-function distributeExcludingRemoved(total, dates, editType, removedSet) {
-    const activeDates = dates.filter(d => !removedSet.has(`${editType}:${d.date}`))
-    const activeAmounts = distributeEvenly(total, activeDates.length)
+// Distribute yearly total among non-removed, non-overridden dates; overridden dates use their override
+function distributeExcludingRemoved(total, dates, editType, removedSet, overrides = {}) {
+    let overriddenTotal = 0
+    const overrideMap = {}
+    for (const d of dates) {
+        const key = `${editType}:${d.date}`
+        if (overrides[key] != null && !removedSet.has(key)) {
+            const val = parseFloat(String(overrides[key]).replace(/,/g, '')) || 0
+            overrideMap[d.date] = val
+            overriddenTotal += val
+        }
+    }
+    const remaining = total - overriddenTotal
+    const flexDates = dates.filter(d => !removedSet.has(`${editType}:${d.date}`) && !overrideMap.hasOwnProperty(d.date))
+    const flexAmounts = distributeEvenly(Math.max(0, remaining), flexDates.length)
     const originalAmounts = distributeEvenly(total, dates.length)
-    let ai = 0
-    return dates.map((d, i) => removedSet.has(`${editType}:${d.date}`) ? originalAmounts[i] : activeAmounts[ai++])
+    let fi = 0
+    return dates.map((d, i) => {
+        const key = `${editType}:${d.date}`
+        if (removedSet.has(key)) return originalAmounts[i]
+        if (overrideMap.hasOwnProperty(d.date)) return overrideMap[d.date]
+        return flexAmounts[fi++] || 0
+    })
 }
 
 function buildGraphEvents(formData) {
     const events = []
     const terms = formData.termDates?.terms || []
     const removedSet = new Set(formData.removedEvents || [])
+    const overridesMap = formData.amountOverrides || {}
     const ayEnd = AY_END
+    const sepStart = new Date('2025-09-01T00:00:00')
 
     // Generic category events (income + expense)
     const ALL_CATS = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
@@ -189,7 +207,7 @@ function buildGraphEvents(formData) {
                 const months = (entry.months || []).sort((a, b) => ALL_MONTH_KEYS.indexOf(a) - ALL_MONTH_KEYS.indexOf(b))
                 if (months.length === 0) continue
                 const dateObjs = months.map(m => ({ date: entry.dates?.[m] || MONTH_KEY_TO_DATE[m] }))
-                const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet)
+                const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
                 for (let mi = 0; mi < months.length; mi++) {
                     const month = months[mi]
                     const date = entry.dates?.[month] || MONTH_KEY_TO_DATE[month]
@@ -205,97 +223,113 @@ function buildGraphEvents(formData) {
                 }
             } else if (freq === 'weekly' || freq === 'fortnightly') {
                 const interval = freq === 'weekly' ? 7 : 14
-                const startDate = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
-                let d = new Date(startDate)
-                if (!entry.nextDate) {
+                const loopStart = amtFreq === 'yearly' ? sepStart : (entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START))
+                let d = new Date(loopStart)
+                if (!entry.nextDate && amtFreq !== 'yearly') {
                     while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
                     while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
                 }
+                const DAY_MAP = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
+                const targetDay = DAY_MAP[entry.dayOfWeek] ?? 1
+                for (let i = 0; i < 7 && d.getDay() !== targetDay; i++) d = new Date(d.getTime() + 86400000)
                 const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : convertedAmt
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
+                const earliest = amtFreq === 'yearly' ? sepStart : AY_START
+                const paymentDates = []
                 while (d <= endDate) {
-                    if (d >= AY_START) {
-                        const dateStr = toLocalDate(d)
-                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? convertedAmt : nonTermAmt) : convertedAmt
-                        if (eventAmt > 0) {
-                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: entryEditType })
-                        }
+                    if (d >= earliest) {
+                        paymentDates.push({ date: toLocalDate(d), sublabel: `${freq === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}` })
                     }
                     d = new Date(d.getTime() + interval * 86400000)
+                }
+                if (amtFreq === 'yearly' && paymentDates.length > 0) {
+                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
+                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
+                    for (let pi = 0; pi < paymentDates.length; pi++) {
+                        if (amounts[pi] > 0) events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
+                    }
+                } else {
+                    for (const pd of paymentDates) {
+                        const eventAmt = entry.variesByTerm ? (isInTerm(pd.date, terms) ? convertedAmt : nonTermAmt) : convertedAmt
+                        if (eventAmt > 0) events.push({ date: pd.date, amount: eventAmt, type, label: entryLabel, sublabel: pd.sublabel, editType: entryEditType })
+                    }
                 }
             } else if (freq === 'monthly') {
                 const domRaw = entry.dayOfMonth || '1'
                 const isLast = domRaw === 'last'
                 const domTarget = isLast ? 31 : parseInt(domRaw) || 1
                 const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
-                const earliest = startFrom > AY_START ? startFrom : AY_START
+                const earliest = amtFreq === 'yearly' ? sepStart : (startFrom > AY_START ? startFrom : AY_START)
                 const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
                 const nonTermAmt = entry.variesByTerm ? parseFloat(String(entry.nonTermAmount || '0').replace(/,/g, '')) : convertedAmt
-                let month = AY_START.getMonth()
-                let year = AY_START.getFullYear()
-                for (let i = 0; i < 13; i++) {
+                const loopStart = amtFreq === 'yearly' ? sepStart : AY_START
+                const paymentDates = []
+                let month = loopStart.getMonth()
+                let year = loopStart.getFullYear()
+                for (let i = 0; i < 12; i++) {
                     const lastDay = new Date(year, month + 1, 0).getDate()
                     const day = Math.min(domTarget, lastDay)
                     const d = new Date(year, month, day)
                     if (d >= earliest && d <= endDate) {
-                        const dateStr = toLocalDate(d)
-                        const eventAmt = entry.variesByTerm ? (isInTerm(dateStr, terms) ? convertedAmt : nonTermAmt) : convertedAmt
-                        if (eventAmt > 0) {
-                            events.push({ date: dateStr, amount: eventAmt, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: entryEditType })
-                        }
+                        paymentDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}` })
                     }
                     month++
                     if (month > 11) { month = 0; year++ }
+                }
+                if (amtFreq === 'yearly' && paymentDates.length > 0) {
+                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
+                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
+                    for (let pi = 0; pi < paymentDates.length; pi++) {
+                        if (amounts[pi] > 0) events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
+                    }
+                } else {
+                    for (const pd of paymentDates) {
+                        const eventAmt = entry.variesByTerm ? (isInTerm(pd.date, terms) ? convertedAmt : nonTermAmt) : convertedAmt
+                        if (eventAmt > 0) events.push({ date: pd.date, amount: eventAmt, type, label: entryLabel, sublabel: pd.sublabel, editType: entryEditType })
+                    }
                 }
             } else if (freq === 'yearly') {
                 const sf = entry.scheduleFrequency
                 if (sf === 'weekly' || sf === 'fortnightly') {
                     const interval = sf === 'weekly' ? 7 : 14
-                    const startDate = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : new Date(AY_START)
-                    let d = new Date(startDate)
-                    if (!entry.nextDate) {
-                        while (d > AY_START) d = new Date(d.getTime() - interval * 86400000)
-                        while (d < AY_START) d = new Date(d.getTime() + interval * 86400000)
-                    }
+                    let d = new Date(sepStart)
+                    const DAY_MAP2 = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 }
+                    const targetDay2 = DAY_MAP2[entry.dayOfWeek] ?? 1
+                    for (let i = 0; i < 7 && d.getDay() !== targetDay2; i++) d = new Date(d.getTime() + 86400000)
                     const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
-                    let count = 0
-                    let tempD = new Date(d)
-                    while (tempD <= endDate) { if (tempD >= AY_START) count++; tempD = new Date(tempD.getTime() + interval * 86400000) }
-                    const perPayment = count > 0 ? Math.round(amt * 100 / count) / 100 : amt
+                    const paymentDates = []
                     while (d <= endDate) {
-                        if (d >= AY_START) {
-                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${sf === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}`, editType: entryEditType })
-                        }
+                        if (d >= sepStart) paymentDates.push({ date: toLocalDate(d), sublabel: `${sf === 'weekly' ? 'Weekly' : 'Fortnightly'} ${entryLabel.toLowerCase()}` })
                         d = new Date(d.getTime() + interval * 86400000)
+                    }
+                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
+                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
+                    for (let pi = 0; pi < paymentDates.length; pi++) {
+                        if (amounts[pi] > 0) events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
                     }
                 } else if (sf === 'monthly') {
                     const domRaw = entry.dayOfMonth || '1'
                     const isLast = domRaw === 'last'
                     const domTarget = isLast ? 31 : parseInt(domRaw) || 1
-                    const startFrom = entry.nextDate ? new Date(entry.nextDate + 'T00:00:00') : AY_START
-                    const earliest = startFrom > AY_START ? startFrom : AY_START
                     const endDate = entry.endDate ? new Date(entry.endDate + 'T00:00:00') : ayEnd
-                    let count = 0, m2 = AY_START.getMonth(), y2 = AY_START.getFullYear()
-                    for (let i = 0; i < 13; i++) {
-                        const lastDay = new Date(y2, m2 + 1, 0).getDate()
-                        const day = Math.min(domTarget, lastDay)
-                        const dd = new Date(y2, m2, day)
-                        if (dd >= earliest && dd <= endDate) count++
-                        m2++; if (m2 > 11) { m2 = 0; y2++ }
-                    }
-                    const perPayment = count > 0 ? Math.round(amt * 100 / count) / 100 : amt
-                    let month = AY_START.getMonth(), year = AY_START.getFullYear()
-                    for (let i = 0; i < 13; i++) {
+                    const paymentDates = []
+                    let month = sepStart.getMonth(), year = sepStart.getFullYear()
+                    for (let i = 0; i < 12; i++) {
                         const lastDay = new Date(year, month + 1, 0).getDate()
                         const day = Math.min(domTarget, lastDay)
                         const d = new Date(year, month, day)
-                        if (d >= earliest && d <= endDate) {
-                            events.push({ date: toLocalDate(d), amount: perPayment, type, label: entryLabel, sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}`, editType: entryEditType })
+                        if (d >= sepStart && d <= endDate) {
+                            paymentDates.push({ date: toLocalDate(d), sublabel: `${d.toLocaleDateString('en-GB', { month: 'long' })} ${entryLabel.toLowerCase()}` })
                         }
                         month++; if (month > 11) { month = 0; year++ }
                     }
+                    const dateObjs = paymentDates.map(p => ({ date: p.date }))
+                    const amounts = distributeExcludingRemoved(amt, dateObjs, entryEditType, removedSet, overridesMap)
+                    for (let pi = 0; pi < paymentDates.length; pi++) {
+                        if (amounts[pi] > 0) events.push({ date: paymentDates[pi].date, amount: amounts[pi], type, label: entryLabel, sublabel: paymentDates[pi].sublabel, editType: entryEditType })
+                    }
                 } else {
-                    events.push({ date: entry.nextDate || ayStartStr(), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: entryEditType })
+                    events.push({ date: entry.nextDate || toLocalDate(AY_START), amount: amt, type, label: entryLabel, sublabel: `Yearly ${entryLabel.toLowerCase()}`, editType: entryEditType })
                 }
             }
         }
@@ -344,9 +378,18 @@ function buildGraphEvents(formData) {
         }
     }
 
-    // Mark individually removed events
+    // Mark individually removed and overridden events
     const removed = formData.removedEvents || []
-    return events.map(e => removed.includes(`${e.editType}:${e.date}`) ? { ...e, removed: true } : e)
+    const overrides = formData.amountOverrides || {}
+    return events.map(e => {
+        const key = `${e.editType}:${e.date}`
+        const overrideVal = overrides[key]
+        const withOverride = overrideVal != null
+            ? { ...e, amount: parseFloat(String(overrideVal).replace(/,/g, '')) || e.amount, edited: true, hasOverride: true, originalAmount: e.amount }
+            : e
+        if (removed.includes(key)) return { ...withOverride, removed: true }
+        return withOverride
+    })
 }
 /* ---------- SUB-COMPONENTS ---------- */
 
@@ -847,6 +890,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
     }
 
     const [editingEvent, setEditingEvent] = useState(null)  // { ...event, clickX, clickY }
+    const [visibleEntryIndex, setVisibleEntryIndex] = useState(0)
     const [editAmount, setEditAmount] = useState('')
     const [nearbyEvents, setNearbyEvents] = useState([])   // events on same date as editingEvent
     const [nearbyIdx, setNearbyIdx] = useState(0)           // which nearby event is active
@@ -1360,6 +1404,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 if (freq === 'irregular' && (!entry.months || entry.months.length === 0)) {
                     return 'Please select at least one month'
                 }
+                // Check instalment amounts sum to total for irregular entries
                 if (freq === 'one-off' && !entry.nextDate) {
                     return 'Please select a date'
                 }
@@ -1828,7 +1873,13 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             const panelId = PANEL_STEPS[activePanel]
                             const allCats = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES]
                             const matchedCat = allCats.find(c => c.panelId === panelId)
-                            if (matchedCat) return matchedCat.id
+                            if (matchedCat) {
+                                const catEntries = formData[matchedCat.formKey] || []
+                                if (catEntries.length > 1 && catEntries[visibleEntryIndex]?.id) {
+                                    return `${matchedCat.id}:${catEntries[visibleEntryIndex].id}`
+                                }
+                                return matchedCat.id
+                            }
                             if (panelId === 'weeklySpend') return 'weeklySpend'
                             return null
                         })() : null}
@@ -2376,6 +2427,13 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                                     return { ...prev, [formKey]: newEntries }
                                                 })
                                             }}
+                                            onVisibleEntryChange={entries.length > 1 ? setVisibleEntryIndex : null}
+                                            onDeleteEntry={entries.length > 1 ? ({ label }) => {
+                                                const prevFormData = { ...formData }
+                                                if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+                                                setSkipToast({ label, undoFn: () => setFormData(prevFormData) })
+                                                skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
+                                            } : null}
                                         />
                                     )
                                 })()}
@@ -2713,9 +2771,15 @@ export default function FinancialOnboardingForm({ onComplete }) {
                 {editingEvent && (() => {
                     const isIncome = editingEvent.type === 'income'
                     const color = isIncome ? '#147b75' : '#e06470'
-                    const cat = CATEGORY_MAP[editingEvent.editType]
-                    const amtFreq = cat ? (formData[cat.formKey]?.[0]?.frequency || cat.defaultFrequency) : 'monthly'
-                    const paidFreq = cat ? (formData[cat.formKey]?.[0]?.scheduleFrequency || amtFreq) : amtFreq
+                    // Parse category and entry ID from editType (e.g. 'student_finance:entry_0' or 'student_finance')
+                    const editTypeParts = editingEvent.editType?.split(':') || []
+                    const catId = editTypeParts[0]
+                    const entryId = editTypeParts.length > 1 ? editTypeParts.slice(1).join(':') : null
+                    const cat = CATEGORY_MAP[catId]
+                    const entries = cat ? (formData[cat.formKey] || []) : []
+                    const eventEntry = entryId ? entries.find(e => e.id === entryId) : entries[0]
+                    const amtFreq = eventEntry?.frequency || cat?.defaultFrequency || 'monthly'
+                    const paidFreq = eventEntry?.scheduleFrequency || amtFreq
                     const eventFreq = paidFreq === 'irregular' ? 'irregular' : paidFreq === 'one-off' ? amtFreq : paidFreq
                     const freqLabel = { weekly: 'Weekly', fortnightly: 'Fortnightly', monthly: 'Monthly', yearly: 'Yearly', irregular: 'Per instalment', 'one-off': 'One-off' }[eventFreq] || ''
                     const skipLabel = (() => {
@@ -2732,22 +2796,21 @@ export default function FinancialOnboardingForm({ onComplete }) {
                         if (cat) {
                             const formKey = cat.formKey
                             if (editingEvent.editMonth) {
-                                const entries = formData[formKey] || []
-                                const entry = entries[0]
-                                const total = entry ? (parseFloat(String(entry.amount || '0').replace(/,/g, '')) || 0) : 0
+                                // Irregular/instalment: redistribute across other months (only for matching entry)
+                                const total = eventEntry ? (parseFloat(String(eventEntry.amount || '0').replace(/,/g, '')) || 0) : 0
                                 const parsedVal = parseFloat(val) || 0
                                 if (parsedVal > total) { setEditWarning(`Can't exceed total of ${getCurrencySymbol()}${total.toLocaleString()}`); return }
-                                if (parsedVal <= 0) { setEditWarning('Instalment amount must be greater than zero'); return }
-                                setEditWarning('')
-                            }
-                            setFormData(prev => {
-                                const entries = prev[formKey] || []
-                                if (editingEvent.editMonth) {
-                                    return { ...prev, [formKey]: entries.map(e => {
-                                        const total = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
+                                const entryMonths = eventEntry?.months || []
+                                if (entryMonths.length <= 1 && total > 0 && Math.abs(parsedVal - total) > 0.01) { setEditWarning(`Only 1 instalment — must equal the total (${getCurrencySymbol()}${Math.round(total).toLocaleString()})`); return }
+                                setFormData(prev => {
+                                    const prevEntries = prev[formKey] || []
+                                    return { ...prev, [formKey]: prevEntries.map(e => {
+                                        if (entryId && e.id !== entryId) return e
+                                        if (!entryId && prevEntries.length > 1) return e
+                                        const eTotal = parseFloat(String(e.amount || '0').replace(/,/g, '')) || 0
                                         const newVal = parseFloat(val) || 0
                                         const otherMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
-                                        const remainder = Math.max(0, total - newVal)
+                                        const remainder = Math.max(0, eTotal - newVal)
                                         const newInst = { [editingEvent.editMonth]: val }
                                         if (otherMonths.length > 0) {
                                             const perMonth = Math.round(remainder * 100 / otherMonths.length) / 100
@@ -2756,12 +2819,35 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                         }
                                         return { ...e, instalmentAmounts: newInst }
                                     })}
-                                } else {
-                                    const matchIdx = entries.findIndex(e => e.nextDate === editingEvent.date)
-                                    const idx = matchIdx >= 0 ? matchIdx : 0
-                                    return { ...prev, [formKey]: entries.map((e, i) => i === idx ? { ...e, amount: val } : e) }
+                                })
+                            } else if (amtFreq === 'yearly') {
+                                // Yearly paid monthly/weekly/fortnightly: validate then use amountOverrides
+                                const total = eventEntry ? (parseFloat(String(eventEntry.amount || '0').replace(/,/g, '')) || 0) : 0
+                                const parsedVal = parseFloat(val) || 0
+                                if (parsedVal > total) { setEditWarning(`Can't exceed yearly total of ${getCurrencySymbol()}${Math.round(total).toLocaleString()}`); return }
+                                // Check total of all overrides + this one doesn't exceed yearly
+                                const currentOverrides = formData.amountOverrides || {}
+                                const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
+                                let otherOverridesTotal = 0
+                                for (const [k, v] of Object.entries(currentOverrides)) {
+                                    if (k.startsWith(editingEvent.editType + ':') && k !== overrideKey) {
+                                        otherOverridesTotal += parseFloat(String(v).replace(/,/g, '')) || 0
+                                    }
                                 }
-                            })
+                                if (otherOverridesTotal + parsedVal > total) {
+                                    setEditWarning(`Edited payments total ${getCurrencySymbol()}${Math.round(otherOverridesTotal + parsedVal).toLocaleString()} — exceeds yearly total of ${getCurrencySymbol()}${Math.round(total).toLocaleString()}`)
+                                    return
+                                }
+                                setFormData(prev => ({
+                                    ...prev,
+                                    amountOverrides: { ...(prev.amountOverrides || {}), [overrideKey]: val }
+                                }))
+                            } else {
+                                // Regular amount edit
+                                const matchIdx = entries.findIndex(e => e.nextDate === editingEvent.date)
+                                const idx = matchIdx >= 0 ? matchIdx : 0
+                                setFormData(prev => ({ ...prev, [cat.formKey]: (prev[cat.formKey] || []).map((e, i) => i === idx ? { ...e, amount: val } : e) }))
+                            }
                         }
                         setEditingEvent(null)
                     }
@@ -2925,7 +3011,58 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             </div>
                                         )
                                     })()}
-                                    {/* Amount + Save + Skip/Delete */}
+                                    {/* Reset button (if edited) */}
+                                    {editingEvent.hasOverride && (
+                                        <button onClick={() => {
+                                            const overrideKey = `${editingEvent.editType}:${editingEvent.date}`
+                                            const updated = { ...(formData.amountOverrides || {}) }
+                                            delete updated[overrideKey]
+                                            updateField('amountOverrides', updated)
+                                            setEditingEvent(null)
+                                        }} style={{
+                                            width: '100%', height: 32, background: 'rgba(59,130,246,0.08)', border: 'none', borderRadius: 8,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer', marginBottom: 8,
+                                        }}>
+                                            <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#3b82f6' }}>Reset all instalments to equal</span>
+                                        </button>
+                                    )}
+                                    {/* Yearly single payment or one-off: just show Delete */}
+                                    {(eventFreq === 'yearly' || eventFreq === 'one-off') && !editingEvent.editMonth ? (
+                                        <button onClick={() => {
+                                            const prevFormData = { ...formData }
+                                            if (cat) {
+                                                const currentEntries = formData[cat.formKey] || []
+                                                const remaining = entryId
+                                                    ? currentEntries.filter(e => e.id !== entryId)
+                                                    : currentEntries.slice(1)
+                                                if (remaining.length === 0) {
+                                                    // Last entry — remove entire source
+                                                    const sourceKey = isIncome ? 'incomeSources' : 'expenseSources'
+                                                    setFormData(prev => ({
+                                                        ...prev,
+                                                        [sourceKey]: (prev[sourceKey] || []).filter(s => s !== cat.id),
+                                                        [cat.formKey]: [],
+                                                    }))
+                                                } else {
+                                                    // Remove just this entry
+                                                    setFormData(prev => ({ ...prev, [cat.formKey]: remaining }))
+                                                }
+                                            }
+                                            setEditingEvent(null)
+                                            if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+                                            setSkipToast({ label: `${editingEvent.label || 'Payment'} deleted`, undoFn: () => setFormData(prevFormData) })
+                                            skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
+                                        }} style={{
+                                            width: '100%', height: 36, borderRadius: 8, border: 'none',
+                                            background: 'rgba(224,100,112,0.08)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            cursor: 'pointer',
+                                        }}>
+                                            <span style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Delete</span>
+                                        </button>
+                                    ) : (
+                                    /* Amount + Save + Skip/Delete */
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                                         {amtFreq === 'irregular' && (
                                             <span style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333', flex: 1 }}>
@@ -2970,10 +3107,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                             cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap',
                                         }}>
                                             <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
-                                                {amtFreq === 'irregular' ? 'Delete instalment' : eventFreq === 'irregular' ? 'Delete' : `Skip ${skipLabel}`}
+                                                {amtFreq === 'irregular' ? 'Delete instalment' : `Skip ${skipLabel}`}
                                             </span>
                                         </button>
                                     </div>
+                                    )}
                                     {editWarning && (
                                         <p style={{ margin: '6px 0 0', fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>
                                             {editWarning}
