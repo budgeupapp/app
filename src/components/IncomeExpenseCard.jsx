@@ -397,7 +397,22 @@ export default function IncomeExpenseCard({
                             </div>
                         )}
                         {nameEditable && (
-                            <div style={{ marginBottom: 10 }}>
+                            <div data-section style={{ marginBottom: 10 }}
+                                onFocusCapture={!compact ? (e) => {
+                                    if (!e.target.matches('input[type="text"]')) return
+                                    const section = e.target.closest('[data-section]')
+                                    if (!section) return
+                                    setTimeout(() => {
+                                        const panel = section.closest('.onboarding-panel')
+                                        if (panel) {
+                                            const panelRect = panel.getBoundingClientRect()
+                                            const sectionRect = section.getBoundingClientRect()
+                                            const offset = sectionRect.top - panelRect.top + panel.scrollTop - 8
+                                            panel.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
+                                        }
+                                    }, 301)
+                                } : undefined}
+                            >
                                 <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: compact ? '#888' : '#666', display: 'block', marginBottom: 6 }}>
                                     Name
                                 </span>
@@ -411,7 +426,6 @@ export default function IncomeExpenseCard({
                                         padding: '0 14px', height: 44, fontSize: 14, fontWeight: 500,
                                         fontFamily: 'Nunito, sans-serif', color: '#000',
                                         outline: 'none', boxSizing: 'border-box',
-                                        background: '#fff',
                                     }}
                                 />
                             </div>
@@ -423,7 +437,7 @@ export default function IncomeExpenseCard({
                             defaultMonths={defaultMonths}
                             defaultDates={defaultDates}
                             isExpense={isExpense}
-                            scrollOnFocus={!compact && idx > 0}
+                            scrollOnFocus={!compact}
                             compact={compact}
                             freqLabelOverrides={freqLabelOverrides}
                             scheduleFreqOptions={scheduleFreqOptions}
@@ -685,14 +699,18 @@ function EntryCard({
 
     const isRegularFreq = frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly'
 
+    // Scroll the focused input's section label to the top of the panel
     const scrollOnFocusHandler = scrollOnFocus ? (e) => {
-        const el = e.target.closest('[data-entry]')
-        if (el) setTimeout(() => {
-            const panel = el.closest('.onboarding-panel')
+        if (!e.target.matches('input[type="text"], input[type="number"], input:not([type])')) return
+        // Find the closest section label (Amount, Schedule, etc.) above the input
+        const section = e.target.closest('[data-section]') || e.target.closest('[data-entry]')
+        if (!section) return
+        setTimeout(() => {
+            const panel = section.closest('.onboarding-panel')
             if (panel) {
                 const panelRect = panel.getBoundingClientRect()
-                const elRect = el.getBoundingClientRect()
-                const offset = elRect.top - panelRect.top + panel.scrollTop - 10
+                const sectionRect = section.getBoundingClientRect()
+                const offset = sectionRect.top - panelRect.top + panel.scrollTop - 8
                 panel.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
             }
         }, 301)
@@ -701,9 +719,9 @@ function EntryCard({
     const showTermSplit = variesByTerm && isRegularFreq
 
     return (
-        <div>
+        <div onFocusCapture={scrollOnFocusHandler}>
             {/* Amount + frequency */}
-            <div style={{ marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
+            <div data-section style={{ marginBottom: 16, width: '100%', boxSizing: 'border-box' }}>
                 <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: compact ? '#999' : '#777', display: 'block', marginTop: 4, marginBottom: 6 }}>
                     {isExpense ? 'I pay' : 'I earn'}
                 </span>
@@ -734,7 +752,7 @@ function EntryCard({
                                     placeholder="0.00"
                                     value={formatDisplay(rawAmount)}
                                     onChange={handleAmountChange}
-                                    onFocus={scrollOnFocusHandler}
+
                                     style={{
                                         flex: 1, border: 'none', background: 'transparent',
                                         fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
@@ -762,7 +780,7 @@ function EntryCard({
                                         placeholder="0.00"
                                         value={formatDisplay(rawNonTermAmount)}
                                         onChange={handleNonTermAmountChange}
-                                        onFocus={scrollOnFocusHandler}
+    
                                         style={{
                                             flex: 1, border: 'none', background: 'transparent',
                                             fontSize: 16, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
@@ -883,7 +901,7 @@ function EntryCard({
             {/* Divider between Amount and Schedule */}
 
             {/* === ONE-OFF MODE: just a date picker === */}
-            {frequency === 'one-off' && (<>
+            {frequency === 'one-off' && (<div data-section>
                 <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
                     On
                 </span>
@@ -906,11 +924,11 @@ function EntryCard({
                         style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', fontSize: 16 }}
                     />
                 </div>
-            </>)}
+            </div>)}
 
             {/* === WEEKLY/FORTNIGHTLY/MONTHLY/YEARLY: schedule card === */}
             {(frequency === 'weekly' || frequency === 'fortnightly' || frequency === 'monthly' || frequency === 'yearly' || showFreqPicker) && frequency !== 'irregular' && frequency !== 'one-off' && (<>
-                <div style={{ marginBottom: 16 }}>
+                <div data-section style={{ marginBottom: 16 }}>
                     {/* Paid dropdown row (only for yearly — others skip straight to day selector) */}
                     {frequency === 'yearly' && (sf === 'weekly' || sf === 'fortnightly' || sf === 'monthly' || sf === 'yearly' || showFreqPicker || sf === 'irregular') && (
                         <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
@@ -1114,7 +1132,7 @@ function EntryCard({
 
             {/* === IRREGULAR MODE: month pills + customise === */}
             {(isIrregular || sf === 'irregular') && (
-                <>
+                <div data-section>
                     <span style={{ fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: grey2, display: 'block', marginBottom: 6 }}>
                         {frequency === 'irregular' ? 'Paid in' : 'In'}
                     </span>
@@ -1274,7 +1292,7 @@ function EntryCard({
                             </div>
                         </>)}
                     </div>
-                </>
+                </div>
             )}
         </div>
     )

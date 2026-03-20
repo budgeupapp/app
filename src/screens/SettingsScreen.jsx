@@ -355,7 +355,16 @@ export default function SettingsScreen() {
         userIdRef.current = user.id
         try {
           const result = await fetchUserData(user.id)
-          if (result.formData?.termDates) {
+          // Prefer localStorage term dates (saved immediately) over Supabase (may lag behind)
+          let localTermDates = null
+          try {
+            const ls = localStorage.getItem('budgeup_onboarding_state')
+            const parsed = ls ? JSON.parse(ls) : {}
+            if (parsed.formData?.termDates?.terms?.length) localTermDates = parsed.formData.termDates
+          } catch { }
+          if (localTermDates) {
+            setTermDates(localTermDates)
+          } else if (result.formData?.termDates) {
             setTermDates(result.formData.termDates)
           }
           if (result.formData?.university) {

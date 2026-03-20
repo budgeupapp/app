@@ -15,7 +15,7 @@ function formatDisplay(raw) {
 
 /* ---------- MAIN ---------- */
 
-export default function BankBalanceStep({ balance, updateBalance, heading = 'Bank Balance', subtitle = "What's your current bank balance? Add up all your accounts \u2014 a rough estimate is fine!" }) {
+export default function BankBalanceStep({ balance, updateBalance, heading = 'Bank Balance', subtitle = "Add up all your accounts \u2014 a rough estimate is fine!" }) {
     const [rawAmount, setRawAmount] = useState(() => {
         const n = parseFloat(String(balance || '').replace(/,/g, ''))
         return n ? String(n) : ''

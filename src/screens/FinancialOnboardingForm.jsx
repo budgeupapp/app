@@ -657,6 +657,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
     const [editBalanceAmount, setEditBalanceAmount] = useState('')
     const transitionRef = useRef(null) // guards against overlapping transitions
     const sheetRef = useRef(null)
+    const backingRef = useRef(null)
     const graphWrapRef = useRef(null)
     const sheetDragRef = useRef({ dragging: false, startY: 0, startTop: 0 })
     const [sheetExpanded, setSheetExpanded] = useState(false)
@@ -834,6 +835,60 @@ export default function FinancialOnboardingForm({ onComplete }) {
         const saved = formData.loanMonths || []
         return saved.some(m => !DEFAULT_LOAN_MONTHS.includes(m))
     })
+
+    /* --- Lock body/document scroll (prevents iOS keyboard pushing viewport) --- */
+
+    useEffect(() => {
+        const html = document.documentElement
+        const body = document.body
+        html.style.overflow = 'hidden'
+        body.style.overflow = 'hidden'
+        body.style.position = 'fixed'
+        body.style.top = '0'
+        body.style.left = '0'
+        body.style.right = '0'
+        body.style.bottom = '0'
+        body.style.width = '100%'
+        body.style.height = '100%'
+
+        // Block touchmove on document unless it's inside a scrollable container
+        const blockTouch = (e) => {
+            let el = e.target
+            while (el && el !== body) {
+                const { overflowY } = getComputedStyle(el)
+                if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+                    return // allow — this element is scrollable
+                }
+                el = el.parentElement
+            }
+            e.preventDefault()
+        }
+        document.addEventListener('touchmove', blockTouch, { passive: false })
+
+        // Pin visualViewport (iOS keyboard)
+        const pinVP = () => {
+            if (window.visualViewport) {
+                window.visualViewport.offsetTop && window.scrollTo(0, 0)
+            }
+        }
+        window.visualViewport?.addEventListener('resize', pinVP)
+        window.visualViewport?.addEventListener('scroll', pinVP)
+
+        return () => {
+            html.style.overflow = ''
+            body.style.overflow = ''
+            body.style.position = ''
+            body.style.top = ''
+            body.style.left = ''
+            body.style.right = ''
+            body.style.bottom = ''
+            body.style.width = ''
+            body.style.height = ''
+            document.removeEventListener('touchmove', blockTouch)
+            window.visualViewport?.removeEventListener('resize', pinVP)
+            window.visualViewport?.removeEventListener('scroll', pinVP)
+        }
+    }, [])
 
     /* --- Persist to localStorage --- */
 
@@ -1512,6 +1567,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
         const COLLAPSED_TOP = `calc(${SAFE_AREA_TOP} + ${GRAPH_HEIGHT}px)`
         const EXPANDED_TOP = `calc(${SAFE_AREA_TOP} + 8px)`
 
+        // Sync backing position with sheet
+        const syncBacking = (top) => {
+            if (backingRef.current) backingRef.current.style.top = `calc(${top} + 20px)`
+        }
+
         const handleSheetDragStart = (clientY) => {
             const s = sheetDragRef.current
             if (!sheetRef.current) return
@@ -1519,6 +1579,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             s.startY = clientY
             s.startTop = sheetRef.current.getBoundingClientRect().top
             sheetRef.current.style.transition = 'none'
+            if (backingRef.current) backingRef.current.style.transition = 'none'
             if (graphWrapRef.current) graphWrapRef.current.style.transition = 'none'
         }
         const handleSheetDragMove = (clientY) => {
@@ -1530,6 +1591,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             const delta = clientY - s.startY
             const newTop = Math.max(minTop, Math.min(maxTop, s.startTop + delta))
             sheetRef.current.style.top = newTop + 'px'
+            syncBacking(newTop + 'px')
             // Scale graph opacity based on position
             if (graphWrapRef.current) {
                 const progress = (newTop - minTop) / (maxTop - minTop)
@@ -1546,20 +1608,21 @@ export default function FinancialOnboardingForm({ onComplete }) {
             const midpoint = safeTop + GRAPH_HEIGHT / 2
             const shouldExpand = currentTop < midpoint
             sheetRef.current.style.transition = 'top 0.35s cubic-bezier(.25,1,.5,1)'
+            if (backingRef.current) backingRef.current.style.transition = 'top 0.35s cubic-bezier(.25,1,.5,1)'
             if (graphWrapRef.current) graphWrapRef.current.style.transition = 'opacity 0.35s ease, transform 0.35s ease'
             if (shouldExpand) {
-                sheetRef.current.style.top = EXPANDED_TOP
+                sheetRef.current.style.top = EXPANDED_TOP; syncBacking(EXPANDED_TOP)
                 if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '0.3'; graphWrapRef.current.style.transform = 'scale(0.95)' }
                 setSheetExpanded(true)
             } else {
-                sheetRef.current.style.top = COLLAPSED_TOP
+                sheetRef.current.style.top = COLLAPSED_TOP; syncBacking(COLLAPSED_TOP)
                 if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '1'; graphWrapRef.current.style.transform = 'scale(1)' }
                 setSheetExpanded(false)
             }
         }
 
         return (
-            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#fff' }}>
+            <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#fff', overscrollBehavior: 'none' }}>
                 <style>{`:root { --sat: 0px; } @supports (padding-top: env(safe-area-inset-top)) { :root { --sat: env(safe-area-inset-top, 0px); } }`}</style>
                 {toastEl}
                 {/* Safe area spacer for notch */}
@@ -1664,14 +1727,15 @@ export default function FinancialOnboardingForm({ onComplete }) {
                     />
                 </div>
 
-                {/* Opaque backing behind sheet — covers rounded corner gaps and panel transitions */}
-                <div style={{
+                {/* Opaque backing behind sheet — covers rounded corner gaps during transitions */}
+                <div ref={backingRef} style={{
                     position: 'absolute',
                     top: `calc(${COLLAPSED_TOP} + 20px)`,
                     left: 0, right: 0, bottom: 0,
                     background: '#f5f7f7',
                     zIndex: 1,
                     pointerEvents: 'none',
+                    transition: 'top 0.35s cubic-bezier(.25,1,.5,1)',
                 }} />
                 {/* Form card — draggable bottom sheet */}
                 <div ref={(el) => { sheetRef.current = el; formCardCallbackRef(el) }} style={{
@@ -1708,11 +1772,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     sheetRef.current.style.transition = 'top 0.35s cubic-bezier(.25,1,.5,1)'
                                     if (graphWrapRef.current) graphWrapRef.current.style.transition = 'opacity 0.35s ease, transform 0.35s ease'
                                     if (sheetExpanded) {
-                                        sheetRef.current.style.top = COLLAPSED_TOP
+                                        sheetRef.current.style.top = COLLAPSED_TOP; syncBacking(COLLAPSED_TOP)
                                         if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '1'; graphWrapRef.current.style.transform = 'scale(1)' }
                                         setSheetExpanded(false)
                                     } else {
-                                        sheetRef.current.style.top = EXPANDED_TOP
+                                        sheetRef.current.style.top = EXPANDED_TOP; syncBacking(EXPANDED_TOP)
                                         if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '0.3'; graphWrapRef.current.style.transform = 'scale(0.95)' }
                                         setSheetExpanded(true)
                                     }
@@ -1752,11 +1816,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     sheetRef.current.style.transition = 'top 0.35s cubic-bezier(.25,1,.5,1)'
                                     if (graphWrapRef.current) graphWrapRef.current.style.transition = 'opacity 0.35s ease, transform 0.35s ease'
                                     if (sheetExpanded) {
-                                        sheetRef.current.style.top = COLLAPSED_TOP
+                                        sheetRef.current.style.top = COLLAPSED_TOP; syncBacking(COLLAPSED_TOP)
                                         if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '1'; graphWrapRef.current.style.transform = 'scale(1)' }
                                         setSheetExpanded(false)
                                     } else {
-                                        sheetRef.current.style.top = EXPANDED_TOP
+                                        sheetRef.current.style.top = EXPANDED_TOP; syncBacking(EXPANDED_TOP)
                                         if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '0.3'; graphWrapRef.current.style.transform = 'scale(0.95)' }
                                         setSheetExpanded(true)
                                     }
@@ -1940,11 +2004,11 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                     sheetRef.current.style.transition = 'top 0.35s cubic-bezier(.25,1,.5,1)'
                                     if (graphWrapRef.current) graphWrapRef.current.style.transition = 'opacity 0.35s ease, transform 0.35s ease'
                                     if (sheetExpanded) {
-                                        sheetRef.current.style.top = COLLAPSED_TOP
+                                        sheetRef.current.style.top = COLLAPSED_TOP; syncBacking(COLLAPSED_TOP)
                                         if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '1'; graphWrapRef.current.style.transform = 'scale(1)' }
                                         setSheetExpanded(false)
                                     } else {
-                                        sheetRef.current.style.top = EXPANDED_TOP
+                                        sheetRef.current.style.top = EXPANDED_TOP; syncBacking(EXPANDED_TOP)
                                         if (graphWrapRef.current) { graphWrapRef.current.style.opacity = '0.3'; graphWrapRef.current.style.transform = 'scale(0.95)' }
                                         setSheetExpanded(true)
                                     }
@@ -1997,7 +2061,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                             panels.forEach(p => { p.scrollTop = 0 })
                             setTitleBorderVisible(false)
                         }}
-                        style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#f5f7f7' }}>
+                        style={{ flex: 1, position: 'relative', overflow: 'hidden', background: '#f5f7f7', overscrollBehavior: 'none' }}>
                         {PANEL_STEPS.map((panelId, i) => (
                             <div key={panelId} data-active-panel={i === activePanel ? '' : undefined} className="onboarding-panel"
                                 onScroll={i === activePanel ? (e) => setTitleBorderVisible(e.target.scrollTop > 2) : undefined}
@@ -2007,6 +2071,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
                                 overflowY: i === activePanel ? 'auto' : 'hidden',
                                 overflowX: 'hidden',
                                 WebkitOverflowScrolling: 'touch',
+                                overscrollBehavior: 'none',
                                 opacity: 1,
                                 zIndex: i === activePanel ? 2 : 1,
                                 pointerEvents: i === activePanel ? 'auto' : 'none',
