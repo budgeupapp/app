@@ -1,7 +1,7 @@
 {
   "name": "Budge Up",
   "short_name": "Budge Up",
-  "description": "Money clarity for student life",
+  "description": "A revolution in student budgeting",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
