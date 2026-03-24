@@ -704,7 +704,7 @@ export default function FinancialOnboardingForm({ onComplete }) {
             </div>
         )
     }
-    const needsConsent = !localStorage.getItem('signup_email')
+    const needsConsent = !localStorage.getItem('signup_email') && !localStorage.getItem('signup_onboarding_pending')
     const buildPanelSteps = (sources, expSources) => {
         const panels = []
         // Show consent step if user came via Google OAuth (no signup_email in localStorage)
