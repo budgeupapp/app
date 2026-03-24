@@ -137,7 +137,11 @@ function AppContent() {
                         setProcessingSignup(true)
                         analytics.track(AUTH_EVENTS.SIGNUP_COMPLETED)
                         localStorage.setItem('signup_onboarding_pending', 'true')
-                        await saveSignupConsents(session.user.id)
+                        try {
+                            await saveSignupConsents(session.user.id)
+                        } catch (err) {
+                            console.error('Failed to save signup consents:', err)
+                        }
                         localStorage.removeItem('signup_email')
                         localStorage.removeItem('signup_timestamp')
                         setProcessingSignup(false)
