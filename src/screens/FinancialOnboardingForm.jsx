@@ -823,13 +823,16 @@ export default function FinancialOnboardingForm({ user, onComplete }) {
                     parsed.currentStepId &&
                     STEPS.some(s => s.id === parsed.currentStepId)
                 ) {
+                    // If saved step is 'consent' but user doesn't need it, skip to termDates
+                    if (parsed.currentStepId === 'consent' && !needsConsent) return 'termDates'
                     return parsed.currentStepId
                 }
             }
         } catch {
             /* ignore */
         }
-        return STEPS[0].id
+        // Skip consent for email signups — go straight to term dates
+        return needsConsent ? STEPS[0].id : 'termDates'
     })
 
     const [submitting, setSubmitting] = useState(false)
