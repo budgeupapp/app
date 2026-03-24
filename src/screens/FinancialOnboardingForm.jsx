@@ -706,7 +706,10 @@ export default function FinancialOnboardingForm({ user, onComplete }) {
     }
     // Only show consent/welcome screen for Google OAuth users (email signups already consented on signup form)
     const isGoogleUser = user?.app_metadata?.provider === 'google'
+        || user?.app_metadata?.providers?.includes('google')
+        || (!user?.app_metadata?.provider && !localStorage.getItem('signup_onboarding_pending'))
     const needsConsent = isGoogleUser
+    console.log('[Onboarding] provider:', user?.app_metadata?.provider, 'providers:', user?.app_metadata?.providers, 'isGoogleUser:', isGoogleUser, 'needsConsent:', needsConsent)
     const buildPanelSteps = (sources, expSources) => {
         const panels = []
         // Show consent step if user came via Google OAuth (no signup_email in localStorage)
