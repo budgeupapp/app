@@ -611,7 +611,7 @@ const OneOffItemList = ({ items, onChange, type }) => {
 
 /* ---------- MAIN COMPONENT ---------- */
 
-export default function FinancialOnboardingForm({ onComplete }) {
+export default function FinancialOnboardingForm({ user, onComplete }) {
     const startedRef = useRef(false)
     const trackOnce = (key, callback) => {
         if (sessionStorage.getItem(key)) return
@@ -704,7 +704,9 @@ export default function FinancialOnboardingForm({ onComplete }) {
             </div>
         )
     }
-    const needsConsent = !localStorage.getItem('signup_email') && !localStorage.getItem('signup_onboarding_pending')
+    // Only show consent/welcome screen for Google OAuth users (email signups already consented on signup form)
+    const isGoogleUser = user?.app_metadata?.provider === 'google'
+    const needsConsent = isGoogleUser
     const buildPanelSteps = (sources, expSources) => {
         const panels = []
         // Show consent step if user came via Google OAuth (no signup_email in localStorage)
