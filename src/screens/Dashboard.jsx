@@ -244,7 +244,7 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
                     height: H,
                     borderRadius: 14,
                     border: 'none',
-                    background: 'linear-gradient(135deg,#EC8C17,#F5A64A)',
+                    background: '#f1a950',
                     padding: '0 14px 0 16px',
                     cursor: 'pointer',
 
@@ -384,7 +384,7 @@ function BalancePill({ value, onSave, scrollContainerRef }) {
                         <button
                             onClick={handleConfirm}
                             style={{
-                                background: '#EC8C17', border: 'none', cursor: 'pointer',
+                                background: '#f1a950', border: 'none', cursor: 'pointer',
                                 borderRadius: 8, width: 26, height: 26,
                                 flexShrink: 0, position: 'relative'
                             }}
@@ -475,7 +475,7 @@ function BalancePillInline({ value, sym, onSave, onCancel, compact }) {
                 style={{
                     width: compact ? 40 : '100%', height: compact ? 40 : 48,
                     borderRadius: compact ? 12 : 14,
-                    border: 'none', background: '#EC8C17',
+                    border: 'none', background: '#f1a950',
                     fontSize: compact ? 14 : 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
                     color: '#fff', cursor: 'pointer', flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -739,7 +739,7 @@ function SourceRow({ source, active, yearlyAmount, removedCount, onRestoreRemove
                 {/* Label + amount */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{
-                        fontSize: 14, fontWeight: 600,
+                        fontSize: 15, fontWeight: 700,
                         fontFamily: 'Nunito, sans-serif',
                         color: isInactive ? '#838383' : '#000',
                         margin: 0,
@@ -973,6 +973,7 @@ export default function Dashboard() {
     const [showExpenses, setShowExpenses] = useState(() => localStorage.getItem('budgeup_show_expenses') === 'true')
     const [showOverdraft, setShowOverdraft] = useState(() => localStorage.getItem('budgeup_show_overdraft') !== 'false')
     const [showHolidays, setShowHolidays] = useState(() => localStorage.getItem('budgeup_show_holidays') !== 'false')
+    const [showDateMarker, setShowDateMarker] = useState(() => localStorage.getItem('budgeup_show_date_marker') !== 'false')
     const [expandedSources, setExpandedSourcesRaw] = useState(() => {
         try { const s = sessionStorage.getItem('budgeup_expanded_sources'); return s ? new Set(JSON.parse(s)) : new Set() } catch { return new Set() }
     })
@@ -1102,7 +1103,7 @@ export default function Dashboard() {
     const setGoalsShowMore = (fn) => { setGoalsShowMoreRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; sessionStorage.setItem('budgeup_goals_show_more', String(val)); return val }) }
     const [trackingShowAll, setTrackingShowAllRaw] = useState(() => sessionStorage.getItem('budgeup_tracking_show_all') === 'true')
     const setTrackingShowAll = (fn) => { setTrackingShowAllRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; sessionStorage.setItem('budgeup_tracking_show_all', String(val)); return val }) }
-    const [warningMinimised, setWarningMinimisedRaw] = useState(() => localStorage.getItem('budgeup_warning_minimised') === 'true')
+    const [warningMinimised, setWarningMinimisedRaw] = useState(true)
     const setWarningMinimised = (fn) => { setWarningMinimisedRaw(prev => { const val = typeof fn === 'function' ? fn(prev) : fn; localStorage.setItem('budgeup_warning_minimised', String(val)); return val }) }
     const [trackMinimised, setTrackMinimised] = useState(false)
     const [disclaimerOpen, setDisclaimerOpen] = useState(() => localStorage.getItem('budgeup_disclaimer_seen') !== 'true')
@@ -1143,27 +1144,56 @@ export default function Dashboard() {
             const heroEl = heroHeaderRef.current
             if (!gc || !graphEl) return
             const currentH = graphEl.offsetHeight
-            const isExpanded = currentH > MIN_H + 10
-            const t = '0.35s cubic-bezier(0.4, 0, 0.2, 1)'
-            gc.style.transition = `height ${t}`
-            graphEl.style.transition = `height ${t}`
-            if (heroEl) heroEl.style.transition = `opacity 0.3s ease, max-height ${t}, padding ${t}`
+            const isCov = graphCovered
+            const isExpanded = currentH > MIN_H + 10 && !isCov
+            const isCollapsed = !isExpanded && !isCov
+
             if (isExpanded) {
+                // Expanded → collapsed
+                const t = '0.45s cubic-bezier(0.25, 1, 0.5, 1)'
+                gc.style.transition = `max-height ${t}, margin-top ${t}`
+                graphEl.style.transition = `height ${t}`
+                if (heroEl) heroEl.style.transition = `opacity 0.15s ease, max-height ${t}, padding ${t}`
+                gc.offsetHeight // reflow
                 graphEl.style.height = `${MIN_H}px`
+                gc.style.height = ''
+                gc.style.maxHeight = ''
+                gc.style.overflow = ''
                 if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
                 setGraphCollapsed(true)
-            } else {
+                setTimeout(() => { gc.style.transition = ''; graphEl.style.transition = ''; if (heroEl) heroEl.style.transition = ''; gc.style.maxHeight = ''; gc.style.overflow = '' }, 500)
+            } else if (isCov) {
+                // Covered → expanded (slower, gentler)
+                const t = '0.65s cubic-bezier(0.22, 1, 0.36, 1)'
+                gc.style.transition = `max-height ${t}, margin-top ${t}`
+                graphEl.style.transition = `height ${t}`
+                if (heroEl) heroEl.style.transition = `opacity 0.5s ease 0.15s, max-height ${t}, padding ${t}`
+                gc.offsetHeight // reflow
                 graphEl.style.height = `${MAX_H}px`
                 gc.style.height = ''
+                gc.style.maxHeight = '500px'
+                gc.style.overflow = ''
                 if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
                 setGraphCollapsed(false)
-                if (graphCovered) {
-                    setGraphCovered(false)
-                    setThemeColor('#ffffff')
-                    themeColorRef.current = '#ffffff'
-                }
+                setGraphCovered(false)
+                setThemeColor('#ffffff')
+                themeColorRef.current = '#ffffff'
+                setTimeout(() => { gc.style.transition = ''; graphEl.style.transition = ''; if (heroEl) heroEl.style.transition = ''; gc.style.maxHeight = ''; gc.style.overflow = '' }, 700)
+            } else {
+                // Collapsed → expanded
+                const t = '0.45s cubic-bezier(0.25, 1, 0.5, 1)'
+                gc.style.transition = `max-height ${t}, margin-top ${t}`
+                graphEl.style.transition = `height ${t}`
+                if (heroEl) heroEl.style.transition = `opacity 0.35s ease, max-height ${t}, padding ${t}`
+                gc.offsetHeight // reflow
+                graphEl.style.height = `${MAX_H}px`
+                gc.style.height = ''
+                gc.style.maxHeight = ''
+                gc.style.overflow = ''
+                if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
+                setGraphCollapsed(false)
+                setTimeout(() => { gc.style.transition = ''; graphEl.style.transition = ''; if (heroEl) heroEl.style.transition = ''; gc.style.maxHeight = ''; gc.style.overflow = '' }, 500)
             }
-            setTimeout(() => { gc.style.transition = ''; graphEl.style.transition = ''; if (heroEl) heroEl.style.transition = '' }, 400)
             return
         }
 
@@ -1213,6 +1243,26 @@ export default function Dashboard() {
         })
     }
     const [editingEvent, setEditingEvent] = useState(null)
+    const [termPopup, setTermPopup] = useState(null) // { term, clickX, clickY }
+    const termPopupRef = useRef(null)
+    // Dismiss term popup on scroll or click away
+    useEffect(() => {
+        if (!termPopup) return
+        const el = scrollRef.current
+        const onScroll = () => setTermPopup(null)
+        const onClick = (e) => {
+            if (e.target.closest('[data-term-label]')) return
+            if (termPopupRef.current?.contains(e.target)) return
+            setTermPopup(null)
+        }
+        if (el) el.addEventListener('scroll', onScroll, { passive: true, once: true })
+        const t = setTimeout(() => document.addEventListener('click', onClick), 0)
+        return () => {
+            if (el) el.removeEventListener('scroll', onScroll)
+            clearTimeout(t)
+            document.removeEventListener('click', onClick)
+        }
+    }, [termPopup?.term?.id])
     const [editAmount, setEditAmount] = useState('')
     const [editWarning, setEditWarning] = useState('')
     const [skipToast, setSkipToast] = useState(null) // { label, undoFn }
@@ -1308,6 +1358,11 @@ export default function Dashboard() {
     const graphFilterDropdownRef = useRef(null)
     const [graphIsZoomed, setGraphIsZoomed] = useState(false)
     const zoomOutRef = useRef(null)
+    const [graphSettled, setGraphSettled] = useState(false)
+    useEffect(() => {
+        const t = setTimeout(() => setGraphSettled(true), 450)
+        return () => clearTimeout(t)
+    }, [])
 
     const closeGraphFilter = useCallback(() => {
         if (!showGraphFilter || graphFilterClosing) return
@@ -1327,9 +1382,29 @@ export default function Dashboard() {
         document.addEventListener('pointerdown', handler)
         return () => document.removeEventListener('pointerdown', handler)
     }, [showGraphFilter, closeGraphFilter])
-    const [balanceHistory, setBalanceHistory] = useState([])
+    const [balanceHistory, setBalanceHistoryRaw] = useState(() => {
+        try { const cached = localStorage.getItem('budgeup_balance_history_cache'); return cached ? JSON.parse(cached) : [] } catch { return [] }
+    })
+    const setBalanceHistory = (valOrFn) => {
+        setBalanceHistoryRaw(prev => {
+            const next = typeof valOrFn === 'function' ? valOrFn(prev) : valOrFn
+            localStorage.setItem('budgeup_balance_history_cache', JSON.stringify(next))
+            return next
+        })
+    }
     const originSetRef = useRef(false)
-    const [dbLoaded, setDbLoaded] = useState(false)
+    const [apiLoaded, setApiLoaded] = useState(false)
+    const [dbLoaded, setDbLoaded] = useState(() => {
+        // If we have cached form data with a balance, skip loading state
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY)
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                if (parsed.formData?.balance) return true
+            }
+        } catch { /* ignore */ }
+        return false
+    })
     const saveTimerRef = useRef(null)
     const userIdRef = useRef(null)
     const formDataRef = useRef(formData)
@@ -1518,12 +1593,14 @@ export default function Dashboard() {
                         })
                     }
                     setDbLoaded(true)
+                    setApiLoaded(true)
                     // If there was a pending save from a quick reload, the debounced save
                     // will fire automatically since dbLoaded just turned true and formData
                     // has the localStorage data merged in
                 } catch (err) {
                     console.error('Failed to load from Supabase:', err)
                     setDbLoaded(true) // still mark loaded so localStorage data is used
+                    setApiLoaded(true)
                 }
             })()
         return () => { cancelled = true }
@@ -1671,27 +1748,23 @@ export default function Dashboard() {
     const tabsBarRef = useRef(null)
     const themeColorRef = useRef('#ffffff')
     const [graphCovered, setGraphCoveredRaw] = useState(() => {
-        const tab = localStorage.getItem('budgeup_active_tab') || 'goals'
-        return sessionStorage.getItem('budgeup_graph_covered_' + tab) === 'true'
+        return localStorage.getItem('budgeup_graph_covered') === 'true'
     })
     const setGraphCovered = (v) => {
-        const tab = localStorage.getItem('budgeup_active_tab') || 'goals'
-        sessionStorage.setItem('budgeup_graph_covered_' + tab, String(v))
+        localStorage.setItem('budgeup_graph_covered', String(v))
         setGraphCoveredRaw(v)
     }
     const [graphCollapsed, setGraphCollapsedRaw] = useState(() => {
-        const tab = localStorage.getItem('budgeup_active_tab') || 'goals'
-        return sessionStorage.getItem('budgeup_graph_collapsed_' + tab) === 'true'
+        return localStorage.getItem('budgeup_graph_collapsed') === 'true'
     })
     const setGraphCollapsed = (v) => {
-        const tab = localStorage.getItem('budgeup_active_tab') || 'goals'
-        sessionStorage.setItem('budgeup_graph_collapsed_' + tab, String(v))
+        localStorage.setItem('budgeup_graph_collapsed', String(v))
         setGraphCollapsedRaw(v)
     }
     const graphCardRef = useRef(null)
     const heroHeaderRef = useRef(null)
     const rafRef = useRef(null)
-    const MAX_H = 220
+    const MAX_H = 224
     const MIN_H = 115
     const SHRINK_DIST = MAX_H - MIN_H
     const HIDE_DIST = MIN_H // additional scroll to fully hide graph
@@ -1751,48 +1824,84 @@ export default function Dashboard() {
         }, 400)
     }, [])
 
+    // Track when handle drag is active so pull-down doesn't interfere
+    const handleDraggingRef = useRef(false)
+
     // Drag on tabs/handle: Phase 1 = shrink graph, Phase 2 = cover collapsed graph
     const onHandlePointerDown = useCallback((e) => {
-        // Don't expand graph while scrubbing
+        // Don't expand graph while scrubbing or zoomed
         if (window.__budgeup_scrubbing?.current?.active) return
+        if (graphIsZoomed) return
         const gc = graphCardRef.current
         const graphEl = graphContainerRef.current
         const heroEl = heroHeaderRef.current
         if (!gc) return
 
+        handleDraggingRef.current = true
         const startY = e.clientY
         let moved = false
         let rafId = null
         let lastPos = 0
         const easeLocal = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
 
-        // Work out where we're starting from
-        const currentGraphH = graphEl ? graphEl.offsetHeight : MAX_H
-        let startPos
-        let maxDragPos // limit how far this gesture can go
-        if (graphCovered) {
-            // Covered — drag down stops at collapsed
-            startPos = MAX_H
-            maxDragPos = MAX_H
-        } else if (currentGraphH <= MIN_H + 10) {
-            // Already collapsed — this gesture covers the graph
-            startPos = SHRINK_DIST
-            maxDragPos = MAX_H
-        } else {
-            // Expanded — this gesture only collapses, stops at SHRINK_DIST
-            startPos = 0
-            maxDragPos = SHRINK_DIST
+        // Defer measurement to first move — don't touch DOM on tap
+        let collapsedGcH = null
+        let maxDragPos = MAX_H // temporary, updated on first move
+        let startPos = 0 // temporary, updated on first move
+        let measured = false
+
+        const measure = () => {
+            if (measured) return
+            measured = true
+            const savedGraphH = graphEl ? graphEl.style.height : ''
+            const savedGcH = gc.style.height
+            const savedGcMax = gc.style.maxHeight
+            const savedHero = heroEl ? {
+                o: heroEl.style.opacity, mh: heroEl.style.maxHeight,
+                pt: heroEl.style.paddingTop, pb: heroEl.style.paddingBottom,
+            } : null
+
+            if (graphEl) graphEl.style.height = `${MIN_H}px`
+            gc.style.height = ''
+            gc.style.maxHeight = ''
+            if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+            collapsedGcH = gc.offsetHeight
+
+            // Restore (no paint happened)
+            if (graphEl) graphEl.style.height = savedGraphH
+            gc.style.height = savedGcH
+            gc.style.maxHeight = savedGcMax
+            if (heroEl && savedHero) {
+                heroEl.style.opacity = savedHero.o; heroEl.style.maxHeight = savedHero.mh
+                heroEl.style.paddingTop = savedHero.pt; heroEl.style.paddingBottom = savedHero.pb
+            }
+
+            const currentGraphH = graphEl ? graphEl.offsetHeight : MAX_H
+            if (graphCovered) {
+                startPos = SHRINK_DIST + collapsedGcH
+                maxDragPos = SHRINK_DIST + collapsedGcH
+            } else if (currentGraphH <= MIN_H + 10) {
+                startPos = SHRINK_DIST
+                maxDragPos = SHRINK_DIST + collapsedGcH
+            } else {
+                // Expanded — only allow collapsing, not covering
+                startPos = 0
+                maxDragPos = SHRINK_DIST
+            }
+
         }
 
         const applyPos = (pos) => {
-            const p = Math.max(0, Math.min(MAX_H, pos))
+            const p = Math.max(0, Math.min(maxDragPos, pos))
 
             if (p <= SHRINK_DIST) {
-                // Phase 1: shrink graph, no clipping
+                // Phase 1: tabs push graph up — gc auto-wraps naturally
                 const t = p / SHRINK_DIST
                 const ct = easeLocal(t)
                 if (graphEl) graphEl.style.height = `${MAX_H - ct * SHRINK_DIST}px`
                 gc.style.height = ''
+                gc.style.maxHeight = ''
+                gc.style.overflow = ''
                 gc.style.marginTop = '0px'
                 if (heroEl) {
                     const f = easeLocal(Math.min(1, t * 2.5))
@@ -1802,11 +1911,13 @@ export default function Dashboard() {
                     heroEl.style.paddingBottom = `${(1 - f) * 6}px`
                 }
             } else {
-                // Phase 2: graph at MIN_H, shrink card height to hide it
+                // Phase 2: tabs slide over collapsed graph — clip gc with maxHeight
                 if (graphEl) graphEl.style.height = `${MIN_H}px`
-                const cover = (p - SHRINK_DIST) / MIN_H
-                const cardH = MIN_H * (1 - cover)
-                gc.style.height = `${Math.max(4, cardH)}px`
+                const cover = (p - SHRINK_DIST) / collapsedGcH
+                const clipH = collapsedGcH * (1 - Math.min(1, cover))
+                gc.style.height = ''
+                gc.style.maxHeight = `${Math.max(4, clipH)}px`
+                gc.style.overflow = 'hidden'
                 gc.style.marginTop = '0px'
                 if (heroEl) {
                     heroEl.style.opacity = '0'
@@ -1820,14 +1931,17 @@ export default function Dashboard() {
         const onMove = (ev) => {
             const dy = ev.clientY - startY
             if (!moved && Math.abs(dy) < 8) return
-            if (!moved && dy > 0 && startPos <= 0) {
-                // Already expanded, pulling down — abort
-                window.removeEventListener('pointermove', onMove)
-                window.removeEventListener('pointerup', onUp)
-                return
-            }
             if (!moved) {
-                // First move — remove transitions for direct manipulation
+                // First real move — measure now (deferred from pointerdown)
+                measure()
+                if (dy > 0 && startPos <= 0) {
+                    // Already expanded, pulling down — abort
+                    window.removeEventListener('pointermove', onMove)
+                    window.removeEventListener('pointerup', onUp)
+                    handleDraggingRef.current = false
+                    return
+                }
+                // Remove transitions for direct manipulation
                 gc.style.transition = 'none'
                 if (graphEl) graphEl.style.transition = 'none'
                 if (heroEl) heroEl.style.transition = 'none'
@@ -1839,24 +1953,45 @@ export default function Dashboard() {
         }
 
         const snapTo = (state) => {
-            const t = '0.35s cubic-bezier(0.4, 0, 0.2, 1)'
-            gc.style.transition = `height ${t}, margin-top ${t}`
+            // Ensure maxHeight has an explicit pixel value so CSS can transition it
+            if (!gc.style.maxHeight || gc.style.maxHeight === 'none') {
+                gc.style.maxHeight = `${gc.offsetHeight}px`
+                gc.style.overflow = 'hidden'
+            }
+            // Duration proportional to remaining distance (min 0.2s, max 0.45s)
+            const p = Math.max(0, Math.min(maxDragPos, lastPos))
+            const targetPos = state === 'expanded' ? 0 : state === 'collapsed' ? SHRINK_DIST : maxDragPos
+            const dist = Math.abs(p - targetPos)
+            const maxDist = maxDragPos || SHRINK_DIST
+            const dur = Math.max(0.2, Math.min(0.45, 0.2 + (dist / maxDist) * 0.3))
+            const t = `${dur.toFixed(2)}s cubic-bezier(0.25, 1, 0.5, 1)`
+            gc.style.transition = `max-height ${t}, margin-top ${t}`
             if (graphEl) graphEl.style.transition = `height ${t}`
-            if (heroEl) heroEl.style.transition = `opacity 0.3s ease, max-height ${t}, padding ${t}`
+            if (heroEl) heroEl.style.transition = `opacity ${Math.max(0.15, dur * 0.6).toFixed(2)}s ease, max-height ${t}, padding ${t}`
+            // Force reflow so browser registers current state + transition before target
+            gc.offsetHeight
 
             if (state === 'expanded') {
+                // Animate maxHeight to expandedGcH, then clear after transition
                 if (graphEl) graphEl.style.height = `${MAX_H}px`
                 gc.style.height = ''
+                gc.style.maxHeight = `${collapsedGcH + SHRINK_DIST + 200}px`
+                gc.style.overflow = ''
                 gc.style.marginTop = '0px'
                 if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
             } else if (state === 'collapsed') {
+                // Animate maxHeight to collapsedGcH (matches auto), then clear after
                 if (graphEl) graphEl.style.height = `${MIN_H}px`
                 gc.style.height = ''
+                gc.style.maxHeight = `${collapsedGcH}px`
+                gc.style.overflow = 'hidden'
                 gc.style.marginTop = '0px'
                 if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
             } else {
                 if (graphEl) graphEl.style.height = `${MIN_H}px`
-                gc.style.height = '4px'
+                gc.style.height = ''
+                gc.style.maxHeight = '4px'
+                gc.style.overflow = 'hidden'
                 gc.style.marginTop = '0px'
                 if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
             }
@@ -1864,20 +1999,21 @@ export default function Dashboard() {
             const isCovered = state === 'covered'
             const isCollapsed = state === 'collapsed'
 
-            // When expanding, lock scroll and reset to top so graph stays visible
-
             setTimeout(() => {
                 gc.style.transition = ''
                 if (graphEl) graphEl.style.transition = ''
                 if (heroEl) heroEl.style.transition = ''
-                // Always restore scroll
+                // Clear maxHeight/overflow after animation for expanded/collapsed
+                if (!isCovered) {
+                    gc.style.maxHeight = ''
+                    gc.style.overflow = ''
+                }
                 const el = scrollRef.current
                 if (el) {
-                    el.style.overflow = ''
-                    el.style.overflowY = 'auto'
+                    el.style.overflowY = ''
                 }
                 isAnimatingRef.current = false
-            }, 400)
+            }, dur * 1000 + 50)
 
             setGraphCovered(isCovered)
             setGraphCollapsed(isCollapsed)
@@ -1885,141 +2021,260 @@ export default function Dashboard() {
             themeColorRef.current = '#ffffff'
         }
 
-        const onUp = () => {
+        const cleanup = () => {
             window.removeEventListener('pointermove', onMove)
             window.removeEventListener('pointerup', onUp)
+            window.removeEventListener('pointercancel', onCancel)
+        }
+
+        const onUp = () => {
+            cleanup()
             if (rafId) cancelAnimationFrame(rafId)
+            handleDraggingRef.current = false
 
             if (!moved) {
                 // Tap — do nothing, let tab onClick handle it
                 return
             }
 
-            // Snap to nearest state
-            const p = Math.max(0, Math.min(MAX_H, lastPos))
-            if (graphCovered) {
-                if (p < SHRINK_DIST + MIN_H * 0.75) snapTo('collapsed')
-                else snapTo('covered')
-            } else if (startPos === 0) {
-                if (p > SHRINK_DIST * 0.2) snapTo('collapsed')
-                else snapTo('expanded')
+            // Apply final position synchronously
+            applyPos(lastPos)
+
+            // Snap to nearest — biased: 40% threshold toward covered
+            const p = Math.max(0, Math.min(maxDragPos, lastPos))
+
+            let target
+            if (p <= SHRINK_DIST) {
+                target = p < SHRINK_DIST * 0.5 ? 'expanded' : 'collapsed'
             } else {
-                if (p > SHRINK_DIST + MIN_H * 0.2) snapTo('covered')
-                else if (p < SHRINK_DIST * 0.8) snapTo('expanded')
-                else snapTo('collapsed')
+                const phase2Progress = (p - SHRINK_DIST) / collapsedGcH
+                target = phase2Progress > 0.4 ? 'covered' : 'collapsed'
+            }
+
+            requestAnimationFrame(() => snapTo(target))
+        }
+
+        const onCancel = () => {
+            cleanup()
+            if (rafId) cancelAnimationFrame(rafId)
+            handleDraggingRef.current = false
+            if (moved) {
+                applyPos(lastPos)
+                requestAnimationFrame(() => snapTo(lastPos <= SHRINK_DIST ? (lastPos < SHRINK_DIST * 0.5 ? 'expanded' : 'collapsed') : 'collapsed'))
             }
         }
 
         window.addEventListener('pointermove', onMove)
         window.addEventListener('pointerup', onUp)
+        window.addEventListener('pointercancel', onCancel)
     }, [graphCovered])
 
-    // Pull-down-to-expand: when content is at scrollTop 0 and graph is collapsed/covered, dragging down expands graph
-    const pullDownRef = useRef({ active: false, startY: 0 })
+    // Pull-down-to-expand: when content is at scrollTop 0, pulling down expands the graph
     const pullDownGraphCoveredRef = useRef(false)
     useEffect(() => { pullDownGraphCoveredRef.current = graphCovered }, [graphCovered])
+    const pullDownGraphCollapsedRef = useRef(false)
+    useEffect(() => { pullDownGraphCollapsedRef.current = graphCollapsed }, [graphCollapsed])
 
     useEffect(() => {
         const el = scrollRef.current
         if (!el) return
+        let active = false
+        let startY = 0
+        let collapsedGcH = 0
+        let maxDragPos = 0
+        let startPos = 0
+        let lastPos = 0
+        const easeLocal = (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+
+        const measure = () => {
+            const gc = graphCardRef.current
+            const graphEl = graphContainerRef.current
+            const heroEl = heroHeaderRef.current
+            if (!gc || !graphEl) return false
+
+            const savedGraphH = graphEl.style.height
+            const savedGcH = gc.style.height
+            const savedGcMax = gc.style.maxHeight
+            const savedHero = heroEl ? {
+                o: heroEl.style.opacity, mh: heroEl.style.maxHeight,
+                pt: heroEl.style.paddingTop, pb: heroEl.style.paddingBottom,
+            } : null
+
+            graphEl.style.height = `${MIN_H}px`
+            gc.style.height = ''
+            gc.style.maxHeight = ''
+            if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+            collapsedGcH = gc.offsetHeight
+
+            graphEl.style.height = savedGraphH
+            gc.style.height = savedGcH
+            gc.style.maxHeight = savedGcMax
+            if (heroEl && savedHero) {
+                heroEl.style.opacity = savedHero.o; heroEl.style.maxHeight = savedHero.mh
+                heroEl.style.paddingTop = savedHero.pt; heroEl.style.paddingBottom = savedHero.pb
+            }
+
+            maxDragPos = SHRINK_DIST + collapsedGcH
+            const isCov = pullDownGraphCoveredRef.current
+            const isCol = pullDownGraphCollapsedRef.current
+            const currentH = graphEl.offsetHeight
+            if (isCov) {
+                startPos = maxDragPos
+            } else if (currentH <= MIN_H + 10 || isCol) {
+                startPos = SHRINK_DIST
+            } else {
+                startPos = 0
+            }
+            return true
+        }
+
+        const applyPos = (pos) => {
+            const gc = graphCardRef.current
+            const graphEl = graphContainerRef.current
+            const heroEl = heroHeaderRef.current
+            if (!gc) return
+            const p = Math.max(0, Math.min(maxDragPos, pos))
+
+            if (p <= SHRINK_DIST) {
+                const t = p / SHRINK_DIST
+                const ct = easeLocal(t)
+                if (graphEl) graphEl.style.height = `${MAX_H - ct * SHRINK_DIST}px`
+                gc.style.height = ''
+                gc.style.maxHeight = ''
+                gc.style.overflow = ''
+                gc.style.marginTop = '0px'
+                if (heroEl) {
+                    const f = easeLocal(Math.min(1, t * 2.5))
+                    heroEl.style.opacity = `${1 - f}`
+                    heroEl.style.maxHeight = `${(1 - f) * 80}px`
+                    heroEl.style.paddingTop = `${(1 - f) * 4}px`
+                    heroEl.style.paddingBottom = `${(1 - f) * 6}px`
+                }
+            } else {
+                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                const cover = (p - SHRINK_DIST) / collapsedGcH
+                const clipH = collapsedGcH * (1 - Math.min(1, cover))
+                gc.style.height = ''
+                gc.style.maxHeight = `${Math.max(4, clipH)}px`
+                gc.style.overflow = 'hidden'
+                gc.style.marginTop = '0px'
+                if (heroEl) {
+                    heroEl.style.opacity = '0'
+                    heroEl.style.maxHeight = '0px'
+                    heroEl.style.paddingTop = '0px'
+                    heroEl.style.paddingBottom = '0px'
+                }
+            }
+        }
+
+        const snapTo = (state) => {
+            const gc = graphCardRef.current
+            const graphEl = graphContainerRef.current
+            const heroEl = heroHeaderRef.current
+            if (!gc) return
+            if (!gc.style.maxHeight || gc.style.maxHeight === 'none') {
+                gc.style.maxHeight = `${gc.offsetHeight}px`
+                gc.style.overflow = 'hidden'
+            }
+            const t = '0.45s cubic-bezier(0.25, 1, 0.5, 1)'
+            gc.style.transition = `max-height ${t}, margin-top ${t}`
+            if (graphEl) graphEl.style.transition = `height ${t}`
+            if (heroEl) heroEl.style.transition = `opacity 0.35s ease, max-height ${t}, padding ${t}`
+            gc.offsetHeight
+
+            if (state === 'expanded') {
+                if (graphEl) graphEl.style.height = `${MAX_H}px`
+                gc.style.height = ''
+                gc.style.maxHeight = `${collapsedGcH + SHRINK_DIST + 200}px`
+                gc.style.overflow = ''
+                if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
+            } else if (state === 'collapsed') {
+                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                gc.style.height = ''
+                gc.style.maxHeight = `${collapsedGcH}px`
+                gc.style.overflow = 'hidden'
+                if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+            } else {
+                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                gc.style.height = ''
+                gc.style.maxHeight = '4px'
+                gc.style.overflow = 'hidden'
+                if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
+            }
+
+            const isCovered = state === 'covered'
+            const isCollapsed = state === 'collapsed'
+            setTimeout(() => {
+                gc.style.transition = ''
+                if (graphEl) graphEl.style.transition = ''
+                if (heroEl) heroEl.style.transition = ''
+                if (!isCovered) { gc.style.maxHeight = ''; gc.style.overflow = '' }
+                el.style.overflow = ''
+                el.style.overflowY = 'auto'
+            }, 500)
+            setGraphCovered(isCovered)
+            setGraphCollapsed(isCollapsed)
+            setThemeColor('#ffffff')
+            themeColorRef.current = '#ffffff'
+        }
 
         const onStart = (e) => {
+            if (e.touches.length >= 2) return
+            if (handleDraggingRef.current) return
             if (el.scrollTop > 1) return
             if (window.__budgeup_scrubbing?.current?.active) return
             const gc = graphCardRef.current
             const graphEl = graphContainerRef.current
             if (!gc || !graphEl) return
-            const isCovered = pullDownGraphCoveredRef.current
+            const isCov = pullDownGraphCoveredRef.current
+            const isCol = pullDownGraphCollapsedRef.current
             const currentH = graphEl.offsetHeight
-            if (currentH > MIN_H + 10 && !isCovered) return
-            pullDownRef.current = { active: true, startY: e.touches[0].clientY, wasCovered: isCovered }
+            // Only activate if graph is collapsed or covered
+            if (currentH > MIN_H + 10 && !isCov && !isCol) return
+            active = true
+            startY = e.touches[0].clientY
+            lastPos = 0
         }
 
         const onMove = (e) => {
-            const pd = pullDownRef.current
-            if (!pd.active) return
-            const dy = e.touches[0].clientY - pd.startY
-            if (dy < 0) { pd.active = false; return }
-            if (el.scrollTop > 1) { pd.active = false; return }
+            if (!active) return
+            if (e.touches.length >= 2) { active = false; return }
+            const dy = e.touches[0].clientY - startY
+            if (dy < 0) { active = false; return }
+            if (el.scrollTop > 1) { active = false; return }
             e.preventDefault()
-            const gc = graphCardRef.current
-            const graphEl = graphContainerRef.current
-            const heroEl = heroHeaderRef.current
-            if (!gc || !graphEl) return
 
-            if (pd.wasCovered) {
-                const cardReveal = Math.min(1, dy / MIN_H)
-                gc.style.height = cardReveal < 1 ? `${dy}px` : ''
-                const expandT = Math.max(0, Math.min(1, (dy - MIN_H) / SHRINK_DIST))
-                graphEl.style.height = `${MIN_H + expandT * SHRINK_DIST}px`
-                if (heroEl) {
-                    heroEl.style.opacity = `${expandT}`
-                    heroEl.style.maxHeight = `${expandT * 80}px`
-                    heroEl.style.paddingTop = `${expandT * 4}px`
-                    heroEl.style.paddingBottom = `${expandT * 6}px`
-                }
-            } else {
-                const progress = Math.min(1, dy / SHRINK_DIST)
-                graphEl.style.height = `${MIN_H + progress * SHRINK_DIST}px`
-                if (heroEl) {
-                    heroEl.style.opacity = `${progress}`
-                    heroEl.style.maxHeight = `${progress * 80}px`
-                    heroEl.style.paddingTop = `${progress * 4}px`
-                    heroEl.style.paddingBottom = `${progress * 6}px`
-                }
+            // Measure on first real move
+            if (lastPos === 0 && dy > 4) {
+                if (!measure()) { active = false; return }
+                const gc = graphCardRef.current
+                const graphEl = graphContainerRef.current
+                const heroEl = heroHeaderRef.current
+                if (gc) gc.style.transition = 'none'
+                if (graphEl) graphEl.style.transition = 'none'
+                if (heroEl) heroEl.style.transition = 'none'
             }
+
+            if (dy <= 4) return
+            lastPos = Math.max(0, Math.min(maxDragPos, startPos - dy))
+            applyPos(lastPos)
         }
 
         const onEnd = () => {
-            const pd = pullDownRef.current
-            if (!pd.active) return
-            pd.active = false
-            const graphEl = graphContainerRef.current
-            const gc = graphCardRef.current
-            const heroEl = heroHeaderRef.current
-            if (!graphEl) return
-            const currentH = graphEl.offsetHeight
-            const progress = (currentH - MIN_H) / SHRINK_DIST
-            const cardH = gc ? gc.offsetHeight : MIN_H
-            const t = '0.35s cubic-bezier(0.4, 0, 0.2, 1)'
-            gc.style.transition = `height ${t}, margin-top ${t}`
-            graphEl.style.transition = `height ${t}`
-            if (heroEl) heroEl.style.transition = `opacity 0.3s ease, max-height ${t}, padding ${t}`
+            if (!active) return
+            active = false
+            if (lastPos === 0) return
 
-            if (pd.wasCovered) {
-                if (cardH > MIN_H * 0.3 || progress > 0.1) {
-                    if (progress > 0.3) {
-                        graphEl.style.height = `${MAX_H}px`
-                        gc.style.height = ''
-                        if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
-                        setGraphCollapsed(false)
-                    } else {
-                        graphEl.style.height = `${MIN_H}px`
-                        gc.style.height = ''
-                        if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
-                        setGraphCollapsed(true)
-                    }
-                    setGraphCovered(false)
-                } else {
-                    graphEl.style.height = `${MIN_H}px`
-                    gc.style.height = '4px'
-                    if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
-                }
+            applyPos(lastPos)
+            const p = Math.max(0, Math.min(maxDragPos, lastPos))
+            let target
+            if (p <= SHRINK_DIST) {
+                target = p < SHRINK_DIST * 0.5 ? 'expanded' : 'collapsed'
             } else {
-                if (progress > 0.3) {
-                    graphEl.style.height = `${MAX_H}px`
-                    if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
-                    setGraphCollapsed(false)
-                } else {
-                    graphEl.style.height = `${MIN_H}px`
-                    if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
-                }
+                const phase2Progress = (p - SHRINK_DIST) / collapsedGcH
+                target = phase2Progress > 0.4 ? 'covered' : 'collapsed'
             }
-            setTimeout(() => {
-                gc.style.transition = ''
-                graphEl.style.transition = ''
-                if (heroEl) heroEl.style.transition = ''
-            }, 400)
+            requestAnimationFrame(() => snapTo(target))
         }
 
         el.addEventListener('touchstart', onStart, { passive: true })
@@ -2030,6 +2285,19 @@ export default function Dashboard() {
             el.removeEventListener('touchmove', onMove)
             el.removeEventListener('touchend', onEnd)
         }
+    }, [])
+
+    // Block scroll when 2+ fingers are touching (prevents pinch-zoom scroll conflicts)
+    useEffect(() => {
+        const el = scrollRef.current
+        if (!el) return
+        const onTouchMove = (e) => {
+            if (e.touches.length >= 2) {
+                e.preventDefault()
+            }
+        }
+        el.addEventListener('touchmove', onTouchMove, { passive: false })
+        return () => el.removeEventListener('touchmove', onTouchMove)
     }, [])
 
     const animateScroll = useCallback((el, target, durationOverride, onComplete) => {
@@ -2122,7 +2390,7 @@ export default function Dashboard() {
         const heroEl = heroHeaderRef.current
         if (graphCovered) {
             if (graphEl) graphEl.style.height = `${MIN_H}px`
-            if (gc) { gc.style.height = '4px'; gc.style.marginTop = '0px' }
+            if (gc) { gc.style.height = ''; gc.style.maxHeight = '4px'; gc.style.overflow = 'hidden'; gc.style.marginTop = '0px' }
             if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
         } else if (graphCollapsed) {
             if (graphEl) graphEl.style.height = `${MIN_H}px`
@@ -2138,7 +2406,7 @@ export default function Dashboard() {
         const heroEl = heroHeaderRef.current
         if (graphCovered) {
             if (graphEl) graphEl.style.height = `${MIN_H}px`
-            if (gc) { gc.style.height = '4px'; gc.style.marginTop = '0px' }
+            if (gc) { gc.style.height = ''; gc.style.maxHeight = '4px'; gc.style.overflow = 'hidden'; gc.style.marginTop = '0px' }
             if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
         } else if (graphCollapsed) {
             if (graphEl) graphEl.style.height = `${MIN_H}px`
@@ -2771,6 +3039,17 @@ export default function Dashboard() {
     const expenseEmpty = EXPENSE_SOURCES.filter(s => isSourceVisible(s.id, formData.expenseSources)).length === 0
     const tabContentEmpty = (activeTab === 'income' && incomeEmpty)
 
+    // Compute active source label for hero header
+    const activeSourceLabel = (() => {
+        if (!activeSource) return null
+        const cat = CATEGORY_MAP[activeSource]
+        if (!cat) return null
+        const entries = formData[cat.formKey] || []
+        const hasMulti = entries.filter(e => parseMoney(e.amount) > 0).length > 1
+        return hasMulti ? `${cat.label} ${visibleEntryIndex + 1}` : cat.label
+    })()
+    const activeSourceIsIncome = activeSource && INCOME_CATEGORIES.some(c => c.id === activeSource)
+
     return (
         <div style={{
             display: 'flex', flexDirection: 'column',
@@ -2953,37 +3232,42 @@ export default function Dashboard() {
                             padding: '12px 18px 6px',
                             opacity: showInitialBalancePopup ? 0.35 : 1,
                             pointerEvents: showInitialBalancePopup ? 'none' : 'auto',
+                            overflow: 'hidden',
                         }}>
                             {/* Row 1: Balance + filter button */}
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                                     {!dbLoaded ? (
                                         <div style={{ width: 140, height: 28, borderRadius: 8, background: '#e8e8e8' }} />
                                     ) : (
-                                    <p style={{
-                                        margin: 0, fontSize: 30, fontWeight: 800,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: balanceNum < 0 ? '#e06470' : '#1a1a1a',
-                                        lineHeight: 1,
-                                    }}>
-                                        {balanceNum < 0 ? '\u2212' : ''}{getCurrencySymbol()}{Math.abs(balanceNum).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </p>
+                                        <p style={{
+                                            margin: 0, fontSize: 30, fontWeight: 800,
+                                            fontFamily: 'Nunito, sans-serif',
+                                            color: balanceNum < 0 ? '#e06470' : '#1a1a1a',
+                                            lineHeight: 1,
+                                        }}>
+                                            {balanceNum < 0 ? '\u2212' : ''}{getCurrencySymbol()}{Math.abs(balanceNum).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </p>
                                     )}
-                                    <p style={{
-                                        margin: 0, fontSize: 10, fontWeight: 600,
-                                        fontFamily: 'Nunito, sans-serif',
-                                        color: '#b0b0b0',
-                                    }}>
-                                        {(() => {
-                                            if (!balanceHistory.length) return ''
-                                            const recordedDate = balanceHistory[0].recorded_date
-                                            const today = toLocalDate(new Date())
-                                            if (recordedDate === today) return 'today'
-                                            const days = daysBetween(recordedDate, today)
-                                            if (days === 1) return 'yesterday'
-                                            return `${days}d ago`
-                                        })()}
-                                    </p>
+                                    {/* Active source label */}
+                                    {activeSourceLabel && (
+                                        <div style={{
+                                            background: activeSourceIsIncome ? '#147b75' : '#e06470',
+                                            borderRadius: 20, padding: '6px 20px',
+                                            boxShadow: activeSourceIsIncome
+                                                ? '0 2px 8px rgba(20,123,117,0.3)'
+                                                : '0 2px 8px rgba(224,100,112,0.3)',
+                                            animation: 'fadeSlideIn 0.25s ease',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                            <span style={{
+                                                fontSize: 12, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+                                                color: '#fff', letterSpacing: 0.3, lineHeight: 1,
+                                            }}>
+                                                {activeSourceLabel}
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                                 {/* Zoom out + Filter buttons */}
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -3038,16 +3322,58 @@ export default function Dashboard() {
                                     </div>
                                 </div>
                             </div>
-
+                            {/* Balance update status — inline with orange dot accent */}
+                            {dbLoaded && (() => {
+                                const noHistory = !balanceHistory.length
+                                const recordedDate = noHistory ? null : balanceHistory[0].recorded_date
+                                const today = toLocalDate(new Date())
+                                const days = noHistory ? -1 : daysBetween(recordedDate, today)
+                                const isStale = days > 0
+                                if (days === 0) return null
+                                return (
+                                    <div
+                                        onClick={openFabBalance}
+                                        style={{
+                                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                                            margin: '6px 0 0',
+                                            background: 'rgba(241,169,80,0.08)',
+                                            borderRadius: 20, padding: '4px 12px',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        <div style={{
+                                            width: 6, height: 6, borderRadius: '50%',
+                                            background: '#f1a950',
+                                            flexShrink: 0,
+                                        }} />
+                                        <span style={{
+                                            fontSize: 10, fontWeight: 600,
+                                            fontFamily: 'Nunito, sans-serif',
+                                            color: '#bbb',
+                                            letterSpacing: 0.1,
+                                        }}>
+                                            {noHistory
+                                                ? <>No balance recorded<span style={{ color: '#ccc', margin: '0 4px', fontWeight: 800 }}>·</span><span style={{ color: '#147b75', fontWeight: 700 }}>tap to add</span></>
+                                                : days === 1
+                                                    ? <>Updated <span style={{ fontWeight: 700, color: '#f1a950' }}>yesterday</span><span style={{ color: '#ccc', margin: '0 4px', fontWeight: 800 }}>·</span><span style={{ color: '#147b75', fontWeight: 700 }}>tap to update</span></>
+                                                    : <>Updated <span style={{ fontWeight: 700, color: '#f1a950' }}>{new Date(recordedDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span><span style={{ color: '#ccc', margin: '0 4px', fontWeight: 800 }}>·</span><span style={{ color: '#147b75', fontWeight: 700 }}>tap to update</span></>
+                                            }
+                                        </span>
+                                    </div>
+                                )
+                            })()}
                         </div>
 
                         <div style={{ position: 'relative', opacity: showInitialBalancePopup ? 0.35 : 1, pointerEvents: showInitialBalancePopup ? 'none' : 'auto' }}>
-                            {!dbLoaded && (
+                            {(!dbLoaded || !graphSettled) && (
                                 <div style={{
-                                    position: 'absolute', inset: 0, zIndex: 20,
+                                    position: 'absolute', inset: 0, zIndex: 50,
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    background: 'rgba(255,255,255,0.7)',
+                                    background: '#fff',
                                     borderRadius: 8,
+                                    opacity: graphSettled && dbLoaded ? 0 : 1,
+                                    transition: 'opacity 0.3s ease',
+                                    pointerEvents: graphSettled && dbLoaded ? 'none' : 'auto',
                                 }}>
                                     <div style={{
                                         width: 24, height: 24, borderRadius: '50%',
@@ -3061,7 +3387,9 @@ export default function Dashboard() {
                                 graphHeight={graphHeight}
                                 graphHeightRef={graphContainerRef}
                                 marginTop={0}
+                                collapsed={graphCollapsed || graphCovered}
                                 terms={terms}
+                                expandedTerm={termPopup?.term?.id}
                                 balance={projectionBalance || undefined}
                                 balanceAnchorDate={anchorDate}
                                 balanceStartDate={getGraphStart()}
@@ -3103,14 +3431,15 @@ export default function Dashboard() {
                                     return allMaps[id] || []
                                 })}
                                 currentEventType={currentEventType}
-                                currentEventLabel={(() => {
-                                    if (!activeSource) return null
-                                    const cat = CATEGORY_MAP[activeSource]
-                                    if (!cat) return null
-                                    const entries = formData[cat.formKey] || []
-                                    const hasMulti = entries.filter(e => parseMoney(e.amount) > 0).length > 1
-                                    return hasMulti ? `${cat.label} ${visibleEntryIndex + 1}` : cat.label
-                                })()}
+                                currentEventLabel={null}
+                                onTermClick={(termId, pos) => {
+                                    if (termPopup?.term?.id === termId) {
+                                        setTermPopup(null)
+                                    } else {
+                                        const term = terms.find(t => t.id === termId)
+                                        if (term && pos) setTermPopup({ term, clickX: pos.clickX, clickY: pos.clickY })
+                                    }
+                                }}
                                 onEventClick={handleEventClick}
                                 activeEventDot={editingEvent}
                                 balanceHistory={balanceHistory}
@@ -3118,6 +3447,7 @@ export default function Dashboard() {
                                 onZeroDate={setGraphZeroDate}
                                 onOverdraftBreachDate={setGraphOverdraftDate}
                                 showHolidays={showHolidays}
+                                showDateMarker={showDateMarker}
                                 onZoomChange={(zoomed) => {
                                     setGraphIsZoomed(zoomed)
                                     if (zoomed) analytics.track(DASHBOARD_EVENTS.GRAPH_ZOOMED)
@@ -3128,14 +3458,18 @@ export default function Dashboard() {
                         </div>
                     </div>{/* end graph card */}
 
+                    {/* Small white spacer above draggable */}
+                    <div style={{ height: 2, background: '#fff', flexShrink: 0 }} />
+
                     {/* Tabs — inside sticky header so they stick */}
                     <div ref={tabsBarRef} style={{
                         background: '#f5f7f7',
-                        borderRadius: '28px 28px 0 0',
+                        borderRadius: '36px 36px 0 0',
                         padding: '0 14px 8px',
-                        borderTop: '4px solid #fff',
-                        boxShadow: 'none',
-                        transition: 'box-shadow 0.2s ease',
+                        borderTop: 'none',
+                        boxShadow: '0 -1px 2px rgba(0,0,0,0.08)',
+                        transform: 'translateZ(0)',
+                        backfaceVisibility: 'hidden',
                     }}>
                         {/* Drag handle line */}
                         <div
@@ -3160,6 +3494,7 @@ export default function Dashboard() {
                                     <div style={{
                                         display: 'flex', width: '100%', position: 'relative',
                                         background: 'rgba(0,0,0,0.04)', borderRadius: 50, padding: 3,
+                                        transform: 'translateZ(0)',
                                     }}>
                                         <div style={{
                                             position: 'absolute', top: 3, bottom: 3,
@@ -3181,9 +3516,10 @@ export default function Dashboard() {
                                                         position: 'relative', zIndex: 1,
                                                         color: isActive ? '#fff' : '#1a1a1a',
                                                         transition: isActive ? 'color 0.1s ease 0.1s' : 'color 0.1s ease',
+                                                        willChange: 'color',
                                                     }}
                                                 >
-                                                    <tab.Icon size={15} style={{ flexShrink: 0 }} />
+                                                    <tab.Icon size={15} style={{ flexShrink: 0, width: 15, height: 15 }} />
                                                     <span style={{
                                                         fontSize: 14, fontWeight: 700,
                                                         fontFamily: 'Nunito, sans-serif', marginLeft: 5,
@@ -3214,435 +3550,441 @@ export default function Dashboard() {
                         {(activeTab === 'income' || activeTab === 'expenses') && (<div style={{ paddingBottom: 40 }}>
                             {/* === INCOME TAB CONTENT === */}
                             {activeTab === 'income' && (<>
-                            {/* Income Overview summary card */}
-                            {(() => {
-                                const inc = Math.round(yearlyIncome * freqMultiplier[freqView]) || 0
-                                const exp = Math.round((yearlyExpense + weeklySpendTotal) * freqMultiplier[freqView]) || 0
-                                const total = inc + exp
-                                const incPct = total > 0 ? (inc / total) * 100 : 50
-                                return (
-                                    <div style={{ padding: '16px 16px', background: '#fff', borderRadius: 14, marginBottom: 10 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                                            <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: 0 }}>
-                                                Income Overview
-                                            </p>
-                                            <span style={{
-                                                fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
-                                                color: '#147b75',
-                                            }}>
-                                                {getCurrencySymbol()}{inc.toLocaleString()}{freqSuffix[freqView]}
-                                            </span>
+                                {/* Income Overview summary card */}
+                                {(() => {
+                                    const inc = Math.round(yearlyIncome * freqMultiplier[freqView]) || 0
+                                    const exp = Math.round((yearlyExpense + weeklySpendTotal) * freqMultiplier[freqView]) || 0
+                                    const total = inc + exp
+                                    const incPct = total > 0 ? (inc / total) * 100 : 50
+                                    return (
+                                        <div style={{ padding: '16px 16px', background: '#fff', borderRadius: 14, marginBottom: 10 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                                <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: 0 }}>
+                                                    Income Overview
+                                                </p>
+                                                <span style={{
+                                                    fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+                                                    color: '#147b75',
+                                                }}>
+                                                    {getCurrencySymbol()}{inc.toLocaleString()}{freqSuffix[freqView]}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>Income</span>
+                                                <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Expenses</span>
+                                            </div>
+                                            <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: '#f0f0f0' }}>
+                                                <div style={{ width: `${incPct}%`, background: '#147b75', borderRadius: '4px 0 0 4px', transition: 'width 0.4s ease' }} />
+                                                <div style={{ flex: 1, background: '#e06470', borderRadius: '0 4px 4px 0' }} />
+                                            </div>
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                                            <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>Income</span>
-                                            <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Expenses</span>
-                                        </div>
-                                        <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: '#f0f0f0' }}>
-                                            <div style={{ width: `${incPct}%`, background: '#147b75', borderRadius: '4px 0 0 4px', transition: 'width 0.4s ease' }} />
-                                            <div style={{ flex: 1, background: '#e06470', borderRadius: '0 4px 4px 0' }} />
-                                        </div>
+                                    )
+                                })()}
+
+                                {/* Empty state when no income sources */}
+                                {incomeEmpty && (
+                                    <div style={{ textAlign: 'center', padding: '16px 40px' }}>
+                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                                            No income sources yet
+                                        </p>
+                                        <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>
+                                            Tap + to add
+                                        </p>
                                     </div>
-                                )
-                            })()}
+                                )}
 
-                            {/* Empty state when no income sources */}
-                            {incomeEmpty && (
-                                <div style={{ textAlign: 'center', padding: '16px 40px' }}>
-                                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
-                                        No income sources yet
-                                    </p>
-                                    <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>
-                                        Tap + to add
-                                    </p>
-                                </div>
-                            )}
+                                {/* Income Section */}
+                                {(INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).length > 0 || addingSourceType === 'income' || collapsingSections.has('income')) && (
+                                    <div data-section="income" style={{
+                                        margin: collapsingSections.has('income') ? '0' : '0 0 10px',
+                                        overflow: collapsingSections.has('income') ? 'hidden' : 'visible',
+                                        maxHeight: collapsingSections.has('income') ? 0 : undefined,
+                                        opacity: collapsingSections.has('income') ? 0 : 1,
+                                        transition: collapsingSections.has('income')
+                                            ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease, margin 0.4s ease'
+                                            : undefined,
+                                    }}>
+                                        <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: '0 0 8px', padding: '0 4px' }}>Income</p>
 
-                            {/* Income Section */}
-                            {(INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).length > 0 || addingSourceType === 'income' || collapsingSections.has('income')) && (
-                                <div data-section="income" style={{
-                                    margin: collapsingSections.has('income') ? '0' : '0 0 10px',
-                                    overflow: collapsingSections.has('income') ? 'hidden' : 'visible',
-                                    maxHeight: collapsingSections.has('income') ? 0 : undefined,
-                                    opacity: collapsingSections.has('income') ? 0 : 1,
-                                    transition: collapsingSections.has('income')
-                                        ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease, margin 0.4s ease'
-                                        : undefined,
-                                }}>
-                                    <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: '0 0 8px', padding: '0 4px' }}>Income</p>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                                            {INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).slice(0, showAllIncome ? undefined : 4).map(source => {
+                                                const active = !hiddenSources.has(source.id)
+                                                const editTypes = incomeEditTypeMap[source.id] || []
+                                                const yearly = getSourceYearly(editTypes)
+                                                const visibleAmt = events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot && e.date >= exactGraphStart).reduce((s, e) => s + e.amount, 0)
+                                                const removedCount = getSourceRemovedCount(editTypes)
+                                                const isExpanded = expandedSources.has(source.id)
 
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                                        {INCOME_SOURCES.filter(source => isSourceVisible(source.id, formData.incomeSources)).slice(0, showAllIncome ? undefined : 4).map(source => {
-                                            const active = !hiddenSources.has(source.id)
-                                            const editTypes = incomeEditTypeMap[source.id] || []
-                                            const yearly = getSourceYearly(editTypes)
-                                            const visibleAmt = events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot && e.date >= exactGraphStart).reduce((s, e) => s + e.amount, 0)
-                                            const removedCount = getSourceRemovedCount(editTypes)
-                                            const isExpanded = expandedSources.has(source.id)
-
-                                            return (
-                                                <SourceRow
-                                                    key={source.id}
-                                                    source={{ ...source, _visibleAmount: visibleAmt }}
-                                                    active={active}
-                                                    yearlyAmount={yearly}
-                                                    removedCount={removedCount}
-                                                    onRestoreRemoved={() => restoreSourceEvents(editTypes)}
-                                                    overrideCount={getSourceOverrideCount(editTypes)}
-                                                    onClearOverrides={() => clearSourceOverrides(editTypes)}
-                                                    expanded={isExpanded}
-                                                    onToggle={() => toggleSourceVisibility(source.id)}
-                                                    onExpandToggle={() => handleExpandToggle(source.id)}
-                                                    onDelete={() => deleteSource(source.id, false)}
-                                                    scrollContainerRef={scrollRef}
-                                                    isTabSwitchingRef={isTabSwitchingRef}
-                                                    entryCount={(() => { const cat = CATEGORY_MAP[source.id]; return cat ? (formData[cat.formKey] || []).length : 1 })()}
-                                                    formData={formData}
-                                                    updateField={updateField}
-                                                >
-                                                    {(() => {
-                                                        const cat = CATEGORY_MAP[source.id]
-                                                        if (!cat) return null
-                                                        let entries = formData[cat.formKey] || []
-                                                        if (entries.length === 0) {
-                                                            const defaultEntry = {
-                                                                id: `${cat.id}_0`,
-                                                                amount: '',
-                                                                frequency: cat.defaultFrequency,
-                                                                nextDate: '',
-                                                                months: [...(cat.defaultMonths || [])],
-                                                                dates: { ...(cat.defaultDates || {}) },
-                                                                instalmentAmounts: {},
+                                                return (
+                                                    <SourceRow
+                                                        key={source.id}
+                                                        source={{ ...source, _visibleAmount: visibleAmt }}
+                                                        active={active}
+                                                        yearlyAmount={yearly}
+                                                        removedCount={removedCount}
+                                                        onRestoreRemoved={() => restoreSourceEvents(editTypes)}
+                                                        overrideCount={getSourceOverrideCount(editTypes)}
+                                                        onClearOverrides={() => clearSourceOverrides(editTypes)}
+                                                        expanded={isExpanded}
+                                                        onToggle={() => toggleSourceVisibility(source.id)}
+                                                        onExpandToggle={() => handleExpandToggle(source.id)}
+                                                        onDelete={() => deleteSource(source.id, false)}
+                                                        scrollContainerRef={scrollRef}
+                                                        isTabSwitchingRef={isTabSwitchingRef}
+                                                        entryCount={(() => { const cat = CATEGORY_MAP[source.id]; return cat ? (formData[cat.formKey] || []).length : 1 })()}
+                                                        formData={formData}
+                                                        updateField={updateField}
+                                                    >
+                                                        {(() => {
+                                                            const cat = CATEGORY_MAP[source.id]
+                                                            if (!cat) return null
+                                                            let entries = formData[cat.formKey] || []
+                                                            if (entries.length === 0) {
+                                                                const defaultEntry = {
+                                                                    id: `${cat.id}_0`,
+                                                                    amount: '',
+                                                                    frequency: cat.defaultFrequency,
+                                                                    nextDate: '',
+                                                                    months: [...(cat.defaultMonths || [])],
+                                                                    dates: { ...(cat.defaultDates || {}) },
+                                                                    instalmentAmounts: {},
+                                                                }
+                                                                entries = [defaultEntry]
+                                                                setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
                                                             }
-                                                            entries = [defaultEntry]
-                                                            setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
-                                                        }
-                                                        const hasMulti = entries.filter(e => parseMoney(e.amount) > 0).length > 1
-                                                        const entryTotals = hasMulti ? entries.map(e => dashCalcEntryTotal(e, cat)) : null
-                                                        const entryRemovedCounts = hasMulti ? entries.map((e, i) => {
-                                                            const et = `${cat.id}:${e.id || i}`
-                                                            return allEvents.filter(ev => ev.editType === et && ev.removed && !ev.noDot).length
-                                                        }) : null
-                                                        const entryOverrideCounts = hasMulti ? entries.map((e, i) => {
-                                                            const et = `${cat.id}:${e.id || i}`
-                                                            const overrides = formData.amountOverrides || {}
-                                                            return Object.keys(overrides).filter(k => {
-                                                                if (!k.startsWith(et + ':')) return false
-                                                                const date = k.slice(et.length + 1)
-                                                                return events.some(ev => ev.editType === et && ev.date === date && !ev.removed)
-                                                            }).length
-                                                        }) : null
-                                                        return (
-                                                            <CategoryStep
-                                                                categoryId={cat.id} compact
-                                                                entries={entries}
-                                                                entryTotals={entryTotals}
-                                                                entryRemovedCounts={entryRemovedCounts}
-                                                                entryOverrideCounts={entryOverrideCounts}
-                                                                updateEntries={(val) => setFormData(prev => ({ ...prev, [cat.formKey]: typeof val === 'function' ? val(prev[cat.formKey] || []) : val }))}
-                                                                onVisibleEntryChange={entries.length > 1 ? setVisibleEntryIndex : null}
-                                                                onDeleteEntry={({ label, entryId }) => {
-                                                                    const prevFormData = { ...formData }
-                                                                    if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
-                                                                    setSkipToast({ label, undoFn: () => setFormData(prevFormData), sourceId: source.id, entryId })
-                                                                    skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
-                                                                }}
-                                                                onClearEntryEvents={(entryId) => {
-                                                                    const prefix = `${cat.id}:${entryId}:`
-                                                                    setFormData(prev => ({
-                                                                        ...prev,
-                                                                        removedEvents: (prev.removedEvents || []).filter(k => !k.startsWith(prefix)),
-                                                                        amountOverrides: Object.fromEntries(Object.entries(prev.amountOverrides || {}).filter(([k]) => !k.startsWith(prefix))),
-                                                                    }))
-                                                                }}
-                                                            />
-                                                        )
-                                                    })()}
-                                                </SourceRow>
-                                            )
-                                        })}
-
-                                        {/* Add income picker (triggered by FAB) */}
-                                        {(() => {
-                                            const pickerOptions = FIXED_INCOME_SOURCES.filter(s => !isSourceVisible(s.id, formData.incomeSources))
-                                            return (
-                                                <div style={{ position: 'relative' }}>
-                                                    {addingSourceType === 'income' && (<>
-                                                        <div onClick={closeAddPicker} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
-                                                        <div style={{
-                                                            marginTop: 6, borderRadius: 10, border: '1px solid #f0f0f0',
-                                                            background: '#fff', overflow: 'hidden',
-                                                            boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-                                                            position: 'relative', zIndex: 51,
-                                                            animation: pickerClosing ? 'pickerSlideUp 0.2s ease forwards' : 'pickerSlideDown 0.25s ease',
-                                                        }}>
-                                                            {pickerOptions.map(source => (
-                                                                <button
-                                                                    key={source.id}
-                                                                    onClick={() => addSource(source.id, false)}
-                                                                    style={{
-                                                                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                                                                        padding: '11px 14px', border: 'none', borderBottom: '1px solid #f5f5f5',
-                                                                        background: 'none', cursor: 'pointer', textAlign: 'left',
+                                                            const hasMulti = entries.filter(e => parseMoney(e.amount) > 0).length > 1
+                                                            const entryTotals = hasMulti ? entries.map(e => dashCalcEntryTotal(e, cat)) : null
+                                                            const entryRemovedCounts = hasMulti ? entries.map((e, i) => {
+                                                                const et = `${cat.id}:${e.id || i}`
+                                                                return allEvents.filter(ev => ev.editType === et && ev.removed && !ev.noDot).length
+                                                            }) : null
+                                                            const entryOverrideCounts = hasMulti ? entries.map((e, i) => {
+                                                                const et = `${cat.id}:${e.id || i}`
+                                                                const overrides = formData.amountOverrides || {}
+                                                                return Object.keys(overrides).filter(k => {
+                                                                    if (!k.startsWith(et + ':')) return false
+                                                                    const date = k.slice(et.length + 1)
+                                                                    return events.some(ev => ev.editType === et && ev.date === date && !ev.removed)
+                                                                }).length
+                                                            }) : null
+                                                            return (
+                                                                <CategoryStep
+                                                                    categoryId={cat.id} compact
+                                                                    entries={entries}
+                                                                    entryTotals={entryTotals}
+                                                                    entryRemovedCounts={entryRemovedCounts}
+                                                                    entryOverrideCounts={entryOverrideCounts}
+                                                                    updateEntries={(val) => setFormData(prev => ({ ...prev, [cat.formKey]: typeof val === 'function' ? val(prev[cat.formKey] || []) : val }))}
+                                                                    onVisibleEntryChange={entries.length > 1 ? setVisibleEntryIndex : null}
+                                                                    onDeleteEntry={({ label, entryId }) => {
+                                                                        const prevFormData = { ...formData }
+                                                                        if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+                                                                        setSkipToast({ label, undoFn: () => setFormData(prevFormData), sourceId: source.id, entryId })
+                                                                        skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
                                                                     }}
-                                                                >
-                                                                    {(() => {
-                                                                        const si = SOURCE_ICONS[source.id]
-                                                                        if (si) { const { Icon: SI, color } = si; return <SI size={20} color={color} /> }
-                                                                        return <img src={source.icon} alt="" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.7 }} />
-                                                                    })()}
-                                                                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                                                                        {source.label}
-                                                                    </span>
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </>)}
-                                                </div>
-                                            )
-                                        })()}
-                                    </div>
-                                </div>)}
+                                                                    onClearEntryEvents={(entryId) => {
+                                                                        const prefix = `${cat.id}:${entryId}:`
+                                                                        setFormData(prev => ({
+                                                                            ...prev,
+                                                                            removedEvents: (prev.removedEvents || []).filter(k => !k.startsWith(prefix)),
+                                                                            amountOverrides: Object.fromEntries(Object.entries(prev.amountOverrides || {}).filter(([k]) => !k.startsWith(prefix))),
+                                                                        }))
+                                                                    }}
+                                                                />
+                                                            )
+                                                        })()}
+                                                    </SourceRow>
+                                                )
+                                            })}
+
+                                            {/* Add income picker (triggered by FAB) */}
+                                            {(() => {
+                                                const pickerOptions = FIXED_INCOME_SOURCES.filter(s => !isSourceVisible(s.id, formData.incomeSources))
+                                                return (
+                                                    <div style={{ position: 'relative' }}>
+                                                        {addingSourceType === 'income' && (<>
+                                                            <div onClick={closeAddPicker} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+                                                            <div style={{
+                                                                marginTop: 6, borderRadius: 10, border: '1px solid #f0f0f0',
+                                                                background: '#fff', overflow: 'hidden',
+                                                                boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                                                                position: 'relative', zIndex: 51,
+                                                                animation: pickerClosing ? 'pickerSlideUp 0.2s ease forwards' : 'pickerSlideDown 0.25s ease',
+                                                            }}>
+                                                                {pickerOptions.map(source => (
+                                                                    <button
+                                                                        key={source.id}
+                                                                        onClick={() => addSource(source.id, false)}
+                                                                        style={{
+                                                                            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                                                                            padding: '11px 14px', border: 'none', borderBottom: '1px solid #f5f5f5',
+                                                                            background: 'none', cursor: 'pointer', textAlign: 'left',
+                                                                        }}
+                                                                    >
+                                                                        {(() => {
+                                                                            const si = SOURCE_ICONS[source.id]
+                                                                            if (si) { const { Icon: SI, color } = si; return <SI size={20} color={color} /> }
+                                                                            return <img src={source.icon} alt="" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.7 }} />
+                                                                        })()}
+                                                                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                                            {source.label}
+                                                                        </span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </>)}
+                                                    </div>
+                                                )
+                                            })()}
+                                        </div>
+                                    </div>)}
 
                             </>)}
                             {/* === END INCOME TAB CONTENT === */}
 
                             {/* === EXPENSES TAB CONTENT === */}
                             {activeTab === 'expenses' && (<>
-                            {/* Expense Overview summary card */}
-                            {(() => {
-                                const inc = Math.round(yearlyIncome * freqMultiplier[freqView]) || 0
-                                const exp = Math.round((yearlyExpense + weeklySpendTotal) * freqMultiplier[freqView]) || 0
-                                const total = inc + exp
-                                const incPct = total > 0 ? (inc / total) * 100 : 50
-                                return (
-                                    <div style={{ padding: '16px 16px', background: '#fff', borderRadius: 14, marginBottom: 10 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                                            <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: 0 }}>
-                                                Expense Overview
-                                            </p>
-                                            <span style={{
-                                                fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
-                                                color: '#e06470',
-                                            }}>
-                                                {getCurrencySymbol()}{exp.toLocaleString()}{freqSuffix[freqView]}
-                                            </span>
+                                {/* Expense Overview summary card */}
+                                {(() => {
+                                    const inc = Math.round(yearlyIncome * freqMultiplier[freqView]) || 0
+                                    const exp = Math.round((yearlyExpense + weeklySpendTotal) * freqMultiplier[freqView]) || 0
+                                    const total = inc + exp
+                                    const incPct = total > 0 ? (inc / total) * 100 : 50
+                                    return (
+                                        <div style={{ padding: '16px 16px', background: '#fff', borderRadius: 14, marginBottom: 10 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                                                <p style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', margin: 0 }}>
+                                                    Expense Overview
+                                                </p>
+                                                <span style={{
+                                                    fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+                                                    color: '#e06470',
+                                                }}>
+                                                    {getCurrencySymbol()}{exp.toLocaleString()}{freqSuffix[freqView]}
+                                                </span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                                                <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>Income</span>
+                                                <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Expenses</span>
+                                            </div>
+                                            <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: '#f0f0f0' }}>
+                                                <div style={{ width: `${incPct}%`, background: '#147b75', borderRadius: '4px 0 0 4px', transition: 'width 0.4s ease' }} />
+                                                <div style={{ flex: 1, background: '#e06470', borderRadius: '0 4px 4px 0' }} />
+                                            </div>
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                                            <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>Income</span>
-                                            <span style={{ fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>Expenses</span>
-                                        </div>
-                                        <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', background: '#f0f0f0' }}>
-                                            <div style={{ width: `${incPct}%`, background: '#147b75', borderRadius: '4px 0 0 4px', transition: 'width 0.4s ease' }} />
-                                            <div style={{ flex: 1, background: '#e06470', borderRadius: '0 4px 4px 0' }} />
-                                        </div>
-                                    </div>
-                                )
-                            })()}
+                                    )
+                                })()}
 
-                            {/* Weekly Spend Card */}
-                            <div style={{
-                                padding: '14px 16px 8px', background: '#fff', borderRadius: 14, marginBottom: 10,
-                            }}>
-                                <div style={{ padding: '0 0 12px' }}>
-                                    <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
-                                        Weekly Spend
-                                    </span>
-                                </div>
-                                <WeeklySpendStep compact
-                                    weeklySpend={formData.weeklySpend}
-                                    updateWeeklySpend={(val) => updateField('weeklySpend', val)}
-                                    weeklySpendNonTerm={formData.weeklySpendNonTerm}
-                                    updateWeeklySpendNonTerm={(val) => updateField('weeklySpendNonTerm', val)}
-                                    weeklySpendVariesByTerm={formData.weeklySpendVariesByTerm}
-                                    updateWeeklySpendVariesByTerm={(val) => updateField('weeklySpendVariesByTerm', val)}
-                                />
-                            </div>
-
-                            {/* Empty state when no expense sources */}
-                            {expenseEmpty && (
-                                <div style={{ textAlign: 'center', padding: '16px 40px' }}>
-                                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
-                                        No expense sources yet
-                                    </p>
-                                    <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>
-                                        Tap + to add
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Expenses Section */}
-                            {(EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).length > 0 || addingSourceType === 'expense' || collapsingSections.has('expenses')) && (
-                                <div data-section="expenses" style={{
-                                    margin: collapsingSections.has('expenses') ? '0' : '0 0 10px',
-                                    overflow: collapsingSections.has('expenses') ? 'hidden' : 'visible',
-                                    maxHeight: collapsingSections.has('expenses') ? 0 : undefined,
-                                    opacity: collapsingSections.has('expenses') ? 0 : 1,
-                                    transition: collapsingSections.has('expenses')
-                                        ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease, margin 0.4s ease'
-                                        : undefined,
+                                {/* Weekly Spend Card */}
+                                <div style={{
+                                    padding: '14px 16px 8px', background: '#fff', borderRadius: 14, marginBottom: 10,
                                 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
-                                        <span style={{
-                                            fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a',
-                                        }}>Expenses</span>
-                                        {EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).length > 4 && (
-                                            <span
-                                                onClick={() => setShowAllExpenses(p => !p)}
-                                                style={{
-                                                    fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470',
-                                                    cursor: 'pointer',
-                                                }}
-                                            >{showAllExpenses ? 'Show less' : 'See all'}</span>
-                                        )}
+                                    <div style={{ padding: '0 0 12px' }}>
+                                        <span style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                                            Weekly Spend
+                                        </span>
                                     </div>
+                                    <WeeklySpendStep compact
+                                        weeklySpend={formData.weeklySpend}
+                                        updateWeeklySpend={(val) => updateField('weeklySpend', val)}
+                                        weeklySpendNonTerm={formData.weeklySpendNonTerm}
+                                        updateWeeklySpendNonTerm={(val) => updateField('weeklySpendNonTerm', val)}
+                                        weeklySpendVariesByTerm={formData.weeklySpendVariesByTerm}
+                                        updateWeeklySpendVariesByTerm={(val) => updateField('weeklySpendVariesByTerm', val)}
+                                    />
+                                </div>
 
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                                        {EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).slice(0, showAllExpenses ? undefined : 4).map(source => {
-                                            const active = !hiddenSources.has(source.id)
-                                            const editTypes = expenseEditTypeMap[source.id] || []
-                                            const yearly = getSourceYearly(editTypes)
-                                            const visibleAmt = events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot && e.date >= exactGraphStart).reduce((s, e) => s + e.amount, 0)
-                                            const removedCount = getSourceRemovedCount(editTypes)
+                                {/* Empty state when no expense sources */}
+                                {expenseEmpty && (
+                                    <div style={{ textAlign: 'center', padding: '16px 40px' }}>
+                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                                            No expense sources yet
+                                        </p>
+                                        <p style={{ margin: '4px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb' }}>
+                                            Tap + to add
+                                        </p>
+                                    </div>
+                                )}
 
-                                            return (
-                                                <SourceRow
-                                                    key={source.id}
-                                                    source={{ ...source, _visibleAmount: visibleAmt }}
-                                                    active={active}
-                                                    yearlyAmount={yearly}
-                                                    removedCount={removedCount}
-                                                    onRestoreRemoved={() => restoreSourceEvents(editTypes)}
-                                                    overrideCount={getSourceOverrideCount(editTypes)}
-                                                    onClearOverrides={() => clearSourceOverrides(editTypes)}
-                                                    isExpense
-                                                    expanded={expandedSources.has(source.id)}
-                                                    onToggle={() => toggleSourceVisibility(source.id)}
-                                                    onExpandToggle={() => handleExpandToggle(source.id)}
-                                                    onDelete={() => deleteSource(source.id, true)}
-                                                    scrollContainerRef={scrollRef}
-                                                    isTabSwitchingRef={isTabSwitchingRef}
-                                                    entryCount={(() => { const cat = CATEGORY_MAP[source.id]; return cat ? (formData[cat.formKey] || []).length : 1 })()}
-                                                    formData={formData}
-                                                    updateField={updateField}
-                                                >
-                                                    {(() => {
-                                                        const cat = CATEGORY_MAP[source.id]
-                                                        if (!cat) return null
-                                                        let entries = formData[cat.formKey] || []
-                                                        if (entries.length === 0) {
-                                                            const defaultEntry = {
-                                                                id: `${cat.id}_0`,
-                                                                amount: '',
-                                                                frequency: cat.defaultFrequency,
-                                                                nextDate: '',
-                                                                months: [...(cat.defaultMonths || [])],
-                                                                dates: { ...(cat.defaultDates || {}) },
-                                                                instalmentAmounts: {},
+                                {/* Expenses Section */}
+                                {(EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).length > 0 || addingSourceType === 'expense' || collapsingSections.has('expenses')) && (
+                                    <div data-section="expenses" style={{
+                                        margin: collapsingSections.has('expenses') ? '0' : '0 0 10px',
+                                        overflow: collapsingSections.has('expenses') ? 'hidden' : 'visible',
+                                        maxHeight: collapsingSections.has('expenses') ? 0 : undefined,
+                                        opacity: collapsingSections.has('expenses') ? 0 : 1,
+                                        transition: collapsingSections.has('expenses')
+                                            ? 'max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease, margin 0.4s ease'
+                                            : undefined,
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px 10px' }}>
+                                            <span style={{
+                                                fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a',
+                                            }}>Expenses</span>
+                                            {EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).length > 4 && (
+                                                <span
+                                                    onClick={() => setShowAllExpenses(p => !p)}
+                                                    style={{
+                                                        fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470',
+                                                        cursor: 'pointer',
+                                                    }}
+                                                >{showAllExpenses ? 'Show less' : 'See all'}</span>
+                                            )}
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                                            {EXPENSE_SOURCES.filter(source => isSourceVisible(source.id, formData.expenseSources)).slice(0, showAllExpenses ? undefined : 4).map(source => {
+                                                const active = !hiddenSources.has(source.id)
+                                                const editTypes = expenseEditTypeMap[source.id] || []
+                                                const yearly = getSourceYearly(editTypes)
+                                                const visibleAmt = events.filter(e => editTypes.includes(e.editType) && !e.removed && !e.noDot && e.date >= exactGraphStart).reduce((s, e) => s + e.amount, 0)
+                                                const removedCount = getSourceRemovedCount(editTypes)
+
+                                                return (
+                                                    <SourceRow
+                                                        key={source.id}
+                                                        source={{ ...source, _visibleAmount: visibleAmt }}
+                                                        active={active}
+                                                        yearlyAmount={yearly}
+                                                        removedCount={removedCount}
+                                                        onRestoreRemoved={() => restoreSourceEvents(editTypes)}
+                                                        overrideCount={getSourceOverrideCount(editTypes)}
+                                                        onClearOverrides={() => clearSourceOverrides(editTypes)}
+                                                        isExpense
+                                                        expanded={expandedSources.has(source.id)}
+                                                        onToggle={() => toggleSourceVisibility(source.id)}
+                                                        onExpandToggle={() => handleExpandToggle(source.id)}
+                                                        onDelete={() => deleteSource(source.id, true)}
+                                                        scrollContainerRef={scrollRef}
+                                                        isTabSwitchingRef={isTabSwitchingRef}
+                                                        entryCount={(() => { const cat = CATEGORY_MAP[source.id]; return cat ? (formData[cat.formKey] || []).length : 1 })()}
+                                                        formData={formData}
+                                                        updateField={updateField}
+                                                    >
+                                                        {(() => {
+                                                            const cat = CATEGORY_MAP[source.id]
+                                                            if (!cat) return null
+                                                            let entries = formData[cat.formKey] || []
+                                                            if (entries.length === 0) {
+                                                                const defaultEntry = {
+                                                                    id: `${cat.id}_0`,
+                                                                    amount: '',
+                                                                    frequency: cat.defaultFrequency,
+                                                                    nextDate: '',
+                                                                    months: [...(cat.defaultMonths || [])],
+                                                                    dates: { ...(cat.defaultDates || {}) },
+                                                                    instalmentAmounts: {},
+                                                                }
+                                                                entries = [defaultEntry]
+                                                                setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
                                                             }
-                                                            entries = [defaultEntry]
-                                                            setTimeout(() => setFormData(prev => prev[cat.formKey]?.length ? prev : { ...prev, [cat.formKey]: [defaultEntry] }), 0)
-                                                        }
-                                                        const hasMulti = entries.filter(e => parseMoney(e.amount) > 0).length > 1
-                                                        const entryTotals = hasMulti ? entries.map(e => dashCalcEntryTotal(e, cat)) : null
-                                                        const entryRemovedCounts = hasMulti ? entries.map((e, i) => {
-                                                            const et = `${cat.id}:${e.id || i}`
-                                                            return allEvents.filter(ev => ev.editType === et && ev.removed && !ev.noDot).length
-                                                        }) : null
-                                                        const entryOverrideCounts = hasMulti ? entries.map((e, i) => {
-                                                            const et = `${cat.id}:${e.id || i}`
-                                                            const overrides = formData.amountOverrides || {}
-                                                            return Object.keys(overrides).filter(k => {
-                                                                if (!k.startsWith(et + ':')) return false
-                                                                const date = k.slice(et.length + 1)
-                                                                return events.some(ev => ev.editType === et && ev.date === date && !ev.removed)
-                                                            }).length
-                                                        }) : null
-                                                        return (
-                                                            <CategoryStep
-                                                                categoryId={cat.id} compact
-                                                                entries={entries}
-                                                                entryTotals={entryTotals}
-                                                                entryRemovedCounts={entryRemovedCounts}
-                                                                entryOverrideCounts={entryOverrideCounts}
-                                                                updateEntries={(val) => setFormData(prev => ({ ...prev, [cat.formKey]: typeof val === 'function' ? val(prev[cat.formKey] || []) : val }))}
-                                                                onVisibleEntryChange={entries.length > 1 ? setVisibleEntryIndex : null}
-                                                                onDeleteEntry={({ label, entryId }) => {
-                                                                    const prevFormData = { ...formData }
-                                                                    if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
-                                                                    setSkipToast({ label, undoFn: () => setFormData(prevFormData), sourceId: source.id, entryId })
-                                                                    skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
-                                                                }}
-                                                                onClearEntryEvents={(entryId) => {
-                                                                    const prefix = `${cat.id}:${entryId}:`
-                                                                    setFormData(prev => ({
-                                                                        ...prev,
-                                                                        removedEvents: (prev.removedEvents || []).filter(k => !k.startsWith(prefix)),
-                                                                        amountOverrides: Object.fromEntries(Object.entries(prev.amountOverrides || {}).filter(([k]) => !k.startsWith(prefix))),
-                                                                    }))
-                                                                }}
-                                                            />
-                                                        )
-                                                    })()}
-                                                </SourceRow>
-                                            )
-                                        })}
-
-                                        {/* Add expense picker (triggered by FAB) */}
-                                        {(() => {
-                                            const pickerOptions = FIXED_EXPENSE_SOURCES.filter(s => !isSourceVisible(s.id, formData.expenseSources))
-                                            return (
-                                                <div style={{ position: 'relative' }}>
-                                                    {addingSourceType === 'expense' && (<>
-                                                        <div onClick={closeAddPicker} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
-                                                        <div style={{
-                                                            marginTop: 6, borderRadius: 10, border: '1px solid #f0f0f0',
-                                                            background: '#fff', overflow: 'hidden',
-                                                            boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
-                                                            position: 'relative', zIndex: 51,
-                                                            animation: pickerClosing ? 'pickerSlideUp 0.2s ease forwards' : 'pickerSlideDown 0.25s ease',
-                                                        }}>
-                                                            {pickerOptions.map(source => (
-                                                                <button
-                                                                    key={source.id}
-                                                                    onClick={() => addSource(source.id, true)}
-                                                                    style={{
-                                                                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                                                                        padding: '11px 14px', border: 'none', borderBottom: '1px solid #f5f5f5',
-                                                                        background: 'none', cursor: 'pointer', textAlign: 'left',
+                                                            const hasMulti = entries.filter(e => parseMoney(e.amount) > 0).length > 1
+                                                            const entryTotals = hasMulti ? entries.map(e => dashCalcEntryTotal(e, cat)) : null
+                                                            const entryRemovedCounts = hasMulti ? entries.map((e, i) => {
+                                                                const et = `${cat.id}:${e.id || i}`
+                                                                return allEvents.filter(ev => ev.editType === et && ev.removed && !ev.noDot).length
+                                                            }) : null
+                                                            const entryOverrideCounts = hasMulti ? entries.map((e, i) => {
+                                                                const et = `${cat.id}:${e.id || i}`
+                                                                const overrides = formData.amountOverrides || {}
+                                                                return Object.keys(overrides).filter(k => {
+                                                                    if (!k.startsWith(et + ':')) return false
+                                                                    const date = k.slice(et.length + 1)
+                                                                    return events.some(ev => ev.editType === et && ev.date === date && !ev.removed)
+                                                                }).length
+                                                            }) : null
+                                                            return (
+                                                                <CategoryStep
+                                                                    categoryId={cat.id} compact
+                                                                    entries={entries}
+                                                                    entryTotals={entryTotals}
+                                                                    entryRemovedCounts={entryRemovedCounts}
+                                                                    entryOverrideCounts={entryOverrideCounts}
+                                                                    updateEntries={(val) => setFormData(prev => ({ ...prev, [cat.formKey]: typeof val === 'function' ? val(prev[cat.formKey] || []) : val }))}
+                                                                    onVisibleEntryChange={entries.length > 1 ? setVisibleEntryIndex : null}
+                                                                    onDeleteEntry={({ label, entryId }) => {
+                                                                        const prevFormData = { ...formData }
+                                                                        if (skipToastTimerRef.current) clearTimeout(skipToastTimerRef.current)
+                                                                        setSkipToast({ label, undoFn: () => setFormData(prevFormData), sourceId: source.id, entryId })
+                                                                        skipToastTimerRef.current = setTimeout(() => setSkipToast(null), 5000)
                                                                     }}
-                                                                >
-                                                                    {(() => {
-                                                                        const si = SOURCE_ICONS[source.id]
-                                                                        if (si) { const { Icon: SI, color } = si; return <SI size={20} color={color} /> }
-                                                                        return <img src={source.icon} alt="" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.7 }} />
-                                                                    })()}
-                                                                    <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                                                                        {source.label}
-                                                                    </span>
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    </>)}
-                                                </div>
-                                            )
-                                        })()}
-                                    </div>
-                                </div>)}
+                                                                    onClearEntryEvents={(entryId) => {
+                                                                        const prefix = `${cat.id}:${entryId}:`
+                                                                        setFormData(prev => ({
+                                                                            ...prev,
+                                                                            removedEvents: (prev.removedEvents || []).filter(k => !k.startsWith(prefix)),
+                                                                            amountOverrides: Object.fromEntries(Object.entries(prev.amountOverrides || {}).filter(([k]) => !k.startsWith(prefix))),
+                                                                        }))
+                                                                    }}
+                                                                />
+                                                            )
+                                                        })()}
+                                                    </SourceRow>
+                                                )
+                                            })}
+
+                                            {/* Add expense picker (triggered by FAB) */}
+                                            {(() => {
+                                                const pickerOptions = FIXED_EXPENSE_SOURCES.filter(s => !isSourceVisible(s.id, formData.expenseSources))
+                                                return (
+                                                    <div style={{ position: 'relative' }}>
+                                                        {addingSourceType === 'expense' && (<>
+                                                            <div onClick={closeAddPicker} style={{ position: 'fixed', inset: 0, zIndex: 50 }} />
+                                                            <div style={{
+                                                                marginTop: 6, borderRadius: 10, border: '1px solid #f0f0f0',
+                                                                background: '#fff', overflow: 'hidden',
+                                                                boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                                                                position: 'relative', zIndex: 51,
+                                                                animation: pickerClosing ? 'pickerSlideUp 0.2s ease forwards' : 'pickerSlideDown 0.25s ease',
+                                                            }}>
+                                                                {pickerOptions.map(source => (
+                                                                    <button
+                                                                        key={source.id}
+                                                                        onClick={() => addSource(source.id, true)}
+                                                                        style={{
+                                                                            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                                                                            padding: '11px 14px', border: 'none', borderBottom: '1px solid #f5f5f5',
+                                                                            background: 'none', cursor: 'pointer', textAlign: 'left',
+                                                                        }}
+                                                                    >
+                                                                        {(() => {
+                                                                            const si = SOURCE_ICONS[source.id]
+                                                                            if (si) { const { Icon: SI, color } = si; return <SI size={20} color={color} /> }
+                                                                            return <img src={source.icon} alt="" style={{ width: 24, height: 24, objectFit: 'contain', opacity: 0.7 }} />
+                                                                        })()}
+                                                                        <span style={{ fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                                            {source.label}
+                                                                        </span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </>)}
+                                                    </div>
+                                                )
+                                            })()}
+                                        </div>
+                                    </div>)}
 
                             </>)}
                             {/* === END EXPENSES TAB === */}
 
-                            </div>
+                        </div>
                         )}
 
                         {activeTab === 'goals' && !dbLoaded && (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '40px 0' }}>
-                                <div style={{
-                                    width: 28, height: 28, borderRadius: '50%',
-                                    border: '3px solid #f0f0f0', borderTopColor: '#147b75',
-                                    animation: 'spin 0.7s cubic-bezier(0.4, 0, 0.2, 1) infinite',
-                                }} />
-                                <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+                            <div style={{ padding: '0' }}>
+                                <style>{`@keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }`}</style>
+                                {/* Am I On Track skeleton */}
+                                <div style={{ background: '#fff', borderRadius: 14, padding: '16px 16px', marginBottom: 10 }}>
+                                    <div style={{ width: 140, height: 16, borderRadius: 8, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite', marginBottom: 12 }} />
+                                    <div style={{ width: '60%', height: 12, borderRadius: 6, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite', marginBottom: 16 }} />
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                                        <div style={{ width: 120, height: 36, borderRadius: 8, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                        <div style={{ width: 90, height: 32, borderRadius: 24, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                    </div>
+                                    <div style={{ width: '100%', height: 12, borderRadius: 6, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite', marginBottom: 12 }} />
+                                    <div style={{ width: '100%', height: 20, borderRadius: 10, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                </div>
                             </div>
                         )}
                         {activeTab === 'goals' && dbLoaded && (() => {
@@ -3817,7 +4159,7 @@ export default function Dashboard() {
                             )
 
                             return (
-                                <div style={{ padding: '0 0 10px' }} >
+                                <div style={{ padding: '0 0 60px' }} >
 
                                     {/* Will I run out? */}
                                     {(() => {
@@ -3841,9 +4183,8 @@ export default function Dashboard() {
                                         return (
                                             <div style={{
                                                 background: 'linear-gradient(135deg, #c9404f, #a8293a)',
-                                                borderRadius: 14, padding: warningMinimised ? '12px 18px' : '20px 18px', marginBottom: 10,
+                                                borderRadius: 14, padding: '14px 18px', marginBottom: 10,
                                                 color: '#fff', position: 'relative', overflow: 'hidden',
-                                                transition: 'padding 0.25s ease',
                                             }}>
                                                 {/* Decorative circle */}
                                                 <div style={{
@@ -3860,7 +4201,7 @@ export default function Dashboard() {
                                                 {/* Header with minimise toggle */}
                                                 <div
                                                     onClick={() => setWarningMinimised(m => !m)}
-                                                    style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: warningMinimised ? 0 : 12, transition: 'margin 0.25s ease' }}
+                                                    style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 0 }}
                                                 >
                                                     <AlertTriangle size={20} color="#fff" strokeWidth={2.5} />
                                                     <p style={{ margin: 0, fontSize: 15, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
@@ -3890,7 +4231,7 @@ export default function Dashboard() {
                                                     overflow: 'hidden',
                                                     transition: 'max-height 0.3s ease, opacity 0.2s ease',
                                                 }}>
-                                                    <p style={{ margin: '0 0 12px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92, lineHeight: 1.5 }}>
+                                                    <p style={{ margin: '10px 0 12px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.92, lineHeight: 1.5 }}>
                                                         {alreadyOut
                                                             ? <>Your balance is already within {sym}100 of {od > 0 ? `your ${sym}${od.toLocaleString()} overdraft limit` : `${sym}0`}.</>
                                                             : <>Your forecast is on track to get within {sym}100 of {od > 0 ? `your ${sym}${od.toLocaleString()} overdraft limit` : `${sym}0`}
@@ -3927,8 +4268,23 @@ export default function Dashboard() {
                                         )
                                     })()}
 
+                                    {/* Am I on track? — skeleton while API loads */}
+                                    {!apiLoaded && (
+                                        <div style={{ background: '#fff', borderRadius: 14, padding: '16px 16px', marginBottom: 10 }}>
+                                            <style>{`@keyframes shimmer { 0% { background-position: -200% 0 } 100% { background-position: 200% 0 } }`}</style>
+                                            <div style={{ width: 140, height: 16, borderRadius: 8, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite', marginBottom: 12 }} />
+                                            <div style={{ width: '55%', height: 11, borderRadius: 6, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite', marginBottom: 16 }} />
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                                                <div style={{ width: 120, height: 36, borderRadius: 8, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                                <div style={{ width: 100, height: 36, borderRadius: 24, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                            </div>
+                                            <div style={{ width: '100%', height: 10, borderRadius: 5, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite', marginBottom: 10 }} />
+                                            <div style={{ width: '100%', height: 20, borderRadius: 10, background: 'linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite' }} />
+                                        </div>
+                                    )}
+
                                     {/* Am I on track? */}
-                                    {balanceHistory.length > 0 && (() => {
+                                    {balanceHistory.length > 0 && projectionBalance !== 0 && (() => {
                                         const latestActual = balanceHistory[0]
                                         const actualBal = Number(latestActual.balance)
                                         const forecastBal = projectionBalance
@@ -3936,93 +4292,85 @@ export default function Dashboard() {
                                         const absDiff = Math.abs(diff)
                                         const isAhead = diff > 0
                                         const isClose = absDiff < 50
-                                        const weeksLeft2 = Math.max(1, Math.ceil(termDaysLeft / 7))
-                                        const weeklyAdj = Math.round(absDiff / Math.min(weeksLeft2, 4))
                                         const pct = forecastBal !== 0 ? Math.round((diff / Math.abs(forecastBal)) * 100) : 0
                                         const clampedPct = Math.max(-100, Math.min(100, pct))
-                                        const sliderPos = Math.max(3, Math.min(97, 50 + clampedPct / 2))
                                         const isDanger = clampedPct < -30
                                         const isWarning2 = clampedPct < -10 && clampedPct >= -30
                                         const statusText = isDanger ? 'NEEDS ATTENTION' : isWarning2 ? 'WATCH SPENDING' : 'HEALTHY'
                                         const healthColor = isDanger ? '#e06470' : isWarning2 ? '#EC8C17' : '#147b75'
-                                        const healthBg = isDanger ? '#fdf0f1' : isWarning2 ? 'rgba(236,140,23,0.1)' : '#f0faf9'
-
-                                        // Gauge: pointer shows position on arc
-                                        // Left = behind (-), center = on track (0), right = ahead (+)
-                                        const gW = 250
-                                        const strokeW = 14
-                                        const r = (gW - strokeW) / 2
-                                        const cx = gW / 2
-                                        const cy = r + strokeW / 2
-                                        // Map clampedPct (-100..+100) to arc position (0..1), center = 0.5
-                                        const arcPos = Math.max(0.02, Math.min(0.98, (clampedPct + 100) / 200))
-                                        // Pointer on the arc edge
-                                        const pointerAngle = Math.PI * (1 - arcPos)
-                                        const dotX = cx + r * Math.cos(pointerAngle)
-                                        const dotY = cy - r * Math.sin(pointerAngle)
+                                        // Slider position: 0% = -100%, 50% = on track, 100% = +100%
+                                        const sliderPos = Math.max(3, Math.min(97, 50 + clampedPct / 2))
+                                        // Display percentage (how far off from forecast)
+                                        const displayPct = Math.abs(clampedPct)
 
                                         return (
                                             <div style={cardStyle}>
-                                                <p style={cardTitle}>Am I On Track?</p>
-                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                                    <div style={{ position: 'relative', width: gW, height: cy + 24 }}>
-                                                        <svg width={gW} height={cy + 24} viewBox={`0 0 ${gW} ${cy + 24}`} style={{ overflow: 'visible' }}>
-                                                            <defs>
-                                                                <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                                                    <stop offset="0%" stopColor="#e06470" />
-                                                                    <stop offset="20%" stopColor="#EC8C17" />
-                                                                    <stop offset="40%" stopColor="#d4b44a" />
-                                                                    <stop offset="50%" stopColor="#147b75" />
-                                                                    <stop offset="100%" stopColor="#147b75" />
-                                                                </linearGradient>
-                                                            </defs>
-                                                            {/* Full gradient arc */}
-                                                            <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
-                                                                fill="none" stroke="url(#gaugeGrad)" strokeWidth={strokeW} strokeLinecap="round" />
-                                                            {/* White dot on the arc — rotated around center to follow arc */}
-                                                            <g style={{
-                                                                transformOrigin: `${cx}px ${cy}px`,
-                                                                transform: `rotate(${-(pointerAngle * 180 / Math.PI)}deg)`,
-                                                                transition: 'transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
-                                                            }}>
-                                                                <circle cx={cx + r} cy={cy} r={strokeW / 2 + 2}
-                                                                    fill="#fff" stroke={healthColor} strokeWidth={2.5}
-                                                                    style={{ transition: 'stroke 0.3s ease' }} />
-                                                            </g>
-                                                        </svg>
-                                                        {/* Content inside the arc */}
-                                                        <div style={{
-                                                            position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)',
-                                                            textAlign: 'center', width: gW * 0.5,
-                                                        }}>
-                                                             <p style={{ margin: 0, fontSize: (isClose || isAhead) ? 27 : 22, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: healthColor, lineHeight: 1.1 }}>
-                                                                {isClose ? 'On Track!' : isAhead ? 'Ahead!' : isDanger ? 'Needs Attention' : 'Watch Spending'}
-                                                            </p>
-                                                            <p style={{ margin: '10px 0 0 -8px', fontSize: 17, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
-                                                                {isAhead || absDiff === 0 ? '+' : '\u2212'}{sym}{absDiff.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                                                            </p>
-                                                            <p style={{ margin: '3px 0 0', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999', whiteSpace: 'nowrap' }}>
-                                                                compared to forecast
-                                                            </p>
-                                                        </div>
+                                                <p style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a' }}>
+                                                    Am I On Track?
+                                                </p>
+                                                <p style={{ margin: '0 0 16px', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#888', lineHeight: 1.4 }}>
+                                                    Balance: <strong style={{ color: '#1a1a1a' }}>{sym}{actualBal.toLocaleString()}</strong> · Forecast: <strong style={{ color: '#1a1a1a' }}>{sym}{Math.round(forecastBal).toLocaleString()}</strong>
+                                                </p>
+
+                                                {/* Big money difference + status badge */}
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                                                    <p style={{ margin: 0, fontSize: 40, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
+                                                        {isAhead ? '+' : isClose ? '' : '\u2212'}{sym}{absDiff.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                                    </p>
+                                                    <div style={{
+                                                        background: healthColor,
+                                                        color: '#fff',
+                                                        fontSize: 12, fontWeight: 800,
+                                                        fontFamily: 'Nunito, sans-serif',
+                                                        padding: '10px 18px',
+                                                        borderRadius: 24,
+                                                        letterSpacing: 0.5,
+                                                    }}>
+                                                        {statusText}
                                                     </div>
                                                 </div>
+
+                                                <p style={{ margin: '0 0 14px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>
+                                                    compared to forecast
+                                                </p>
+
+                                                {/* Gradient bar with dot indicator */}
+                                                <div style={{ position: 'relative', height: 20, marginBottom: 6 }}>
+                                                    <div style={{
+                                                        position: 'absolute', inset: 0,
+                                                        borderRadius: 10,
+                                                        background: 'linear-gradient(to right, #147b75 0%, #147b75 35%, #6db86d 45%, #d4b44a 55%, #EC8C17 70%, #e06470 100%)',
+                                                    }} />
+                                                    {/* White dot indicator */}
+                                                    <div style={{
+                                                        position: 'absolute',
+                                                        left: `${sliderPos}%`,
+                                                        top: '50%',
+                                                        transform: 'translate(-50%, -50%)',
+                                                        width: 16, height: 16,
+                                                        borderRadius: '50%',
+                                                        background: '#fff',
+                                                        border: `2.5px solid ${healthColor}`,
+                                                        boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                                                        transition: 'left 0.6s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s ease',
+                                                    }} />
+                                                </div>
+
+                                                {/* Collapsible explainer */}
                                                 <div style={{
-                                                    marginTop: 10, borderRadius: 14, padding: trackMinimised ? '12px 18px' : '16px 18px',
-                                                    background: 'linear-gradient(135deg, #147b75, #1a9e97)',
-                                                    color: '#fff', position: 'relative', overflow: 'hidden',
+                                                    marginTop: 14, borderRadius: 14, padding: '14px 18px',
+                                                    background: '#f5f5f5',
+                                                    color: '#333', position: 'relative', overflow: 'hidden',
                                                 }}>
-                                                    <div style={{ position: 'absolute', top: -15, right: -15, width: 70, height: 70, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
-                                                    <div style={{ position: 'absolute', bottom: -20, left: -10, width: 50, height: 50, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
                                                     <div
                                                         onClick={() => setTrackMinimised(m => !m)}
-                                                        style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: trackMinimised ? 0 : 10, cursor: 'pointer', position: 'relative', zIndex: 2, transition: 'margin 0.25s ease' }}
+                                                        style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 0, cursor: 'pointer', position: 'relative', zIndex: 2 }}
                                                     >
-                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
-                                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1 }}>
+                                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                                                        <p style={{ margin: 0, fontSize: 14, fontWeight: 800, fontFamily: 'Nunito, sans-serif', flex: 1, color: '#555' }}>
                                                             What does this mean?
                                                         </p>
-                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: trackMinimised ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease' }}><path d="M6 9l6 6 6-6" /></svg>
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, transform: trackMinimised ? 'rotate(-90deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease' }}><path d="M6 9l6 6 6-6" /></svg>
                                                     </div>
                                                     <div style={{
                                                         maxHeight: trackMinimised ? 0 : 500,
@@ -4030,26 +4378,26 @@ export default function Dashboard() {
                                                         overflow: 'hidden',
                                                         transition: 'max-height 0.35s ease, opacity 0.2s ease',
                                                     }}>
-                                                        <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', opacity: 1, lineHeight: 1.5 }}>
+                                                        <p style={{ margin: '10px 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#555', lineHeight: 1.5 }}>
                                                             Your actual balance vs your forecast
                                                         </p>
-                                                        <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
+                                                        <p style={{ margin: '0 0 10px', fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#777', lineHeight: 1.5 }}>
                                                             This is the difference between where you are and where your forecast expected you to be. Some drift is normal — we spread your weekly spend evenly, but real life doesn't work like that!
                                                         </p>
-                                                        <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', opacity: 1, lineHeight: 1.5 }}>
+                                                        <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#555', lineHeight: 1.5 }}>
                                                             Big difference?
                                                         </p>
                                                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                                             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                                                                <span style={{ fontSize: 12, opacity: 0.85 }}>{'\u2022'}</span>
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
-                                                                    <strong style={{ opacity: 1 }}>Adjust your inputs</strong> — your average spending might need tweaking
+                                                                <span style={{ fontSize: 12, color: '#999' }}>{'\u2022'}</span>
+                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#777', lineHeight: 1.5 }}>
+                                                                    <strong style={{ color: '#555' }}>Adjust your inputs</strong> — your average spending might need tweaking
                                                                 </p>
                                                             </div>
                                                             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                                                                <span style={{ fontSize: 12, opacity: 0.85 }}>{'\u2022'}</span>
-                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', opacity: 0.85, lineHeight: 1.5 }}>
-                                                                    <strong style={{ opacity: 1 }}>Or stay the course</strong> — spend less or earn more over the next few weeks to get back on track
+                                                                <span style={{ fontSize: 12, color: '#999' }}>{'\u2022'}</span>
+                                                                <p style={{ margin: 0, fontSize: 12, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#777', lineHeight: 1.5 }}>
+                                                                    <strong style={{ color: '#555' }}>Or stay the course</strong> — spend less or earn more over the next few weeks to get back on track
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -4061,8 +4409,8 @@ export default function Dashboard() {
 
                                     {/* Not Financial Advice disclaimer */}
                                     <div style={{
-                                        background: '#fff', borderRadius: 14, padding: disclaimerOpen ? '16px 18px' : '12px 18px',
-                                        marginBottom: 10, transition: 'padding 0.25s ease',
+                                        background: '#fff', borderRadius: 14, padding: '14px 18px',
+                                        marginBottom: 10,
                                         boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
                                     }}>
                                         <div
@@ -4073,7 +4421,7 @@ export default function Dashboard() {
                                             }}
                                             style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}
                                         >
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EC8C17" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EC8C17" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
                                             <p style={{ margin: 0, fontSize: 14, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', flex: 1 }}>
                                                 Important: Not Financial Advice
                                             </p>
@@ -4131,14 +4479,21 @@ export default function Dashboard() {
 
                                         if (totalInc === 0 && totalExp === 0) return null
 
-                                        // Simple two-segment donut: income vs expense
-                                        const donutSize = 130
-                                        const strokeWidth = 16
+                                        // Donut chart: income vs expense with gap between segments
+                                        const donutSize = 150
+                                        const strokeWidth = 18
                                         const radius = (donutSize - strokeWidth) / 2
                                         const circumference = 2 * Math.PI * radius
-                                        const incLength = total > 0 ? (totalInc / total) * circumference : circumference / 2
-                                        const expLength = circumference - incLength
-                                        const gap = total > 0 ? 4 : 0
+                                        const hasIncome = totalInc > 0
+                                        const hasExpense = totalExp > 0
+                                        const hasBoth = hasIncome && hasExpense
+                                        const gap = hasBoth ? 24 : 0
+                                        const usable = circumference - (hasBoth ? gap * 2 : 0)
+                                        const incLength = hasIncome ? (hasBoth ? (totalInc / total) * usable : circumference) : 0
+                                        const expLength = hasExpense ? (hasBoth ? usable - incLength : circumference) : 0
+
+                                        // Background track
+                                        const trackColor = '#f0f0f0'
 
                                         const renderBreakdown = (entries, totalAmt, colors, type) => {
                                             if (totalAmt === 0) return null
@@ -4216,56 +4571,66 @@ export default function Dashboard() {
 
                                         return (
                                             <div ref={breakdownRef} style={cardStyle}>
-                                                {/* Donut + summary */}
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 14 }}>
-                                                    <div style={{ position: 'relative', width: donutSize, height: donutSize, flexShrink: 0 }}>
+                                                <p style={{ ...cardTitle, margin: '0 0 14px' }}>
+                                                    Income & Expenses
+                                                </p>
+                                                {/* Donut centered */}
+                                                <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
+                                                    <div style={{ position: 'relative', width: donutSize, height: donutSize }}>
                                                         <svg width={donutSize} height={donutSize} viewBox={`0 0 ${donutSize} ${donutSize}`}>
                                                             {/* Income arc */}
-                                                            <circle
+                                                            {hasIncome && <circle
                                                                 cx={donutSize / 2} cy={donutSize / 2} r={radius}
                                                                 fill="none" stroke="#147b75"
                                                                 strokeWidth={strokeWidth}
-                                                                strokeDasharray={`${Math.max(0, incLength - gap)} ${circumference - Math.max(0, incLength - gap)}`}
+                                                                strokeDasharray={`${incLength} ${circumference - incLength}`}
                                                                 strokeDashoffset={0}
                                                                 strokeLinecap="round"
                                                                 transform={`rotate(-90 ${donutSize / 2} ${donutSize / 2})`}
-                                                            />
+                                                            />}
                                                             {/* Expense arc */}
-                                                            <circle
+                                                            {hasExpense && <circle
                                                                 cx={donutSize / 2} cy={donutSize / 2} r={radius}
                                                                 fill="none" stroke="#e06470"
                                                                 strokeWidth={strokeWidth}
-                                                                strokeDasharray={`${Math.max(0, expLength - gap)} ${circumference - Math.max(0, expLength - gap)}`}
-                                                                strokeDashoffset={-incLength}
+                                                                strokeDasharray={`${expLength} ${circumference - expLength}`}
+                                                                strokeDashoffset={-(incLength + gap)}
                                                                 strokeLinecap="round"
                                                                 transform={`rotate(-90 ${donutSize / 2} ${donutSize / 2})`}
-                                                            />
+                                                            />}
                                                         </svg>
                                                         <div style={{
                                                             position: 'absolute', inset: 0,
                                                             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                                                         }}>
-                                                            <span style={{ fontSize: 18, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: net >= 0 ? '#147b75' : '#e06470', lineHeight: 1 }}>
+                                                            <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: net >= 0 ? '#147b75' : '#e06470', lineHeight: 1 }}>
                                                                 {net >= 0 ? '+' : '\u2212'}{sym}{Math.abs(Math.round(net)).toLocaleString()}
                                                             </span>
-                                                            <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb', marginTop: 2 }}>net / year</span>
+                                                            <span style={{ fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#bbb', marginTop: 3 }}>net / year</span>
                                                         </div>
                                                     </div>
+                                                </div>
 
-                                                    <div style={{ flex: 1 }}>
-                                                        <div style={{ marginBottom: 10 }}>
-                                                            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75' }}>INCOME</p>
-                                                            <p style={{ margin: '2px 0 0', fontSize: 20, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
+                                                {/* Income + Expense summary row */}
+                                                <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+                                                    {hasIncome && (
+                                                        <div style={{ flex: 1, background: 'rgba(20,123,117,0.06)', borderRadius: 12, padding: '12px 14px' }}>
+                                                            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#147b75', textTransform: 'uppercase', letterSpacing: 0.3 }}>Income</p>
+                                                            <p style={{ margin: '4px 0 0', fontSize: 20, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
                                                                 {sym}{Math.round(totalInc).toLocaleString()}
                                                             </p>
+                                                            <p style={{ margin: '3px 0 0', fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>per year</p>
                                                         </div>
-                                                        <div>
-                                                            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470' }}>EXPENSES</p>
-                                                            <p style={{ margin: '2px 0 0', fontSize: 20, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
+                                                    )}
+                                                    {hasExpense && (
+                                                        <div style={{ flex: 1, background: 'rgba(224,100,112,0.06)', borderRadius: 12, padding: '12px 14px' }}>
+                                                            <p style={{ margin: 0, fontSize: 11, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#e06470', textTransform: 'uppercase', letterSpacing: 0.3 }}>Expenses</p>
+                                                            <p style={{ margin: '4px 0 0', fontSize: 20, fontWeight: 800, fontFamily: 'Nunito, sans-serif', color: '#1a1a1a', lineHeight: 1 }}>
                                                                 {sym}{Math.round(totalExp).toLocaleString()}
                                                             </p>
+                                                            <p style={{ margin: '3px 0 0', fontSize: 10, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#999' }}>per year</p>
                                                         </div>
-                                                    </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Income breakdown */}
@@ -4454,34 +4819,34 @@ export default function Dashboard() {
                                                     overflowY: trackingShowAll ? 'auto' : undefined,
                                                     WebkitOverflowScrolling: 'touch',
                                                 }}>
-                                                {(trackingShowAll ? trackingData : recent).map((entry, i) => {
-                                                    const dateObj = new Date(entry.date + 'T00:00:00')
-                                                    const dateLabel = `${dateObj.getDate()} ${dateObj.toLocaleDateString('en-GB', { month: 'short' })}`
-                                                    const isAhead = entry.diff >= 0
-                                                    return (
-                                                        <div key={entry.date} style={{
-                                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                                            padding: '7px 0',
-                                                            borderBottom: i < recent.length - 1 ? '1px solid #f5f5f5' : 'none',
-                                                        }}>
-                                                            <div>
-                                                                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
-                                                                    {dateLabel}
-                                                                </p>
-                                                                <p style={{ margin: '1px 0 0', fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#aaa' }}>
-                                                                    Actual: {sym}{entry.actual.toLocaleString()} · Predicted: {sym}{entry.predicted.toLocaleString()}
-                                                                </p>
-                                                            </div>
-                                                            <span style={{
-                                                                fontSize: 13, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
-                                                                color: isAhead ? '#147b75' : '#e06470',
-                                                                whiteSpace: 'nowrap',
+                                                    {(trackingShowAll ? trackingData : recent).map((entry, i) => {
+                                                        const dateObj = new Date(entry.date + 'T00:00:00')
+                                                        const dateLabel = `${dateObj.getDate()} ${dateObj.toLocaleDateString('en-GB', { month: 'short' })}`
+                                                        const isAhead = entry.diff >= 0
+                                                        return (
+                                                            <div key={entry.date} style={{
+                                                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                                                padding: '7px 0',
+                                                                borderBottom: i < recent.length - 1 ? '1px solid #f5f5f5' : 'none',
                                                             }}>
-                                                                {isAhead ? '+' : '-'}{sym}{Math.abs(entry.diff).toLocaleString()}
-                                                            </span>
-                                                        </div>
-                                                    )
-                                                })}
+                                                                <div>
+                                                                    <p style={{ margin: 0, fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#333' }}>
+                                                                        {dateLabel}
+                                                                    </p>
+                                                                    <p style={{ margin: '1px 0 0', fontSize: 11, fontWeight: 600, fontFamily: 'Nunito, sans-serif', color: '#aaa' }}>
+                                                                        Actual: {sym}{entry.actual.toLocaleString()} · Predicted: {sym}{entry.predicted.toLocaleString()}
+                                                                    </p>
+                                                                </div>
+                                                                <span style={{
+                                                                    fontSize: 13, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+                                                                    color: isAhead ? '#147b75' : '#e06470',
+                                                                    whiteSpace: 'nowrap',
+                                                                }}>
+                                                                    {isAhead ? '+' : '-'}{sym}{Math.abs(entry.diff).toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                        )
+                                                    })}
                                                 </div>
                                             </div>
                                         )
@@ -4649,19 +5014,21 @@ export default function Dashboard() {
                             setEditWarning('')
                             setFormData(prev => {
                                 const entries = prev[saveCat.formKey] || []
-                                return { ...prev, [saveCat.formKey]: entries.map(e => {
-                                    const total = parseMoney(e.amount)
-                                    const newVal = parseFloat(val) || 0
-                                    const otherMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
-                                    const remainder = Math.max(0, total - newVal)
-                                    const newInst = { [editingEvent.editMonth]: val }
-                                    if (otherMonths.length > 0) {
-                                        const perMonth = Math.round(remainder * 100 / otherMonths.length) / 100
-                                        const leftover = Math.round((remainder - perMonth * otherMonths.length) * 100)
-                                        otherMonths.forEach((m, i) => { newInst[m] = String(Math.round((perMonth + (i < leftover ? 0.01 : 0)) * 100) / 100) })
-                                    }
-                                    return { ...e, instalmentAmounts: newInst }
-                                })}
+                                return {
+                                    ...prev, [saveCat.formKey]: entries.map(e => {
+                                        const total = parseMoney(e.amount)
+                                        const newVal = parseFloat(val) || 0
+                                        const otherMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
+                                        const remainder = Math.max(0, total - newVal)
+                                        const newInst = { [editingEvent.editMonth]: val }
+                                        if (otherMonths.length > 0) {
+                                            const perMonth = Math.round(remainder * 100 / otherMonths.length) / 100
+                                            const leftover = Math.round((remainder - perMonth * otherMonths.length) * 100)
+                                            otherMonths.forEach((m, i) => { newInst[m] = String(Math.round((perMonth + (i < leftover ? 0.01 : 0)) * 100) / 100) })
+                                        }
+                                        return { ...e, instalmentAmounts: newInst }
+                                    })
+                                }
                             })
                         }
                     } else {
@@ -4728,29 +5095,31 @@ export default function Dashboard() {
                         if (irregCat) {
                             setFormData(prev => {
                                 const entries = prev[irregCat.formKey] || []
-                                return { ...prev, [irregCat.formKey]: entries.map(e => {
-                                    const total = parseMoney(e.amount)
-                                    const entryFreq = e.frequency || irregCat.defaultFrequency
-                                    const isPerInst = entryFreq === 'irregular'
-                                    const newMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
-                                    const newDates = { ...(e.dates || {}) }; delete newDates[editingEvent.editMonth]
-                                    const newInst = {}
-                                    if (isPerInst) {
-                                        // Per instalment: keep existing amounts, just remove the month
-                                        for (const m of newMonths) {
-                                            newInst[m] = e.instalmentAmounts?.[m] || String(total)
+                                return {
+                                    ...prev, [irregCat.formKey]: entries.map(e => {
+                                        const total = parseMoney(e.amount)
+                                        const entryFreq = e.frequency || irregCat.defaultFrequency
+                                        const isPerInst = entryFreq === 'irregular'
+                                        const newMonths = (e.months || []).filter(m => m !== editingEvent.editMonth)
+                                        const newDates = { ...(e.dates || {}) }; delete newDates[editingEvent.editMonth]
+                                        const newInst = {}
+                                        if (isPerInst) {
+                                            // Per instalment: keep existing amounts, just remove the month
+                                            for (const m of newMonths) {
+                                                newInst[m] = e.instalmentAmounts?.[m] || String(total)
+                                            }
+                                        } else if (newMonths.length > 0 && total > 0) {
+                                            // Per year: redistribute yearly total across remaining months
+                                            const perMonth = Math.round(total * 100 / newMonths.length) / 100
+                                            let remainder = Math.round((total - perMonth * newMonths.length) * 100)
+                                            newMonths.forEach((m, i) => {
+                                                const extra = i < remainder ? 0.01 : 0
+                                                newInst[m] = String(Math.round((perMonth + extra) * 100) / 100)
+                                            })
                                         }
-                                    } else if (newMonths.length > 0 && total > 0) {
-                                        // Per year: redistribute yearly total across remaining months
-                                        const perMonth = Math.round(total * 100 / newMonths.length) / 100
-                                        let remainder = Math.round((total - perMonth * newMonths.length) * 100)
-                                        newMonths.forEach((m, i) => {
-                                            const extra = i < remainder ? 0.01 : 0
-                                            newInst[m] = String(Math.round((perMonth + extra) * 100) / 100)
-                                        })
-                                    }
-                                    return { ...e, months: newMonths, dates: newDates, instalmentAmounts: newInst }
-                                })}
+                                        return { ...e, months: newMonths, dates: newDates, instalmentAmounts: newInst }
+                                    })
+                                }
                             })
                         }
                     } else if (displayFreq === 'one-off' || displayFreq === 'yearly' || (eventFreq === 'yearly' && !eventEntry?.scheduleFrequency)) {
@@ -4907,11 +5276,20 @@ export default function Dashboard() {
                                             }
                                         }, 500)
                                     }}
-                                    style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222', display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}
+                                    style={{ fontSize: 15, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#222', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
                                 >
                                     <div style={{ width: 9, height: 9, borderRadius: '50%', background: color, flexShrink: 0 }} />
                                     {editingEvent.label || editingEvent.sublabel}
-                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginLeft: 2 }}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+                                    <div style={{
+                                        width: 16, height: 16, borderRadius: 4,
+                                        background: '#f0f0f0',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        flexShrink: 0, marginTop: -1,
+                                    }}>
+                                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M7 17l9.2-9.2M17 17V7H7" />
+                                        </svg>
+                                    </div>
                                 </div>
                                 <div style={{ fontSize: 12, fontWeight: 500, fontFamily: 'Nunito, sans-serif', color: '#999', marginTop: 1 }}>
                                     {editingEvent.date ? new Date(editingEvent.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
@@ -5063,6 +5441,54 @@ export default function Dashboard() {
                                     </p>
                                 )}
                             </>)}
+                        </div>
+                    </>
+                )
+            })()}
+
+            {/* Term dates popup */}
+            {termPopup && (() => {
+                const { term, clickX, clickY } = termPopup
+                const w = 200
+                const left = Math.max(8, Math.min(clickX - w / 2, window.innerWidth - w - 8))
+                const top = clickY + 8
+                return (
+                    <>
+                        <div ref={termPopupRef} style={{
+                            position: 'fixed', left, top, width: w,
+                            background: '#fff', borderRadius: 14, zIndex: 101,
+                            boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
+                            padding: '12px 14px',
+                        }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'Nunito, sans-serif', color: '#7a8ea8', marginBottom: 6 }}>
+                                {term.name}
+                            </div>
+                            <div style={{ fontSize: 12, fontFamily: 'Nunito, sans-serif', color: '#666', lineHeight: 1.5 }}>
+                                {fmt(term.start)} – {fmt(term.end)}
+                            </div>
+                            {term.breaks && term.breaks.length > 0 && (
+                                <div style={{ marginTop: 8, borderTop: '1px solid #f0f0f0', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                    {term.breaks.map((brk, i) => {
+                                        const isExamFull = brk.name && /^exams?$/i.test(brk.name.trim())
+                                        const isExamPrep = !isExamFull && brk.name && /exam|revision|prep/i.test(brk.name.trim())
+                                        const isReading = brk.name && /reading/i.test(brk.name)
+                                        const dotColor = isExamFull ? '#e06470' : isExamPrep ? '#f0a0a8' : isReading ? '#5ab4a0' : '#aaa'
+                                        return (
+                                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                <div style={{
+                                                    width: 8, height: 8, borderRadius: '50%',
+                                                    background: dotColor, flexShrink: 0,
+                                                }} />
+                                                <div style={{ fontSize: 11, fontFamily: 'Nunito, sans-serif', color: '#999', lineHeight: 1.3 }}>
+                                                    <span style={{ fontWeight: 700, color: '#666' }}>{brk.name || 'Break'}</span>
+                                                    <br />
+                                                    <span style={{ fontSize: 10 }}>{fmt(brk.start)} – {fmt(brk.end)}</span>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </>
                 )
@@ -5329,9 +5755,9 @@ export default function Dashboard() {
                 const items = [
                     { label: 'Expenses', active: showExpenses, color: '#e06470', toggle: () => setShowExpenses(prev => { localStorage.setItem('budgeup_show_expenses', String(!prev)); return !prev }) },
                     { label: 'Income', active: showIncome, color: '#147b75', toggle: () => setShowIncome(prev => { localStorage.setItem('budgeup_show_income', String(!prev)); return !prev }) },
-                    { label: 'History', active: showBalanceHistory, color: '#EC8C17', toggle: () => { setShowBalanceHistory(prev => { analytics.track(DASHBOARD_EVENTS.BALANCE_HISTORY_TOGGLED, { visible: !prev }); localStorage.setItem('budgeup_show_balance_history', String(!prev)); return !prev }) } },
                     ...(overdraftNum ? [{ label: 'Overdraft', active: showOverdraft, color: '#c0392b', toggle: () => setShowOverdraft(prev => { localStorage.setItem('budgeup_show_overdraft', String(!prev)); return !prev }) }] : []),
-                    { label: 'Breaks', active: showHolidays, color: '#7c8ab8', toggle: () => setShowHolidays(prev => { localStorage.setItem('budgeup_show_holidays', String(!prev)); return !prev }) },
+                    { label: 'Term Dates', active: showHolidays, color: '#7a8ea8', toggle: () => setShowHolidays(prev => { localStorage.setItem('budgeup_show_holidays', String(!prev)); return !prev }) },
+                    ...(balanceHistory.length > 0 ? [{ label: 'History', active: showBalanceHistory, color: '#f1a950', dashed: true, toggle: () => { setShowBalanceHistory(prev => { analytics.track(DASHBOARD_EVENTS.BALANCE_HISTORY_TOGGLED, { visible: !prev }); localStorage.setItem('budgeup_show_balance_history', String(!prev)); return !prev }) } }] : []),
                 ]
                 return (
                     <div ref={graphFilterDropdownRef} style={{
@@ -5365,8 +5791,10 @@ export default function Dashboard() {
                             >
                                 <div style={{
                                     width: 9, height: 9, borderRadius: '50%',
-                                    background: item.active ? item.color : '#ddd',
-                                    transition: 'background 0.2s ease',
+                                    background: item.dashed ? 'transparent' : (item.active ? item.color : '#ddd'),
+                                    border: item.dashed ? `1px dashed ${item.active ? item.color : '#ddd'}` : 'none',
+                                    boxSizing: 'border-box',
+                                    transition: 'background 0.2s ease, border-color 0.2s ease',
                                     flexShrink: 0,
                                 }} />
                                 <span style={{

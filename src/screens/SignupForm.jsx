@@ -190,31 +190,12 @@ export default function SignupForm() {
   const isSignUp = view === 'signup'
   const isForgot = view === 'forgot'
 
-  /* ---------- SUNFLOWERS ---------- */
-  const sunflowers = [
-    { left: '8%', top: 42, size: 30, opacity: 0.11 },
-    { left: '35%', top: 48, size: 36, opacity: 0.12 },
-    { left: '65%', top: 42, size: 44, opacity: 0.14 },
-    { left: '92%', top: 50, size: 26, opacity: 0.09 },
-    { left: '22%', top: 78, size: 22, opacity: 0.08 },
-    { left: '50%', top: 85, size: 28, opacity: 0.09 },
-    { left: '80%', top: 78, size: 20, opacity: 0.07 },
-    { left: '10%', top: 110, size: 38, opacity: 0.1 },
-    { left: '42%', top: 118, size: 20, opacity: 0.06 },
-    { left: '70%', top: 108, size: 32, opacity: 0.08 },
-    { left: '95%', top: 120, size: 24, opacity: 0.06 },
-    { left: '18%', top: 150, size: 28, opacity: 0.05 },
-    { left: '55%', top: 155, size: 22, opacity: 0.04 },
-    { left: '82%', top: 148, size: 34, opacity: 0.05 },
-    { left: '5%', top: 130, size: 16, opacity: 0.05 },
-  ]
-
   /* ---------- WELCOME LANDING ---------- */
   if (!showForm) {
     return (
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column',
-        background: 'linear-gradient(180deg, #ffffff 0%, #e8f5f4 15%, #d4efed 40%, #d4efed 60%, #e8f5f4 85%, #ffffff 100%)',
+        background: 'linear-gradient(180deg, #ffffff 0%, #ffffff 25%, #f0f7f7 40%, #e8f3f2 55%, #f0f7f7 70%, #ffffff 90%, #ffffff 100%)',
         overflow: 'hidden', position: 'relative',
         opacity: transitioning ? 0 : 1,
         transform: transitioning ? 'scale(0.97)' : 'scale(1)',
@@ -223,47 +204,47 @@ export default function SignupForm() {
         {/* Safe area spacer */}
         <div style={{ height: 'calc(env(safe-area-inset-top, 0px) + 10px)', flexShrink: 0 }} />
 
-        {/* Content area with sunflowers behind */}
+        {/* Main content */}
         <div style={{
           flex: 1, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
-          padding: '0 26px',
+          padding: '0 32px',
           position: 'relative',
         }}>
-          {/* Sunflowers scattered behind content */}
-          {sunflowers.map((s, i) => (
-            <img key={i} src="/logo.svg" alt="" style={{
-              position: 'absolute', left: s.left, top: s.top,
-              width: s.size, height: s.size, opacity: s.opacity,
-              transform: 'translate(-50%, -50%)',
-              pointerEvents: 'none',
-            }} />
-          ))}
+          {/* Logo */}
+          <img src="/logo.svg" alt="Budge Up" style={{
+            width: 72, height: 72, marginBottom: 20,
+            filter: 'drop-shadow(0 4px 12px rgba(20,123,117,0.15))',
+          }} />
 
           <span style={{
-            fontSize: 50, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
-            color: '#147b75', letterSpacing: 1.5, marginBottom: 10, marginTop: 50,
-            position: 'relative', zIndex: 1,
+            fontSize: 44, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+            color: '#147b75', letterSpacing: 0.5, marginBottom: 32,
           }}>
             budge up
           </span>
 
-      
-
           <h1 style={{
-            fontSize: 24, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
-            color: '#1a1a1a', margin: '40px 0 14px', textAlign: 'center',
-            lineHeight: 1.3, position: 'relative', zIndex: 1, maxWidth: 340
+            fontSize: 22, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+            color: '#1a1a1a', margin: '0 0 14px', textAlign: 'center',
+            lineHeight: 1.35, maxWidth: 340,
           }}>
             Is your bank balance more confusing than your lectures?
           </h1>
 
           <p style={{
-            fontSize: 14, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
-            color: '#666', margin: 0, textAlign: 'center', lineHeight: 1.6,
-            maxWidth: 340, position: 'relative', zIndex: 1,
+            fontSize: 14, fontWeight: 600, fontFamily: 'Nunito, sans-serif',
+            color: '#7a7a7a', margin: '0 0 6px', textAlign: 'center', lineHeight: 1.6,
+            maxWidth: 340,
           }}>
-            If so, it won't be for much longer! Unlike normal budgeting tools, we don't track your past. We predict your future. It's free, zero-effort, and built by students for students. Sign up to get started!
+            If so, it won't be for much longer!
+          </p>
+          <p style={{
+            fontSize: 14, fontWeight: 500, fontFamily: 'Nunito, sans-serif',
+            color: '#7a7a7a', margin: 0, textAlign: 'center', lineHeight: 1.6,
+            maxWidth: 340,
+          }}>
+            Unlike normal budgeting tools, we don't track your past. We predict your future. It's free, zero-effort, and built by students for students.
           </p>
         </div>
 
@@ -693,21 +674,21 @@ function SlideToUnlock({ onUnlock }) {
   const trackRef = useRef(null)
   const thumbRef = useRef(null)
   const labelRef = useRef(null)
-  const lockRef = useRef(null)
+  const fillRef = useRef(null)
   const shackleRef = useRef(null)
   const stateRef = useRef({ dragging: false, startX: 0, currentX: 0, maxX: 200, unlocked: false })
 
-  const THUMB = 52
+  const THUMB = 56
 
   const updateVisuals = (x) => {
     if (!thumbRef.current || !labelRef.current) return
     thumbRef.current.style.transform = `translateX(${x}px)`
     const progress = x / stateRef.current.maxX
-    labelRef.current.style.opacity = Math.max(0, 1 - progress * 2)
-    // Animate the lock shackle opening as user slides
+    labelRef.current.style.opacity = Math.max(0, 1 - progress * 2.5)
+    if (fillRef.current) fillRef.current.style.width = `${x + THUMB + 4}px`
     if (shackleRef.current) {
-      const shackleProgress = Math.min(1, progress * 1.5)
-      shackleRef.current.style.transform = `translateY(${-shackleProgress * 3}px) rotate(${shackleProgress * 15}deg)`
+      const sp = Math.min(1, progress * 1.5)
+      shackleRef.current.style.transform = `translateY(${-sp * 3}px) rotate(${sp * 15}deg)`
       shackleRef.current.style.transformOrigin = 'right bottom'
     }
   }
@@ -720,6 +701,7 @@ function SlideToUnlock({ onUnlock }) {
     s.currentX = 0
     s.dragging = true
     thumbRef.current.style.transition = 'none'
+    if (fillRef.current) fillRef.current.style.transition = 'none'
     if (shackleRef.current) shackleRef.current.style.transition = 'none'
   }
 
@@ -735,8 +717,10 @@ function SlideToUnlock({ onUnlock }) {
     const s = stateRef.current
     if (!s.dragging) return
     s.dragging = false
-    thumbRef.current.style.transition = 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)'
-    if (shackleRef.current) shackleRef.current.style.transition = 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)'
+    const ease = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+    thumbRef.current.style.transition = ease
+    if (fillRef.current) fillRef.current.style.transition = 'width 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+    if (shackleRef.current) shackleRef.current.style.transition = ease
 
     if (s.currentX >= s.maxX * 0.65) {
       s.unlocked = true
@@ -780,28 +764,37 @@ function SlideToUnlock({ onUnlock }) {
       ref={trackRef}
       style={{
         position: 'relative',
-        width: '100%', height: 60, borderRadius: 50,
-        background: '#147b75',
-        boxShadow: '0 4px 16px rgba(20,123,117,0.3)',
+        width: '100%', height: 64, borderRadius: 50,
+        background: 'linear-gradient(135deg, #147b75 0%, #0f5e59 100%)',
         overflow: 'hidden',
         userSelect: 'none', WebkitUserSelect: 'none',
         touchAction: 'pan-y',
       }}
     >
+      {/* Progress fill */}
+      <div ref={fillRef} style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0,
+        width: THUMB + 4,
+        background: 'rgba(255,255,255,0.1)',
+        borderRadius: 50,
+        pointerEvents: 'none',
+      }} />
+
       <div ref={labelRef} style={{
         position: 'absolute', inset: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        paddingLeft: 26,
-        color: '#fff',
-        fontSize: 17, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+        paddingLeft: 30,
+        color: 'rgba(255,255,255,0.9)',
+        fontSize: 16, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
+        letterSpacing: 0.3,
         pointerEvents: 'none',
         transition: 'opacity 0.15s ease',
       }}>
         Slide to unlock
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8, animation: 'slideArrow 1.2s ease-in-out infinite' }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8, animation: 'slideArrow 1.5s ease-in-out infinite' }}>
           <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <style>{`@keyframes slideArrow { 0%, 100% { transform: translateX(0); opacity: 1; } 50% { transform: translateX(6px); opacity: 0.6; } }`}</style>
+        <style>{`@keyframes slideArrow { 0%, 100% { transform: translateX(0); opacity: 0.7; } 50% { transform: translateX(6px); opacity: 1; } }`}</style>
       </div>
 
       <div
@@ -811,20 +804,16 @@ function SlideToUnlock({ onUnlock }) {
           left: 4, top: 4,
           width: THUMB, height: THUMB, borderRadius: '50%',
           background: '#fff',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: 'grab',
-          transition: 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
           willChange: 'transform',
         }}
       >
-        {/* Lock icon */}
-        <svg ref={lockRef} width="22" height="26" viewBox="0 -2 24 26" fill="none" style={{ overflow: 'visible' }}>
-          {/* Lock body */}
+        <svg width="22" height="26" viewBox="0 -2 24 26" fill="none" style={{ overflow: 'visible' }}>
           <rect x="5" y="11" width="14" height="11" rx="2" stroke="#147b75" strokeWidth="2" fill="none" />
-          {/* Lock shackle (animated) */}
-          <path ref={shackleRef} d="M8 11V7a4 4 0 1 1 8 0v4" stroke="#147b75" strokeWidth="2" strokeLinecap="round" style={{ transition: 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)' }} />
-          {/* Keyhole */}
+          <path ref={shackleRef} d="M8 11V7a4 4 0 1 1 8 0v4" stroke="#147b75" strokeWidth="2" strokeLinecap="round" style={{ transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }} />
           <circle cx="12" cy="16" r="1.5" fill="#147b75" />
         </svg>
       </div>

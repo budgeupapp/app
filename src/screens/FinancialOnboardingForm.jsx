@@ -10,7 +10,8 @@ import NativeSelect from '../components/NativeSelect'
 import variableWeeklySpend from '../assets/variable-weekly-spend.svg'
 import variableOneOff from '../assets/variable-one-off.svg'
 import TermDatesStep from './TermDatesStep'
-import TermGraph, { refreshAY, AY_START, AY_END } from '../components/TermGraph'
+import TermGraph, { refreshAY, AY_START, AY_END, datePctFromDate } from '../components/TermGraph'
+import { getMonthsFromStart } from '../lib/settings'
 import BankBalanceStep from './BankBalanceStep'
 import RegularIncomeStep from './RegularIncomeStep'
 import CategoryStep from './CategoryStep'
@@ -736,6 +737,11 @@ export default function FinancialOnboardingForm({ user, onComplete }) {
         } catch { return 0 }
     })
     const [expandedTerms, setExpandedTerms] = useState(new Set())
+    const [graphSettled, setGraphSettled] = useState(false)
+    useEffect(() => {
+        const t = setTimeout(() => setGraphSettled(true), 450)
+        return () => clearTimeout(t)
+    }, [])
     const [showAllEvents, setShowAllEvents] = useState(false)
     useEffect(() => {
         if (activePanel === 4 && !dotHintShownRef.current) {
@@ -1569,7 +1575,7 @@ export default function FinancialOnboardingForm({ user, onComplete }) {
             </>
         )
 
-        const GRAPH_HEIGHT = 210
+        const GRAPH_HEIGHT = 236
         const SAFE_AREA_TOP = 'env(safe-area-inset-top, 0px)'
         const COLLAPSED_TOP = `calc(${SAFE_AREA_TOP} + ${GRAPH_HEIGHT}px)`
         const EXPANDED_TOP = `calc(${SAFE_AREA_TOP} + 8px)`
@@ -1641,10 +1647,27 @@ export default function FinancialOnboardingForm({ user, onComplete }) {
                     transition: 'opacity 0.35s ease, transform 0.35s ease',
                     position: 'relative', zIndex: 0,
                 }}>
+                    {!graphSettled && (
+                        <div style={{
+                            position: 'absolute', inset: 0, zIndex: 50,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: '#fff',
+                            opacity: graphSettled ? 0 : 1,
+                            transition: 'opacity 0.3s ease',
+                        }}>
+                            <div style={{
+                                width: 24, height: 24, borderRadius: '50%',
+                                border: '2.5px solid #e8e8e8', borderTopColor: '#147b75',
+                                animation: 'spin 0.7s linear infinite',
+                            }} />
+                        </div>
+                    )}
                     <TermGraph
-                        graphHeight={150}
-                        marginTop={8}
+                        graphHeight={180}
+                        marginTop={4}
                         scrubNearLineOnly
+                        showTodayMarker
+                        termLabelsBottom
                         terms={terms}
                         expandedTerm={activePanel === 0 && activeExpanded.size === 1 ? [...activeExpanded][0] : undefined}
                         balance={activePanel >= 1 ? balanceNum : undefined}
@@ -1725,13 +1748,50 @@ export default function FinancialOnboardingForm({ user, onComplete }) {
                         activeEventDot={editingEvent}
                         forceGreenDots={PANEL_STEPS[activePanel] === 'regularIncome'}
                         forceDotColor={PANEL_STEPS[activePanel] === 'regularIncome' ? 'green' : PANEL_STEPS[activePanel] === 'regularExpenses' ? 'red' : null}
-                        onTermClick={activePanel === 0 ? (termId) => setExpandedTerms(prev => {
-                            const next = new Set(prev)
-                            if (next.has(termId)) next.delete(termId); else next.add(termId)
-                            return next
-                        }) : undefined}
+                        onTermClick={activePanel === 0 ? (termId) => {
+                            setExpandedTerms(prev => {
+                                if (prev.has(termId) && prev.size === 1) return new Set()
+                                return new Set([termId])
+                            })
+                            // Scroll the term into view with a small gap above
+                            setTimeout(() => {
+                                const el = document.querySelector(`[data-term-id="${termId}"]`)
+                                if (el) {
+                                    // Find scrollable parent
+                                    let container = el.parentElement
+                                    while (container && container.scrollHeight <= container.clientHeight) {
+                                        container = container.parentElement
+                                    }
+                                    if (container) {
+                                        const elRect = el.getBoundingClientRect()
+                                        const containerRect = container.getBoundingClientRect()
+                                        const scrollTarget = container.scrollTop + (elRect.top - containerRect.top) - 8
+                                        container.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' })
+                                    }
+                                }
+                            }, 301)
+                        } : undefined}
                         onBalanceClick={undefined}
                     />
+                </div>
+                {/* Month labels below graph */}
+                <div style={{ position: 'relative', height: 14, marginTop: 8, marginLeft: 43, marginRight: 22 }}>
+                    {getMonthsFromStart().map(({ label, date }) => {
+                        const midDate = new Date(date.getFullYear(), date.getMonth(), 15)
+                        const pct = datePctFromDate(midDate)
+                        if (pct <= 0 || pct >= 100) return null
+                        return (
+                            <span key={label} style={{
+                                position: 'absolute',
+                                left: `${pct}%`,
+                                transform: pct < 3 ? 'none' : 'translateX(-50%)',
+                                fontSize: 9, fontWeight: 500,
+                                fontFamily: 'Nunito, sans-serif',
+                                color: '#9f9c9c',
+                                whiteSpace: 'nowrap',
+                            }}>{label}</span>
+                        )
+                    })}
                 </div>
 
                 {/* Opaque backing behind sheet — covers rounded corner gaps during transitions */}

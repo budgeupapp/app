@@ -34,8 +34,10 @@ export default function ForgotPasswordForm() {
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column',
       alignItems: 'center',
-      padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 28px 0',
+      padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 28px calc(env(safe-area-inset-bottom, 0px) + 24px)',
       background: '#fff',
+      overflow: 'auto', WebkitOverflowScrolling: 'touch',
+      minHeight: 0,
     }}>
       {/* Illustration */}
       <img src="/forgot-password-illustration.svg" alt="" style={{

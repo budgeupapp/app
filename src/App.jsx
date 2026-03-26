@@ -1,4 +1,4 @@
-// DEV: set to 'onboarding', 'dashboard', or 'signup' to bypass login and jump to that view. Set to null for normal behaviour.
+// DEV: set to 'onboarding', 'dashboard', 'signup', or 'loading' to bypass auth and jump to that view. Set to null for normal behaviour.
 const DEV_VIEW = null
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -53,6 +53,48 @@ import BottomNav from './components/BottomNav'
 import DesktopBlocker from './components/DesktopBlocker'
 import MoneyAdviceSvg from './assets/money-advice.svg'
 import { saveSignupConsents } from './lib/api'
+
+function MainApp() {
+    const location = useLocation()
+    const isDashboard = location.pathname === '/dashboard' || location.pathname === '/'
+    return (
+        <div className="app-container">
+            {/* Dashboard always mounted, hidden when not active */}
+            <div style={{
+                height: '100vh', position: isDashboard ? 'relative' : 'fixed',
+                visibility: isDashboard ? 'visible' : 'hidden',
+                width: '100%',
+                pointerEvents: isDashboard ? 'auto' : 'none',
+            }}>
+                <Dashboard />
+            </div>
+            <Routes>
+                <Route path="/dashboard" element={null} />
+                <Route path="/" element={null} />
+                <Route path="/support" element={
+                    <div style={{ height: '100vh', position: 'relative' }}>
+                        <MoneyAdviceScreen />
+                    </div>
+                } />
+                <Route path="/feedback" element={
+                    <div style={{ height: '100vh', position: 'relative' }}>
+                        <FeedbackScreen />
+                    </div>
+                } />
+                <Route path="/settings" element={
+                    <div style={{ height: '100vh', position: 'relative' }}>
+                        <SettingsScreen />
+                    </div>
+                } />
+                <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/signup" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/reset-password" element={<Navigate to="/dashboard" replace />} />
+                <Route path="*" element={<NotFound />} />
+            </Routes>
+            <BottomNav />
+        </div>
+    )
+}
 
 function AppContent() {
     const sessionTrackedRef = useRef(false)
@@ -202,7 +244,7 @@ function AppContent() {
     }, [session?.user?.id])
 
     // Keep theme-color in sync for non-router states (loading, onboarding, auth)
-    const isMainApp = session && !passwordRecovery && hasCompletedOnboarding === true && DEV_VIEW !== 'onboarding'
+    const isMainApp = DEV_VIEW === 'dashboard' || (session && !passwordRecovery && hasCompletedOnboarding === true && DEV_VIEW !== 'onboarding')
     const isLoading = loading || onboardingLoading || processingSignup || (session?.user?.id && hasCompletedOnboarding === null)
     useLayoutEffect(() => {
         if (!isMainApp && isLoading && !DEV_VIEW) {
@@ -236,7 +278,7 @@ function AppContent() {
 
     /* ---------------- NOT AUTHENTICATED / PASSWORD RECOVERY ---------------- */
 
-    if (DEV_VIEW === 'signup' || (!DEV_VIEW && (!session || passwordRecovery))) {
+    if (DEV_VIEW === 'signup' || (!DEV_VIEW && !session) || (!DEV_VIEW && passwordRecovery)) {
         return (
             <BrowserRouter>
                 <Routes>
@@ -261,7 +303,7 @@ function AppContent() {
         // Reset to university step in dev mode
         localStorage.removeItem('budgeup_onboarding_state')
     }
-    if (DEV_VIEW === 'onboarding' || (hasCompletedOnboarding === false && !showLoadingScreen)) {
+    if (DEV_VIEW === 'onboarding' || (!DEV_VIEW && hasCompletedOnboarding === false && !showLoadingScreen)) {
         return (
             <FinancialOnboardingForm
                 user={session?.user}
@@ -275,7 +317,7 @@ function AppContent() {
         )
     }
 
-    if (showLoadingScreen) {
+    if (DEV_VIEW === 'loading' || showLoadingScreen) {
         return (
             <LoadingScreen
                 onComplete={() => {
@@ -294,53 +336,7 @@ function AppContent() {
     return (
         <BrowserRouter>
             <ThemeColorSync />
-            <Routes>
-                {/* Valid app routes with bottom navigation */}
-                <Route path="/dashboard" element={
-                    <div className="app-container">
-                        <div style={{ height: '100vh', position: 'relative' }}>
-                            <Dashboard />
-                        </div>
-                        <BottomNav />
-                    </div>
-                } />
-                <Route path="/support" element={
-                    <div className="app-container">
-                        <div style={{ height: '100vh', position: 'relative' }}>
-                            <MoneyAdviceScreen />
-                        </div>
-                        <BottomNav />
-                    </div>
-                } />
-                <Route path="/feedback" element={
-                    <div className="app-container">
-                        <div style={{ height: '100vh', position: 'relative' }}>
-                            <FeedbackScreen />
-                        </div>
-                        <BottomNav />
-                    </div>
-                } />
-                <Route path="/settings" element={
-                    <div className="app-container">
-                        <div style={{ height: '100vh', position: 'relative' }}>
-                            <SettingsScreen />
-                        </div>
-                        <BottomNav />
-                    </div>
-                } />
-
-                {/* Redirect root to dashboard */}
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-                {/* Redirect auth routes to dashboard */}
-                <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/signup" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/reset-password" element={<Navigate to="/dashboard" replace />} />
-
-
-                {/* 404 page for invalid routes */}
-                <Route path="*" element={<NotFound />} />
-            </Routes>
+            <MainApp />
         </BrowserRouter>
     )
 }

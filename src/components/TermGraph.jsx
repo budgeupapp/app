@@ -7,6 +7,8 @@ function computeAY() {
     const start = getGraphStart()
     const [y, m, d] = start.split('-').map(Number)
     const ayStart = new Date(y, m - 1, d)
+    // Add a few days padding before join date
+    ayStart.setDate(ayStart.getDate() - 2)
     // Always end Sep 1: same year if start is Sep+, next year otherwise
     const endYear = m >= 9 ? y + 1 : y
     const ayEnd = new Date(endYear, 8, 1) // Sep 1
@@ -72,14 +74,17 @@ export const daysBetween = (s, e) => Math.max(0, Math.round(
     (new Date(e + 'T00:00:00') - new Date(s + 'T00:00:00')) / (24 * 60 * 60 * 1000)
 ))
 
-// Vertical gradient for breaks (warm grey)
-export const HASH_BG = `linear-gradient(to bottom, rgba(160,160,160,0) 0%, rgba(160,160,160,0.07) 35%, rgba(160,160,160,0.07) 65%, rgba(160,160,160,0) 100%)`
+// Vertical gradient for breaks (soft warm sand)
+export const HASH_BG = `linear-gradient(to bottom, rgba(180,170,150,0) 0%, rgba(180,170,150,0.08) 35%, rgba(180,170,150,0.08) 65%, rgba(180,170,150,0) 100%)`
 
-// Vertical gradient for exam breaks (soft rose)
-export const HASH_BG_EXAM = `linear-gradient(to bottom, rgba(210,100,100,0) 0%, rgba(210,100,100,0.08) 35%, rgba(210,100,100,0.08) 65%, rgba(210,100,100,0) 100%)`
+// Vertical gradient for exam breaks (red)
+export const HASH_BG_EXAM = `linear-gradient(to bottom, rgba(224,100,112,0) 0%, rgba(224,100,112,0.10) 35%, rgba(224,100,112,0.10) 65%, rgba(224,100,112,0) 100%)`
 
-// Vertical gradient for reading weeks (soft blue)
-export const HASH_BG_READING = `linear-gradient(to bottom, rgba(100,140,200,0) 0%, rgba(100,140,200,0.08) 35%, rgba(100,140,200,0.08) 65%, rgba(100,140,200,0) 100%)`
+// Vertical gradient for exam prep/revision (lighter red)
+export const HASH_BG_EXAM_PREP = `linear-gradient(to bottom, rgba(224,100,112,0) 0%, rgba(224,100,112,0.05) 35%, rgba(224,100,112,0.05) 65%, rgba(224,100,112,0) 100%)`
+
+// Vertical gradient for reading weeks (soft teal-mint)
+export const HASH_BG_READING = `linear-gradient(to bottom, rgba(90,180,160,0) 0%, rgba(90,180,160,0.09) 35%, rgba(90,180,160,0.09) 65%, rgba(90,180,160,0) 100%)`
 
 /* ---------- BALANCE HELPERS ---------- */
 
@@ -156,7 +161,7 @@ function fmtMoney(v) {
 
 /* ---------- TERM GRAPH ---------- */
 
-export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorDate, actualBalance, balanceStartDate, overdraft, events = [], allEvents: allEventsProp = [], weeklySpendRate = 0, hiddenEventTypes = [], removedHiddenTypes = [], balanceHiddenTypes = [], currentEventLabel = null, currentEventType, onEventClick, onBalanceClick, onOverdraftClick, onTermClick, footer, showDotsToggle, onToggleDots, showIncome, onToggleIncome, showExpenses, onToggleExpenses, graphHeight = 108, marginTop = 16, graphHeightRef, forceGreenDots = false, forceDotColor = null, hideDots = false, balanceHistory = [], showBalanceHistory = true, activeEventDot = null, onZeroDate, onOverdraftBreachDate, showHolidays = true, onZoomChange, zoomOutRef, scrubNearLineOnly = false }) {
+export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorDate, actualBalance, balanceStartDate, overdraft, events = [], allEvents: allEventsProp = [], weeklySpendRate = 0, hiddenEventTypes = [], removedHiddenTypes = [], balanceHiddenTypes = [], currentEventLabel = null, currentEventType, onEventClick, onBalanceClick, onOverdraftClick, onTermClick, footer, showDotsToggle, onToggleDots, showIncome, onToggleIncome, showExpenses, onToggleExpenses, graphHeight = 108, marginTop = 16, graphHeightRef, forceGreenDots = false, forceDotColor = null, hideDots = false, balanceHistory = [], showBalanceHistory = true, activeEventDot = null, onZeroDate, onOverdraftBreachDate, showHolidays = true, showDateMarker = true, showXAxis = false, showTodayMarker = false, termLabelsBottom = false, onZoomChange, zoomOutRef, scrubNearLineOnly = false, collapsed = false }) {
     const today = new Date()
     const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate())
     const todayNoon = new Date(todayMidnight.getTime() + 12 * 60 * 60 * 1000)
@@ -184,30 +189,48 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
     const hasBalance = balance !== undefined
 
     // Animate orange dot + line when balance appears/disappears
+    const isFirstBalance = useRef(true)
     const [balanceAnimated, setBalanceAnimated] = useState(false)
     const [dotAnimated, setDotAnimated] = useState(false)
+    const [dotExiting, setDotExiting] = useState(false)
     const [balanceVisible, setBalanceVisible] = useState(false)
     const prevHasBalance = useRef(false)
     const balanceExitTimer = useRef(null)
     useEffect(() => {
         if (hasBalance && !prevHasBalance.current) {
-            // Entering: show elements, dot pops in first, then lines expand out
             if (balanceExitTimer.current) { clearTimeout(balanceExitTimer.current); balanceExitTimer.current = null }
-            setBalanceVisible(true)
-            requestAnimationFrame(() => {
-                setDotAnimated(true)
-                setBalanceAnimated(true)
-            })
+            if (isFirstBalance.current) {
+                // First time balance appears — show elements then animate
+                isFirstBalance.current = false
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        setBalanceVisible(true)
+                        requestAnimationFrame(() => {
+                            setDotAnimated(true)
+                            setBalanceAnimated(true)
+                        })
+                    })
+                })
+            } else {
+                // Subsequent appearances — animate in
+                setBalanceVisible(true)
+                requestAnimationFrame(() => {
+                    setDotAnimated(true)
+                    setBalanceAnimated(true)
+                })
+            }
         } else if (!hasBalance && prevHasBalance.current) {
-            // Exiting: lines shrink into dot first, then dot shrinks
+            // Exiting: dot shrinks to nothing, then hide
             setBalanceAnimated(false)
+            setDotExiting(true)
             balanceExitTimer.current = setTimeout(() => {
                 setDotAnimated(false)
                 balanceExitTimer.current = setTimeout(() => {
                     setBalanceVisible(false)
+                    setDotExiting(false)
                     balanceExitTimer.current = null
-                }, 450)
-            }, 500)
+                }, 400)
+            }, 100)
         }
         prevHasBalance.current = hasBalance
         return () => { if (balanceExitTimer.current) clearTimeout(balanceExitTimer.current) }
@@ -1082,7 +1105,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
         if (scrubDotRef.current) scrubDotRef.current.style.display = 'none'
         if (scrubTooltipRef.current) { scrubTooltipRef.current.style.opacity = '0'; scrubTooltipRef.current.style.display = 'none' }
 
-        if (!zoomEnabledRef.current && !hasBalance) return
+        if (!zoomEnabledRef.current) return
         const t = touchRef.current
 
 
@@ -1242,8 +1265,8 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
             return
         }
 
-        // Double-tap to zoom in/out
-        if (e.touches.length === 0 && !t.isPinching && !t.isPanning) {
+        // Double-tap to zoom in/out (only when zoom enabled)
+        if (e.touches.length === 0 && !t.isPinching && !t.isPanning && zoomEnabledRef.current) {
             const now = performance.now()
             const dx = Math.abs(t.startX - (t.lastTapX || 0))
             const dy = Math.abs((t.startY || 0) - (t.lastTapY || 0))
@@ -1384,7 +1407,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
             background: 'transparent',
             borderRadius: 0,
             boxShadow: 'none',
-            padding: '10px 14px 0px 4px',
+            padding: '14px 14px 10px 4px',
             flexShrink: 0,
             overflow: 'hidden',
             position: 'relative',
@@ -1453,11 +1476,8 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
 
             <div ref={(el) => { graphContainerRef.current = el; if (graphHeightRef) graphHeightRef.current = el }} style={{ display: 'flex', position: 'relative', height: graphHeight, overflowX: 'clip', overflowY: 'visible', willChange: 'height' }}>
                 {/* Y-axis — always reserves space so graph width is consistent */}
-                <div style={{ width: Y_AXIS_W, position: 'relative', flexShrink: 0 }}>
+                <div style={{ width: Y_AXIS_W, position: 'relative', flexShrink: 0, zIndex: 0 }}>
                     {balanceVisible && ticks.map((tick, i) => {
-                        // Hide top y-axis label if today pill overlaps the y-axis area
-                        const isTopTick = i === ticks.length - 1
-                        const todayOverlapsYAxis = showToday && todayPct < 5
                         return (
                             <div key={tick} style={{
                                 position: 'absolute',
@@ -1469,7 +1489,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                 color: '#9f9c9c',
                                 whiteSpace: 'nowrap',
                                 fontWeight: 500,
-                                opacity: (balanceAnimated && !(isTopTick && todayOverlapsYAxis)) ? 1 : 0,
+                                opacity: balanceAnimated ? 1 : 0,
                                 transition: 'top 0.5s ease, opacity 0.4s ease',
                             }}>
                                 {fmtMoney(tick)}
@@ -1531,6 +1551,108 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                             )}
                         </svg>
 
+                        {/* Inline date dividers — adapt to zoom level (hidden when months shown externally below graph) */}
+                        {!termLabelsBottom && (() => {
+                            // During zoom-out animation, force month view to avoid day labels flying around
+                            const curZoom = isZoomingOut ? 1 : labelZoomRef.current
+                            const totalDays = Math.round((AY_END - AY_START) / 86400000)
+                            const viewWidthDays = (100 / curZoom) / 100 * totalDays
+
+                            if (viewWidthDays > 90) {
+                                // Month labels at month boundaries
+                                const step = (collapsed || viewWidthDays <= 200) ? 1 : 2
+                                // Compute visible term label positions
+                                const termMids = terms.map(term => {
+                                    const sp = datePctStart(term.start)
+                                    const ep = datePctEnd(term.end)
+                                    return (sp + ep) / 2
+                                }).filter(mid => mid > 0.5 && mid < 99.5)
+                                const multipleTermLabels = termMids.length > 1 && !isZoomed && !collapsed
+                                return MONTHS
+                                    .filter((_, idx) => idx % step === 0)
+                                    .map(({ label, date }, i) => {
+                                        const firstOfMonth = new Date(date.getFullYear(), date.getMonth(), 1)
+                                        const pct = datePctFromDate(firstOfMonth)
+                                        if (pct <= 0.5 || pct >= 99.5) return null
+                                        // Hide all month labels if multiple term labels, or hide if too close to a term label
+                                        const pillClash = multipleTermLabels || (!collapsed && !isZoomed && termMids.some(mid => Math.abs(pct - mid) < 8))
+                                        if (pillClash) return null
+                                        return (
+                                            <div key={`month-${i}`} style={{
+                                                position: 'absolute',
+                                                left: `${pct}%`,
+                                                top: 0, bottom: 0,
+                                                pointerEvents: 'none',
+                                                zIndex: 1,
+                                            }}>
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    left: 0, top: 0, bottom: 0,
+                                                    width: 0,
+                                                    borderLeft: '0.5px solid rgba(180,180,180,0.3)',
+                                                }} />
+                                                {!pillClash && (
+                                                    <span style={{
+                                                        position: 'absolute',
+                                                        left: 4, top: -12,
+                                                        fontSize: 9, fontWeight: 500,
+                                                        fontFamily: 'Nunito, sans-serif',
+                                                        color: '#9f9c9c',
+                                                        lineHeight: 1,
+                                                    }}>{label}</span>
+                                                )}
+                                            </div>
+                                        )
+                                    })
+                            }
+
+                            // Day ticks when zoomed
+                            let dayInterval
+                            if (viewWidthDays > 45) dayInterval = 14
+                            else if (viewWidthDays > 30) dayInterval = 7
+                            else if (viewWidthDays > 14) dayInterval = 3
+                            else if (viewWidthDays > 7) dayInterval = 2
+                            else dayInterval = 1
+
+                            const ticks = []
+                            const d = new Date(AY_START)
+                            if (dayInterval === 7 || dayInterval === 14) {
+                                const dow = d.getDay()
+                                d.setDate(d.getDate() + ((8 - dow) % 7))
+                            }
+                            while (d <= AY_END) {
+                                const pct = datePctFromDate(d)
+                                const label = `${d.getDate()} ${d.toLocaleDateString('en-GB', { month: 'short' })}`
+                                ticks.push(
+                                    <div key={`dt-${pct.toFixed(2)}`} style={{
+                                        position: 'absolute',
+                                        left: `${pct}%`,
+                                        top: 0, bottom: 0,
+                                        pointerEvents: 'none',
+                                        zIndex: 1,
+                                    }}>
+                                        <div style={{
+                                            position: 'absolute',
+                                            left: 0, top: 0, bottom: 0,
+                                            width: 0,
+                                            borderLeft: '0.5px solid rgba(180,180,180,0.2)',
+                                        }} />
+                                        <span style={{
+                                            position: 'absolute',
+                                            left: 4, top: -12,
+                                            fontSize: 9, fontWeight: 500,
+                                            fontFamily: 'Nunito, sans-serif',
+                                            color: '#9f9c9c',
+                                            lineHeight: 1,
+                                            whiteSpace: 'nowrap',
+                                        }}>{label}</span>
+                                    </div>
+                                )
+                                d.setDate(d.getDate() + dayInterval)
+                            }
+                            return ticks
+                        })()}
+
                         {/* Overdraft label */}
                         {hasBalance && hasOverdraft && (() => {
                             const odPct = toTopPct(-overdraft)
@@ -1570,7 +1692,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                         })()}
 
                         {/* Term blocks */}
-                        {terms.map((term) => {
+                        {showHolidays && terms.map((term) => {
                             const sp = datePctStart(term.start)
                             const ep = datePctEnd(term.end)
                             const wp = ep - sp
@@ -1584,9 +1706,10 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         left: `${sp}%`, width: `${wp}%`,
                                         top: 0, bottom: -2,
                                         background: isExpanded
-                                            ? 'linear-gradient(to bottom, rgba(20,123,117,0) 0%, rgba(20,123,117,0.06) 40%, rgba(20,123,117,0.06) 60%, rgba(20,123,117,0) 100%)'
-                                            : 'linear-gradient(to bottom, rgba(20,123,117,0) 0%, rgba(20,123,117,0.035) 40%, rgba(20,123,117,0.035) 60%, rgba(20,123,117,0) 100%)',
-                                        border: 'none',
+                                            ? 'linear-gradient(to bottom, rgba(122,142,168,0) 0%, rgba(122,142,168,0.14) 15%, rgba(122,142,168,0.10) 60%, rgba(122,142,168,0) 100%)'
+                                            : 'linear-gradient(to bottom, rgba(122,142,168,0) 0%, rgba(122,142,168,0.09) 15%, rgba(122,142,168,0.06) 60%, rgba(122,142,168,0) 100%)',
+                                        borderLeft: '0.5px solid rgba(122,142,168,0.15)',
+                                        borderRight: '0.5px solid rgba(122,142,168,0.15)',
                                         transition: hasBalance ? undefined : 'left 0.35s ease, width 0.35s ease, background 0.3s ease',
                                         overflow: 'hidden',
                                         cursor: 'pointer',
@@ -1596,14 +1719,15 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         const bep = datePctEnd(brk.end)
                                         const bl = ((bsp - sp) / wp) * 100
                                         const bw = ((bep - bsp) / wp) * 100
-                                        const isExam = brk.name && /^exams?$/i.test(brk.name.trim())
+                                        const isExamFull = brk.name && /^exams?$/i.test(brk.name.trim())
+                                        const isExamPrep = !isExamFull && brk.name && /exam|revision|prep/i.test(brk.name.trim())
                                         const isReading = brk.name && /reading/i.test(brk.name)
                                         return (
                                             <div key={j} style={{
                                                 position: 'absolute',
                                                 left: `${bl}%`, width: `${bw}%`,
                                                 top: 0, bottom: 0,
-                                                background: isExam ? HASH_BG_EXAM : isReading ? HASH_BG_READING : HASH_BG,
+                                                background: isExamFull ? HASH_BG_EXAM : isExamPrep ? HASH_BG_EXAM_PREP : isReading ? HASH_BG_READING : HASH_BG,
                                                 transition: hasBalance ? undefined : 'left 0.35s ease, width 0.35s ease',
                                             }} />
                                         )
@@ -1829,7 +1953,11 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
 
                         {/* Colored vertical step lines at events — fade in with dots */}
                         {balanceVisible && !hideDots && showToday && steppedPath && steppedPath.dots
-                            .filter(dot => !dot.event.noDot && !hiddenEventTypes.includes(dot.event.editType))
+                            .filter(dot => {
+                                if (dot.event.noDot) return false
+                                const et = dot.event.editType
+                                return !hiddenEventTypes.includes(et) && !hiddenEventTypes.some(h => et.startsWith(h + ':'))
+                            })
                             .map((dot, i) => {
                                 const isPast = dot.x < todayPct
                                 const color = isPast ? 'rgba(20,123,117,0.45)' : '#147b75'
@@ -1856,31 +1984,37 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                 )
                             })}
 
-                        {/* Marker vertical dashed line — centered under pill, fades out towards bottom */}
-                        {showToday && (
-                            <div style={{
-                                position: 'absolute',
-                                left: `${markerPct}%`,
-                                top: 0, bottom: 2,
-                                width: 1,
-                                transform: 'translateX(-0.5px)',
-                                backgroundImage: 'repeating-linear-gradient(to bottom, rgba(236,140,23,0.4) 0, rgba(236,140,23,0.4) 3px, transparent 3px, transparent 6px)',
-                                maskImage: 'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
-                                WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
-                            }} />
-                        )}
-
-                        {/* Marker pill — TODAY / YESTERDAY / date */}
-                        {showToday && (
-                            <div style={{
-                                position: 'absolute', left: `${markerPct}%`, top: -5,
-                                transform: `translateX(-50%)`,
-                                background: '#EC8C17', color: '#fff',
-                                fontSize: 7, fontWeight: 700,
-                                fontFamily: 'Nunito, sans-serif',
-                                padding: '2.5px 6px', borderRadius: 6,
-                                whiteSpace: 'nowrap', letterSpacing: 0.5, zIndex: 2,
-                            }}>{markerLabel}</div>
+                        {/* Today marker — dashed line + pill (opt-in via showTodayMarker) */}
+                        {showToday && showTodayMarker && (
+                            <>
+                                <div style={{
+                                    position: 'absolute',
+                                    left: `${markerPct}%`,
+                                    top: 0, bottom: 2,
+                                    width: 1,
+                                    transform: 'translateX(-0.5px)',
+                                    backgroundImage: 'repeating-linear-gradient(to bottom, rgba(241,169,80,0.4) 0, rgba(241,169,80,0.4) 3px, transparent 3px, transparent 6px)',
+                                    maskImage: 'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
+                                    WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
+                                    pointerEvents: 'none',
+                                }} />
+                                <div style={{
+                                    position: 'absolute', left: `${markerPct}%`, top: -5,
+                                    transform: 'translateX(-50%)',
+                                    background: 'rgba(241,169,80,0.75)',
+                                    backdropFilter: 'blur(8px)',
+                                    WebkitBackdropFilter: 'blur(8px)',
+                                    color: '#fff',
+                                    fontSize: 7, fontWeight: 700,
+                                    fontFamily: 'Nunito, sans-serif',
+                                    padding: '2.5px 6px', borderRadius: 6,
+                                    whiteSpace: 'nowrap', letterSpacing: 0.5, zIndex: 2,
+                                    border: '0.5px solid rgba(255,255,255,0.3)',
+                                    boxShadow: '0 2px 8px rgba(241,169,80,0.25)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    lineHeight: 1,
+                                }}>{markerLabel}</div>
+                            </>
                         )}
 
                         {/* Balance-mode: orange dot at balance position */}
@@ -1889,46 +2023,63 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                             const hasCurrentAtToday = isOneOff && currentEventType && pastEvents.some(e => e.editType === currentEventType && Math.abs(datePct(e.date) - markerPct) < 0.5)
                             const isTodayTapped = tappedHistDot?.date === '__today__'
                             return (
-                                <div
-                                    onClick={(e) => {
-                                        e.stopPropagation()
-                                        if (isTodayTapped) {
-                                            setTappedHistDot(null)
-                                        } else {
-                                            setTappedHistDot({ date: '__today__', balance: actualBalNum, x: markerPct, y: balTopPct })
-                                        }
-                                        onBalanceClick?.(e)
-                                    }}
-                                    style={{
-                                        position: 'absolute',
-                                        left: `${markerPct}%`,
-                                        top: `${balTopPct}%`,
-                                        transform: dotAnimated
-                                            ? `translate(-50%, -50%) scale(${isTodayTapped ? 1.15 : 1})`
-                                            : 'translate(-50%, -50%) scale(0)',
-                                        width: isTodayTapped ? 15 : 13, height: isTodayTapped ? 15 : 13,
-                                        borderRadius: '50%',
-                                        background: '#EC8C17',
-                                        border: '2px solid white',
-                                        boxShadow: isTodayTapped
-                                            ? '0 0 8px 3px rgba(236,140,23,0.5)'
-                                            : '0 0 4px 2px rgba(236,140,23,0.2)',
-                                        cursor: 'pointer',
-                                        zIndex: hasCurrentAtToday ? 3 : 12,
-                                        pointerEvents: hasCurrentAtToday ? 'none' : 'auto',
-                                        transition: zoom > 1
-                                            ? 'top 0.5s ease, width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease'
-                                            : dotAnimated
-                                                ? 'transform 0.5s ease, top 0.5s ease, width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease'
-                                                : 'transform 0.4s cubic-bezier(.22,1,.36,1)',
-                                    }}
-                                />
+                                <>
+                                    {/* Pulsing ring */}
+                                    {dotAnimated && !isTodayTapped && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            left: `${markerPct}%`,
+                                            top: `${balTopPct}%`,
+                                            transform: 'translate(-50%, -50%)',
+                                            width: 13, height: 13, // matches dot size for ring alignment
+                                            borderRadius: '50%',
+                                            border: '2px solid rgba(241,169,80,0.4)',
+                                            animation: 'orangePulse 2s ease-out infinite',
+                                            pointerEvents: 'none',
+                                            zIndex: hasCurrentAtToday ? 2 : 25,
+                                            transition: 'none',
+                                        }} />
+                                    )}
+                                    <div
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            if (isTodayTapped) {
+                                                setTappedHistDot(null)
+                                            } else {
+                                                setTappedHistDot({ date: '__today__', balance: actualBalNum, x: markerPct, y: balTopPct })
+                                            }
+                                            onBalanceClick?.(e)
+                                        }}
+                                        style={{
+                                            position: 'absolute',
+                                            left: `${markerPct}%`,
+                                            top: `${balTopPct}%`,
+                                            transform: dotAnimated
+                                                ? `translate(-50%, -50%) scale(${isTodayTapped ? 1.15 : 1})`
+                                                : 'translate(-50%, -50%) scale(0)',
+                                            opacity: dotAnimated ? 1 : 0,
+                                            width: isTodayTapped ? 18 : 14, height: isTodayTapped ? 18 : 14,
+                                            borderRadius: '50%',
+                                            background: '#f1a950',
+                                            border: '2px solid white',
+                                            boxShadow: isTodayTapped
+                                                ? '0 0 8px 3px rgba(241,169,80,0.5)'
+                                                : 'none',
+                                            cursor: 'pointer',
+                                            zIndex: hasCurrentAtToday ? 3 : 25,
+                                            pointerEvents: hasCurrentAtToday ? 'none' : 'auto',
+                                            transition: (dotAnimated || dotExiting)
+                                                ? 'transform 0.3s ease, opacity 0.3s ease, width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease'
+                                                : 'none',
+                                        }}
+                                    />
+                                </>
                             )
                         })()}
 
 
-                        {/* Term labels at bottom — fade when zoomed, hide if clipped */}
-                        {terms.map((term) => {
+                        {/* Term labels at top — fade when zoomed/collapsed/hidden */}
+                        {showHolidays && terms.map((term) => {
                             const sp = datePctStart(term.start)
                             const ep = datePctEnd(term.end)
                             const mid = (sp + ep) / 2
@@ -1940,24 +2091,26 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                             if (midPx < labelHalfW || midPx > containerW - labelHalfW) return null
                             return (
                                 <div
+                                    data-term-label
                                     key={`lbl-${term.id}`}
-                                    onClick={(e) => { e.stopPropagation(); if (!isZoomed) onTermClick?.(term.id) }}
+                                    onClick={(e) => { if (!isZoomed) { const rect = e.currentTarget.getBoundingClientRect(); onTermClick?.(term.id, { clickX: rect.left + rect.width / 2, clickY: rect.bottom }) } }}
                                     style={{
-                                        position: 'absolute', left: `${mid}%`, bottom: -2,
+                                        position: 'absolute', left: `${mid}%`, ...(termLabelsBottom ? { bottom: 0 } : { top: -13 }),
                                         transform: 'translateX(-50%)',
-                                        background: '#e3f2f1', color: '#4a928e',
-                                        fontSize: 8, fontWeight: 700,
+                                        background: expandedTerm === term.id ? '#7a8ea8' : '#e8edf2',
+                                        color: expandedTerm === term.id ? '#fff' : '#7a8ea8',
+                                        fontSize: 8,
+                                        fontWeight: 700,
                                         fontFamily: 'Nunito, sans-serif',
-                                        padding: '2px 14px', borderRadius: 20,
+                                        padding: '2px 14px',
+                                        borderRadius: 20,
                                         whiteSpace: 'nowrap',
                                         cursor: isZoomed ? 'default' : 'pointer',
-                                        border: expandedTerm === term.id ? '1px solid #7EB6B3' : '0',
-                                        zIndex: 3,
-                                        opacity: isZoomed ? 0 : 1,
-                                        pointerEvents: isZoomed ? 'none' : 'auto',
-                                        transition: hasBalance
-                                            ? 'opacity 0.3s ease'
-                                            : 'left 0.35s ease, opacity 0.3s ease',
+                                        border: 'none',
+                                        zIndex: expandedTerm === term.id ? 5 : 3,
+                                        opacity: (isZoomed || collapsed) ? 0 : 1,
+                                        pointerEvents: (isZoomed || collapsed) ? 'none' : 'auto',
+                                        transition: 'background 0.2s ease, color 0.2s ease, font-size 0.2s ease, padding 0.2s ease, opacity 0.3s ease' + (hasBalance ? '' : ', left 0.35s ease'),
                                     }}
                                 >{term.name}</div>
                             )
@@ -1971,7 +2124,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                     position: 'absolute',
                                     left: 0, right: `${100 - markerPct}%`,
                                     top: `${greenTopPct}%`, bottom: 0,
-                                    background: 'linear-gradient(to bottom, rgba(20,123,117,0.05), rgba(20,123,117,0))',
+                                    background: 'linear-gradient(to bottom, rgba(20,123,117,0.12), rgba(20,123,117,0))',
                                     pointerEvents: 'none',
                                     zIndex: 1,
                                     transformOrigin: 'right',
@@ -2019,10 +2172,27 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                     }}
                                 >
                                     <defs>
-                                        <linearGradient id="pastRetroGrad" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor="rgba(20,123,117,0.05)" />
-                                            <stop offset="100%" stopColor="rgba(20,123,117,0)" />
-                                        </linearGradient>
+                                        {(() => {
+                                            const rawZeroPct = yMax > yMin ? toTopPct(0) : 100
+                                            const zeroOnChart = rawZeroPct >= 0 && rawZeroPct <= 100
+                                            const zeroPct = Math.max(0, Math.min(100, rawZeroPct))
+                                            const bufferPct = 15
+                                            const amberStart = Math.max(0, zeroPct - bufferPct)
+                                            return (
+                                                <linearGradient id="pastRetroGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    {zeroOnChart ? (<>
+                                                        <stop offset="0%" stopColor="rgba(20,123,117,0.12)" />
+                                                        <stop offset={`${amberStart}%`} stopColor="rgba(20,123,117,0.05)" />
+                                                        <stop offset={`${zeroPct}%`} stopColor="rgba(236,140,23,0.07)" />
+                                                        <stop offset={`${Math.min(100, zeroPct + bufferPct)}%`} stopColor="rgba(224,100,112,0.05)" />
+                                                        <stop offset="100%" stopColor="rgba(224,100,112,0)" />
+                                                    </>) : (<>
+                                                        <stop offset="0%" stopColor="rgba(20,123,117,0.12)" />
+                                                        <stop offset="100%" stopColor="rgba(20,123,117,0)" />
+                                                    </>)}
+                                                </linearGradient>
+                                            )
+                                        })()}
                                     </defs>
                                     <path
                                         d={pastPath.fillPath}
@@ -2032,8 +2202,9 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         d={pastPath.linePath}
                                         fill="none"
                                         stroke="rgba(20,123,117,0.25)"
-                                        strokeWidth="1.5"
-                                        strokeLinejoin="miter"
+                                        strokeWidth="1.8"
+                                        strokeLinejoin="round"
+                                        strokeLinecap="round"
                                         vectorEffect="non-scaling-stroke"
                                         shapeRendering="geometricPrecision"
                                     />
@@ -2055,48 +2226,68 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                 }}
                             >
                                 <defs>
-                                    <linearGradient id="stepGrad" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="rgba(20,123,117,0.08)" />
-                                        <stop offset="100%" stopColor="rgba(20,123,117,0)" />
-                                    </linearGradient>
+                                    {/* Fill + line gradients: fill always shows color zones, line only when balance drops near zero */}
+                                    {(() => {
+                                        const rawZeroPct = yMax > yMin ? toTopPct(0) : 100
+                                        const zeroOnChart = rawZeroPct >= 0 && rawZeroPct <= 100
+                                        const lineNearZero = zeroOnChart && projMin < 100
+                                        const zeroPct = Math.max(0, Math.min(100, rawZeroPct))
+                                        const bufferPct = 8
+                                        const amberStart = Math.max(0, zeroPct - bufferPct)
+                                        return (
+                                            <>
+                                                {/* Fill always shows color zones when zero is on chart */}
+                                                <linearGradient id="stepGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    {zeroOnChart ? (<>
+                                                        <stop offset="0%" stopColor="rgba(20,123,117,0.15)" />
+                                                        <stop offset={`${amberStart}%`} stopColor="rgba(20,123,117,0.06)" />
+                                                        <stop offset={`${zeroPct}%`} stopColor="rgba(236,140,23,0.08)" />
+                                                        <stop offset={`${Math.min(100, zeroPct + bufferPct)}%`} stopColor="rgba(224,100,112,0.08)" />
+                                                        <stop offset="100%" stopColor="rgba(224,100,112,0.06)" />
+                                                    </>) : (<>
+                                                        <stop offset="0%" stopColor="rgba(20,123,117,0.15)" />
+                                                        <stop offset="100%" stopColor="rgba(20,123,117,0)" />
+                                                    </>)}
+                                                </linearGradient>
+                                                {/* Line always green */}
+                                                <linearGradient id="lineGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor="#147b75" />
+                                                    <stop offset="100%" stopColor="#147b75" />
+                                                </linearGradient>
+                                            </>
+                                        )
+                                    })()}
                                 </defs>
-                                {/* Past portion of stepped line (lighter green) */}
-                                {steppedPath.pastLinePath && (
-                                    <>
-                                        <path
-                                            d={steppedPath.pastFillPath}
-                                            fill="url(#stepGrad)"
-                                            shapeRendering="geometricPrecision"
-                                            opacity={(eventsRevealed || isZoomed) ? 0.4 : 0}
-                                            style={{ transition: 'opacity 0.5s ease 0.4s' }}
-                                        />
-                                        <path
-                                            d={steppedPath.pastLinePath}
-                                            fill="none"
-                                            stroke="rgba(20,123,117,0.35)"
-                                            strokeWidth="1.5"
-                                            strokeLinejoin="miter"
-                                            vectorEffect="non-scaling-stroke"
-                                            shapeRendering="geometricPrecision"
-                                            opacity={(eventsRevealed || isZoomed) ? 1 : 0}
-                                            style={{ transition: 'opacity 0.5s ease' }}
-                                        />
-                                    </>
-                                )}
-                                {/* Future portion of stepped line (full green) */}
+                                {/* Combined fill for entire line (past + future) — single gradient ensures consistent color */}
                                 <path
-                                    d={steppedPath.futureFillPath || steppedPath.fillPath}
+                                    d={steppedPath.fillPath}
                                     fill="url(#stepGrad)"
                                     shapeRendering="geometricPrecision"
                                     opacity={(eventsRevealed || isZoomed) ? 1 : 0}
                                     style={{ transition: 'opacity 0.5s ease 0.4s' }}
                                 />
+                                {/* Past portion of stepped line (lighter stroke) */}
+                                {steppedPath.pastLinePath && (
+                                    <path
+                                        d={steppedPath.pastLinePath}
+                                        fill="none"
+                                        stroke="rgba(20,123,117,0.35)"
+                                        strokeWidth="1.8"
+                                        strokeLinejoin="round"
+                                        strokeLinecap="round"
+                                        vectorEffect="non-scaling-stroke"
+                                        shapeRendering="geometricPrecision"
+                                        opacity={(eventsRevealed || isZoomed) ? 1 : 0}
+                                        style={{ transition: 'opacity 0.5s ease' }}
+                                    />
+                                )}
                                 <path
                                     d={steppedPath.futureLinePath || steppedPath.linePath}
                                     fill="none"
-                                    stroke="#147b75"
-                                    strokeWidth="1.5"
-                                    strokeLinejoin="miter"
+                                    stroke="url(#lineGrad)"
+                                    strokeWidth="1.8"
+                                    strokeLinejoin="round"
+                                    strokeLinecap="round"
                                     vectorEffect="non-scaling-stroke"
                                     shapeRendering="geometricPrecision"
                                     opacity={(eventsRevealed || isZoomed) ? 1 : 0}
@@ -2182,7 +2373,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                                 stroke="#EC8C17"
                                                 strokeWidth="2"
                                                 strokeDasharray="5 4"
-                                                strokeLinejoin="miter"
+                                                strokeLinejoin="round"
                                                 vectorEffect="non-scaling-stroke"
                                                 style={{
                                                     clipPath: balHistRevealed ? 'inset(0 0% 0 0)' : 'inset(0 0 0 100%)',
@@ -2214,9 +2405,9 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                                         : 'translate(-50%, -50%) scale(0)',
                                                     width: isActive ? 14 : 10, height: isActive ? 14 : 10,
                                                     borderRadius: '50%',
-                                                    background: '#EC8C17',
-                                                    border: `2px solid ${isActive ? '#fff' : 'white'}`,
-                                                    boxShadow: isActive ? '0 0 8px rgba(236,140,23,0.7)' : '0 1px 4px rgba(236,140,23,0.5)',
+                                                    background: '#f1a950',
+                                                    border: '2px solid white',
+                                                    boxShadow: isActive ? '0 0 8px rgba(241,169,80,0.5)' : 'none',
                                                     pointerEvents: showBalanceHistory ? 'auto' : 'none',
                                                     cursor: 'pointer',
                                                     zIndex: isActive ? 20 : 11,
@@ -2238,13 +2429,16 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                             })()
                             const sym = getCurrencySymbol()
                             const showBelow = tappedHistDot.y < 25
+                            // Shift tooltip horizontally so it doesn't get cut off at edges
+                            const xPct = tappedHistDot.x
+                            const translateX = xPct < 12 ? '0%' : xPct > 88 ? '-100%' : '-50%'
                             return (
                                 <div
                                     style={{
                                         position: 'absolute',
-                                        left: `${tappedHistDot.x}%`,
+                                        left: `${xPct}%`,
                                         top: `${tappedHistDot.y}%`,
-                                        transform: showBelow ? 'translate(-50%, 14px)' : 'translate(-50%, calc(-100% - 12px))',
+                                        transform: showBelow ? `translate(${translateX}, 14px)` : `translate(${translateX}, calc(-100% - 12px))`,
                                         background: '#fff',
                                         borderRadius: 12,
                                         padding: '8px 16px',
@@ -2309,19 +2503,23 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
 
                 </div>
 
+                {/* Bottom fade to white — below labels so they stay readable */}
+                <div style={{
+                    position: 'absolute', bottom: -2, left: 0, right: 0, height: 30,
+                    background: 'linear-gradient(to bottom, rgba(255,255,255,0) 0%, rgba(255,255,255,0.5) 60%, rgba(255,255,255,0.8) 100%)',
+                    pointerEvents: 'none', zIndex: 2,
+                }} />
 
             </div>
 
             {/* Spacer between graph and x-axis labels */}
-            <div style={{ height: 0, margin: '0 0 14px', marginLeft: Y_AXIS_W }} />
+            <div style={{ height: 0, margin: '0', marginLeft: Y_AXIS_W }} />
 
-            {/* X-axis date labels — adapt to zoom level */}
+            {/* X-axis date labels */}
             <div ref={xAxisContainerRef} style={{
-                position: 'relative', height: 14, marginTop: 6, marginBottom: 8, marginLeft: Y_AXIS_W,
+                position: 'relative', height: 0, marginTop: 0, marginBottom: 0, marginLeft: Y_AXIS_W,
                 overflow: 'hidden', touchAction: 'none',
             }}>
-                {/* During zoom-out animation, render month labels in a fixed (non-zoomed) container
-                    so they don't fly in from the edges as the zoomed container shrinks */}
                 {isZoomingOut ? (
                     <div style={{
                         position: 'absolute', top: 0, bottom: 0, left: 0, width: '100%',
@@ -2359,7 +2557,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                             const viewWidthDays = (100 / curZoom) / 100 * totalDays
 
                             if (viewWidthDays > 90) {
-                                // Month labels — evenly spaced, skip every other when >6 months visible
+                                // Month labels — evenly spaced, show all when showXAxis
                                 const step = viewWidthDays > 200 ? 2 : 1
                                 return MONTHS
                                     .map(({ label, date }, idx) => ({ label, date, idx }))

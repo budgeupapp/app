@@ -33,7 +33,9 @@ export default function ResetPasswordForm({ onComplete }) {
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column',
-      padding: '24px 28px 0',
+      padding: '24px 28px calc(env(safe-area-inset-bottom, 0px) + 24px)',
+      overflow: 'auto', WebkitOverflowScrolling: 'touch',
+      minHeight: 0,
     }}>
       <h2 style={{
         fontSize: 24, fontWeight: 800, fontFamily: 'Nunito, sans-serif',

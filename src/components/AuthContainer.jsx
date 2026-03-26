@@ -57,11 +57,11 @@ export default function AuthContainer() {
         key={pathname}
         style={{
           flex: 1,
-          overflow: 'auto',
-          WebkitOverflowScrolling: 'touch',
+          overflow: 'hidden',
           display: 'flex',
           flexDirection: 'column',
           animation: 'authFadeIn 0.3s ease',
+          minHeight: 0,
         }}
       >
         <Outlet />

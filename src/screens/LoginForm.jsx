@@ -48,7 +48,9 @@ export default function LoginForm() {
   return (
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column',
-      padding: 'calc(env(safe-area-inset-top, 0px) + 32px) 28px 0',
+      padding: 'calc(env(safe-area-inset-top, 0px) + 32px) 28px calc(env(safe-area-inset-bottom, 0px) + 24px)',
+      overflow: 'auto', WebkitOverflowScrolling: 'touch',
+      minHeight: 0,
     }}>
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: 24 }}>

@@ -334,10 +334,10 @@ export default function BottomNav() {
                     <div style={{ flex: 1, height: 90, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', position: 'relative', overflow: 'visible' }}>
                         {fabBtn(mainVisible, 'translateY(0) scale(1)', 'translateY(30px) scale(0.4)', '0s',
                             () => { if (mainVisible) handleAction('update-balance') },
-                            '#EC8C17',
+                            '#f1a950',
                             <span style={{ fontSize: 24, fontWeight: 800, color: '#fff', fontFamily: 'Nunito, sans-serif', lineHeight: 1 }}>{getCurrencySymbol()}</span>,
                             'UPDATE BALANCE',
-                            '0 4px 16px rgba(236,140,23,0.35), 0 -8px 40px 10px rgba(246,246,246,0.95)',
+                            '0 4px 16px rgba(241,169,80,0.35), 0 -8px 40px 10px rgba(246,246,246,0.95)',
                             mainVisible && !fabOpen ? `all ${tOut}` : (mainVisible ? `opacity 0.25s ease, transform 0.25s ease` : undefined)
                         )}
                     </div>
@@ -461,7 +461,7 @@ export default function BottomNav() {
                     >
                         <div className={`nav-fab ${(fabOpen && !fabClosing) ? 'open' : ''}`} style={{
                             position: 'relative',
-                            ...(fabBalanceActive ? { background: '#EC8C17', boxShadow: '0 0 0 4px rgba(236,140,23,0.2)', transform: 'none' } : {}),
+                            ...(fabBalanceActive ? { background: '#f1a950', boxShadow: '0 0 0 4px rgba(241,169,80,0.2)', transform: 'none' } : {}),
                             transition: 'background 0.35s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease',
                         }}>
                             {/* Currency symbol for balance mode */}

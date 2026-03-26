@@ -51,7 +51,7 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r},${g},${b},${alpha})`
 }
 
-function DateRow({ label, value, onChange, color = '#147b75' }) {
+function DateRow({ label, value, onChange, color = '#7a8ea8' }) {
     return (
         <div style={{
             display: 'flex',
@@ -241,7 +241,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                 {/* Color dot */}
                 <div style={{
                     width: 10, height: 10, borderRadius: '50%',
-                    background: '#147b75', flexShrink: 0,
+                    background: '#7a8ea8', flexShrink: 0,
                     opacity: 0.7,
                 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -297,10 +297,11 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                     {term.breaks.map((brk, i) => {
                         const days = daysBetween(brk.start, brk.end)
                         const isRemoving = removingBreak === i
-                        const isExam = brk.name && /exam/i.test(brk.name.trim())
+                        const isExamFull = brk.name && /^exams?$/i.test(brk.name.trim())
+                        const isExamPrep = !isExamFull && brk.name && /exam|revision|prep/i.test(brk.name.trim())
                         const isReading = brk.name && /reading/i.test(brk.name)
-                        const breakColor = isExam ? '#e06470' : isReading ? '#5b8fd9' : '#888'
-                        const breakBg = isExam ? 'rgba(224,100,112,0.06)' : isReading ? 'rgba(91,143,217,0.06)' : '#fafafa'
+                        const breakColor = isExamFull ? '#e06470' : isExamPrep ? '#f0a0a8' : isReading ? '#5ab4a0' : '#888'
+                        const breakBg = isExamFull ? 'rgba(224,100,112,0.06)' : isExamPrep ? 'rgba(240,160,168,0.06)' : isReading ? 'rgba(90,180,160,0.06)' : '#fafafa'
 
                         return (
                             <div key={brk.id || i} data-break-id={brk.id} style={{
@@ -566,12 +567,12 @@ export default function TermDatesStep({
                 onClick={addTerm}
                 style={{
                     width: '100%', height: 40,
-                    background: 'rgba(20,123,117,0.08)',
+                    background: 'rgba(122,142,168,0.08)',
                     border: 'none',
                     borderRadius: 14,
                     fontSize: 14, fontWeight: 700,
                     fontFamily: 'Nunito, sans-serif',
-                    color: '#147b75', cursor: 'pointer',
+                    color: '#7a8ea8', cursor: 'pointer',
                     display: 'flex', alignItems: 'center',
                     justifyContent: 'center', gap: 6,
                     flexShrink: 0,
