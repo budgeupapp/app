@@ -1574,9 +1574,9 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         const firstOfMonth = new Date(date.getFullYear(), date.getMonth(), 1)
                                         const pct = datePctFromDate(firstOfMonth)
                                         if (pct <= 0.5 || pct >= 99.5) return null
-                                        // Hide all month labels if multiple term labels, or hide if too close to a term label
-                                        const pillClash = multipleTermLabels || (!collapsed && !isZoomed && termMids.some(mid => Math.abs(pct - mid) < 8))
-                                        if (pillClash) return null
+                                        // Fade month labels that clash with term labels using collapse progress
+                                        const pillClash = !isZoomed && termMids.some(mid => Math.abs(pct - mid) < 8)
+                                        if (multipleTermLabels && !collapsed) return null
                                         return (
                                             <div key={`month-${i}`} style={{
                                                 position: 'absolute',
@@ -1591,16 +1591,15 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                                     width: 0,
                                                     borderLeft: '0.5px solid rgba(180,180,180,0.3)',
                                                 }} />
-                                                {!pillClash && (
-                                                    <span style={{
-                                                        position: 'absolute',
-                                                        left: 4, top: -8,
-                                                        fontSize: 9, fontWeight: 500,
-                                                        fontFamily: 'Nunito, sans-serif',
-                                                        color: '#9f9c9c',
-                                                        lineHeight: 1,
-                                                    }}>{label}</span>
-                                                )}
+                                                <span style={{
+                                                    position: 'absolute',
+                                                    left: 4, top: -8,
+                                                    fontSize: 9, fontWeight: 500,
+                                                    fontFamily: 'Nunito, sans-serif',
+                                                    color: '#9f9c9c',
+                                                    lineHeight: 1,
+                                                    opacity: pillClash ? `var(--collapse-progress, ${collapsed ? 1 : 0})` : 1,
+                                                }}>{label}</span>
                                             </div>
                                         )
                                     })
@@ -1997,6 +1996,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                     maskImage: 'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
                                     WebkitMaskImage: 'linear-gradient(to bottom, black 0%, black 65%, transparent 100%)',
                                     pointerEvents: 'none',
+                                    opacity: `calc(1 - var(--collapse-progress, ${collapsed ? 1 : 0}))`,
                                 }} />
                                 <div style={{
                                     position: 'absolute', left: `${markerPct}%`, top: -5,
@@ -2013,6 +2013,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                     boxShadow: '0 2px 8px rgba(241,169,80,0.25)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                     lineHeight: 1,
+                                    opacity: `calc(1 - var(--collapse-progress, ${collapsed ? 1 : 0}))`,
                                 }}>{markerLabel}</div>
                             </>
                         )}
@@ -2095,7 +2096,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                     key={`lbl-${term.id}`}
                                     onClick={(e) => { if (!isZoomed) { const rect = e.currentTarget.getBoundingClientRect(); onTermClick?.(term.id, { clickX: rect.left + rect.width / 2, clickY: rect.bottom }) } }}
                                     style={{
-                                        position: 'absolute', left: `${mid}%`, ...(termLabelsBottom ? { bottom: 0 } : { top: -13 }),
+                                        position: 'absolute', left: `${mid}%`, ...(termLabelsBottom ? { bottom: 0 } : { top: -9 }),
                                         transform: 'translateX(-50%)',
                                         background: expandedTerm === term.id ? '#7a8ea8' : '#e8edf2',
                                         color: expandedTerm === term.id ? '#fff' : '#7a8ea8',
@@ -2108,7 +2109,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         cursor: isZoomed ? 'default' : 'pointer',
                                         border: 'none',
                                         zIndex: expandedTerm === term.id ? 5 : 3,
-                                        opacity: (isZoomed || collapsed) ? 0 : 1,
+                                        opacity: isZoomed ? 0 : `calc(1 - var(--collapse-progress, ${collapsed ? 1 : 0}))`,
                                         pointerEvents: (isZoomed || collapsed) ? 'none' : 'auto',
                                         transition: 'background 0.2s ease, color 0.2s ease, font-size 0.2s ease, padding 0.2s ease, opacity 0.3s ease' + (hasBalance ? '' : ', left 0.35s ease'),
                                     }}

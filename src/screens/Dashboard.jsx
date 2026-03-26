@@ -1182,13 +1182,19 @@ export default function Dashboard() {
             } else {
                 // Collapsed → expanded
                 const t = '0.45s cubic-bezier(0.25, 1, 0.5, 1)'
+                // Ensure maxHeight has a starting pixel value for smooth transition
+                if (!gc.style.maxHeight || gc.style.maxHeight === 'none') {
+                    gc.style.maxHeight = `${gc.offsetHeight}px`
+                    gc.style.overflow = 'hidden'
+                }
                 gc.style.transition = `max-height ${t}, margin-top ${t}`
                 graphEl.style.transition = `height ${t}`
                 if (heroEl) heroEl.style.transition = `opacity 0.35s ease, max-height ${t}, padding ${t}`
                 gc.offsetHeight // reflow
                 graphEl.style.height = `${MAX_H}px`
+                graphEl.style.setProperty('--collapse-progress', '0')
                 gc.style.height = ''
-                gc.style.maxHeight = ''
+                gc.style.maxHeight = `${MAX_H + 200}px`
                 gc.style.overflow = ''
                 if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
                 setGraphCollapsed(false)
@@ -1898,7 +1904,10 @@ export default function Dashboard() {
                 // Phase 1: tabs push graph up — gc auto-wraps naturally
                 const t = p / SHRINK_DIST
                 const ct = easeLocal(t)
-                if (graphEl) graphEl.style.height = `${MAX_H - ct * SHRINK_DIST}px`
+                if (graphEl) {
+                    graphEl.style.height = `${MAX_H - ct * SHRINK_DIST}px`
+                    graphEl.style.setProperty('--collapse-progress', ct.toFixed(3))
+                }
                 gc.style.height = ''
                 gc.style.maxHeight = ''
                 gc.style.overflow = ''
@@ -1912,7 +1921,10 @@ export default function Dashboard() {
                 }
             } else {
                 // Phase 2: tabs slide over collapsed graph — clip gc with maxHeight
-                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                if (graphEl) {
+                    graphEl.style.height = `${MIN_H}px`
+                    graphEl.style.setProperty('--collapse-progress', '1')
+                }
                 const cover = (p - SHRINK_DIST) / collapsedGcH
                 const clipH = collapsedGcH * (1 - Math.min(1, cover))
                 gc.style.height = ''
@@ -1973,7 +1985,7 @@ export default function Dashboard() {
 
             if (state === 'expanded') {
                 // Animate maxHeight to expandedGcH, then clear after transition
-                if (graphEl) graphEl.style.height = `${MAX_H}px`
+                if (graphEl) { graphEl.style.height = `${MAX_H}px`; graphEl.style.setProperty('--collapse-progress', '0') }
                 gc.style.height = ''
                 gc.style.maxHeight = `${collapsedGcH + SHRINK_DIST + 200}px`
                 gc.style.overflow = ''
@@ -1981,14 +1993,14 @@ export default function Dashboard() {
                 if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
             } else if (state === 'collapsed') {
                 // Animate maxHeight to collapsedGcH (matches auto), then clear after
-                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                if (graphEl) { graphEl.style.height = `${MIN_H}px`; graphEl.style.setProperty('--collapse-progress', '1') }
                 gc.style.height = ''
                 gc.style.maxHeight = `${collapsedGcH}px`
                 gc.style.overflow = 'hidden'
                 gc.style.marginTop = '0px'
                 if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
             } else {
-                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                if (graphEl) { graphEl.style.height = `${MIN_H}px`; graphEl.style.setProperty('--collapse-progress', '1') }
                 gc.style.height = ''
                 gc.style.maxHeight = '4px'
                 gc.style.overflow = 'hidden'
@@ -2138,7 +2150,10 @@ export default function Dashboard() {
             if (p <= SHRINK_DIST) {
                 const t = p / SHRINK_DIST
                 const ct = easeLocal(t)
-                if (graphEl) graphEl.style.height = `${MAX_H - ct * SHRINK_DIST}px`
+                if (graphEl) {
+                    graphEl.style.height = `${MAX_H - ct * SHRINK_DIST}px`
+                    graphEl.style.setProperty('--collapse-progress', ct.toFixed(3))
+                }
                 gc.style.height = ''
                 gc.style.maxHeight = ''
                 gc.style.overflow = ''
@@ -2151,7 +2166,10 @@ export default function Dashboard() {
                     heroEl.style.paddingBottom = `${(1 - f) * 6}px`
                 }
             } else {
-                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                if (graphEl) {
+                    graphEl.style.height = `${MIN_H}px`
+                    graphEl.style.setProperty('--collapse-progress', '1')
+                }
                 const cover = (p - SHRINK_DIST) / collapsedGcH
                 const clipH = collapsedGcH * (1 - Math.min(1, cover))
                 gc.style.height = ''
@@ -2183,19 +2201,19 @@ export default function Dashboard() {
             gc.offsetHeight
 
             if (state === 'expanded') {
-                if (graphEl) graphEl.style.height = `${MAX_H}px`
+                if (graphEl) { graphEl.style.height = `${MAX_H}px`; graphEl.style.setProperty('--collapse-progress', '0') }
                 gc.style.height = ''
                 gc.style.maxHeight = `${collapsedGcH + SHRINK_DIST + 200}px`
                 gc.style.overflow = ''
                 if (heroEl) { heroEl.style.opacity = '1'; heroEl.style.maxHeight = '80px'; heroEl.style.paddingTop = '4px'; heroEl.style.paddingBottom = '6px' }
             } else if (state === 'collapsed') {
-                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                if (graphEl) { graphEl.style.height = `${MIN_H}px`; graphEl.style.setProperty('--collapse-progress', '1') }
                 gc.style.height = ''
                 gc.style.maxHeight = `${collapsedGcH}px`
                 gc.style.overflow = 'hidden'
                 if (heroEl) { heroEl.style.opacity = '0'; heroEl.style.maxHeight = '0px'; heroEl.style.paddingTop = '0px'; heroEl.style.paddingBottom = '0px' }
             } else {
-                if (graphEl) graphEl.style.height = `${MIN_H}px`
+                if (graphEl) { graphEl.style.height = `${MIN_H}px`; graphEl.style.setProperty('--collapse-progress', '1') }
                 gc.style.height = ''
                 gc.style.maxHeight = '4px'
                 gc.style.overflow = 'hidden'
