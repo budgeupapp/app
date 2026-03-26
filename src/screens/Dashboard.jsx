@@ -5470,7 +5470,7 @@ export default function Dashboard() {
                                 <div style={{ marginTop: 8, borderTop: '1px solid #f0f0f0', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     {term.breaks.map((brk, i) => {
                                         const isExamFull = brk.name && /^exams?$/i.test(brk.name.trim())
-                                        const isExamPrep = !isExamFull && brk.name && /exam|revision|prep/i.test(brk.name.trim())
+                                        const isExamPrep = !isExamFull && brk.name && /exam.?prep|revision/i.test(brk.name.trim())
                                         const isReading = brk.name && /reading/i.test(brk.name)
                                         const dotColor = isExamFull ? '#e06470' : isExamPrep ? '#f0a0a8' : isReading ? '#5ab4a0' : '#aaa'
                                         return (

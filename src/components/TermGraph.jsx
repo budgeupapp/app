@@ -1594,7 +1594,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                                 {!pillClash && (
                                                     <span style={{
                                                         position: 'absolute',
-                                                        left: 4, top: -12,
+                                                        left: 4, top: -8,
                                                         fontSize: 9, fontWeight: 500,
                                                         fontFamily: 'Nunito, sans-serif',
                                                         color: '#9f9c9c',
@@ -1639,7 +1639,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         }} />
                                         <span style={{
                                             position: 'absolute',
-                                            left: 4, top: -12,
+                                            left: 4, top: -8,
                                             fontSize: 9, fontWeight: 500,
                                             fontFamily: 'Nunito, sans-serif',
                                             color: '#9f9c9c',
@@ -1720,7 +1720,7 @@ export default function TermGraph({ terms, expandedTerm, balance, balanceAnchorD
                                         const bl = ((bsp - sp) / wp) * 100
                                         const bw = ((bep - bsp) / wp) * 100
                                         const isExamFull = brk.name && /^exams?$/i.test(brk.name.trim())
-                                        const isExamPrep = !isExamFull && brk.name && /exam|revision|prep/i.test(brk.name.trim())
+                                        const isExamPrep = !isExamFull && brk.name && /exam.?prep|revision/i.test(brk.name.trim())
                                         const isReading = brk.name && /reading/i.test(brk.name)
                                         return (
                                             <div key={j} style={{

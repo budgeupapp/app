@@ -298,7 +298,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                         const days = daysBetween(brk.start, brk.end)
                         const isRemoving = removingBreak === i
                         const isExamFull = brk.name && /^exams?$/i.test(brk.name.trim())
-                        const isExamPrep = !isExamFull && brk.name && /exam|revision|prep/i.test(brk.name.trim())
+                        const isExamPrep = !isExamFull && brk.name && /exam.?prep|revision/i.test(brk.name.trim())
                         const isReading = brk.name && /reading/i.test(brk.name)
                         const breakColor = isExamFull ? '#e06470' : isExamPrep ? '#f0a0a8' : isReading ? '#5ab4a0' : '#888'
                         const breakBg = isExamFull ? 'rgba(224,100,112,0.06)' : isExamPrep ? 'rgba(240,160,168,0.06)' : isReading ? 'rgba(90,180,160,0.06)' : '#fafafa'
@@ -315,7 +315,7 @@ function TermAccordion({ term, expanded, onToggle, onUpdate, onDelete, canDelete
                                     margin: '4px 12px',
                                     borderRadius: 12,
                                     padding: '10px 14px',
-                                    border: `1px solid ${breakColor}15`,
+                                    border: (isExamFull || isExamPrep || isReading) ? `1px solid ${breakColor}15` : '1px solid #f2f2f2',
                                 }}>
                                     <div style={{
                                         display: 'flex', alignItems: 'center', gap: 8,
