@@ -2260,10 +2260,13 @@ export default function Dashboard() {
             const dy = e.touches[0].clientY - startY
             if (dy < 0) { active = false; return }
             if (el.scrollTop > 1) { active = false; return }
+
+            // Only intercept scroll after user commits to pulling down
+            if (dy <= 4) return
             e.preventDefault()
 
             // Measure on first real move
-            if (lastPos === 0 && dy > 4) {
+            if (lastPos === 0) {
                 if (!measure()) { active = false; return }
                 const gc = graphCardRef.current
                 const graphEl = graphContainerRef.current
