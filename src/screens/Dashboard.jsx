@@ -2244,11 +2244,9 @@ export default function Dashboard() {
             const gc = graphCardRef.current
             const graphEl = graphContainerRef.current
             if (!gc || !graphEl) return
-            const isCov = pullDownGraphCoveredRef.current
-            const isCol = pullDownGraphCollapsedRef.current
             const currentH = graphEl.offsetHeight
-            // Only activate if graph is collapsed or covered
-            if (currentH > MIN_H + 10 && !isCov && !isCol) return
+            // Only activate if graph is actually collapsed or covered (check DOM, not stale refs)
+            if (currentH > MIN_H + 10) return
             active = true
             startY = e.touches[0].clientY
             lastPos = 0
