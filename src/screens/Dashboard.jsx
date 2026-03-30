@@ -1844,6 +1844,7 @@ export default function Dashboard() {
         if (!gc) return
 
         handleDraggingRef.current = true
+        const pointerId = e.pointerId
         const startY = e.clientY
         let moved = false
         let rafId = null
@@ -1941,6 +1942,7 @@ export default function Dashboard() {
         }
 
         const onMove = (ev) => {
+            if (ev.pointerId !== pointerId) return
             const dy = ev.clientY - startY
             if (!moved && Math.abs(dy) < 8) return
             if (!moved) {
@@ -2039,7 +2041,8 @@ export default function Dashboard() {
             window.removeEventListener('pointercancel', onCancel)
         }
 
-        const onUp = () => {
+        const onUp = (ev) => {
+            if (ev.pointerId !== pointerId) return
             cleanup()
             if (rafId) cancelAnimationFrame(rafId)
             handleDraggingRef.current = false
@@ -2066,7 +2069,8 @@ export default function Dashboard() {
             requestAnimationFrame(() => snapTo(target))
         }
 
-        const onCancel = () => {
+        const onCancel = (ev) => {
+            if (ev.pointerId !== pointerId) return
             cleanup()
             if (rafId) cancelAnimationFrame(rafId)
             handleDraggingRef.current = false
@@ -2236,6 +2240,8 @@ export default function Dashboard() {
             themeColorRef.current = '#ffffff'
         }
 
+        let trackingTouchId = null
+
         const onStart = (e) => {
             if (e.touches.length >= 2) return
             if (handleDraggingRef.current) return
@@ -2248,14 +2254,18 @@ export default function Dashboard() {
             // Only activate if graph is actually collapsed or covered (check DOM, not stale refs)
             if (currentH > MIN_H + 10) return
             active = true
+            trackingTouchId = e.touches[0].identifier
             startY = e.touches[0].clientY
             lastPos = 0
         }
 
         const onMove = (e) => {
             if (!active) return
-            if (e.touches.length >= 2) { active = false; return }
-            const dy = e.touches[0].clientY - startY
+            if (e.touches.length >= 2) { active = false; trackingTouchId = null; return }
+            // Only track the finger that started the gesture
+            const touch = Array.from(e.touches).find(t => t.identifier === trackingTouchId)
+            if (!touch) { active = false; trackingTouchId = null; return }
+            const dy = touch.clientY - startY
             if (dy < 0) { active = false; return }
             if (el.scrollTop > 1) { active = false; return }
 
@@ -2282,6 +2292,7 @@ export default function Dashboard() {
         const onEnd = () => {
             if (!active) return
             active = false
+            trackingTouchId = null
             if (lastPos === 0) return
 
             applyPos(lastPos)
