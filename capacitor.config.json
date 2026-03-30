@@ -1,0 +1,13 @@
+{
+  "appId": "co.uk.budgeup.app",
+  "appName": "Budge Up",
+  "webDir": "dist",
+  "server": {
+    "allowNavigation": ["*.budgeup.co.uk"]
+  },
+  "ios": {
+    "contentInset": "always",
+    "scheme": "Budge Up",
+    "backgroundColor": "#ffffff"
+  }
+}

@@ -4358,7 +4358,7 @@ export default function Dashboard() {
                                                     <div style={{
                                                         position: 'absolute', inset: 0,
                                                         borderRadius: 10,
-                                                        background: 'linear-gradient(to right, #147b75 0%, #147b75 35%, #6db86d 45%, #d4b44a 55%, #EC8C17 70%, #e06470 100%)',
+                                                        background: 'linear-gradient(to right, #e06470 0%, #EC8C17 30%, #d4b44a 45%, #6db86d 55%, #147b75 65%, #147b75 100%)',
                                                     }} />
                                                     {/* White dot indicator */}
                                                     <div style={{
